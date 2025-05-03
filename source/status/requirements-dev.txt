@@ -2,8 +2,8 @@
 # Список зависимостей Python для Flask-приложения
 
 Flask==2.3.3
-#psycopg2-binary==2.9.9 # Для работы с PostgreSQL
-psycopg2==2.9.9
+psycopg2-binary==2.9.9 # Для работы с PostgreSQL
+#psycopg2==2.9.9
 gunicorn==21.2.0       # WSGI сервер для production
 python-dateutil==2.8.2 # Для парсинга дат ISO 8601 от PowerShell
 Flask-SocketIO==5.3.6  # <<< Добавлено для WebSockets
