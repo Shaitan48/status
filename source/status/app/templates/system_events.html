@@ -1,0 +1,230 @@
+<!-- status/app/templates/system_events.html -->
+{% extends "base.html" %}
+{% block title %}Системные события - Мониторинг ПТК{% endblock %}
+
+{% block content %}
+<h2>Журнал системных событий</h2>
+
+<!-- Блок фильтров -->
+<div class="filters">
+    <div>
+        <label for="filter-severity">Важность:</label>
+        <select id="filter-severity">
+            <option value="">Все</option>
+            <option value="INFO">INFO</option>
+            <option value="WARN">WARN</option>
+            <option value="ERROR">ERROR</option>
+            <option value="CRITICAL">CRITICAL</option>
+        </select>
+    </div>
+    <div>
+        <label for="filter-event-type">Тип события:</label>
+        <input type="text" id="filter-event-type" placeholder="напр., CHECK_RESULT_RECEIVED">
+    </div>
+    <div>
+        <label for="filter-object-id">ID Объекта:</label>
+        <input type="number" id="filter-object-id" placeholder="напр., 1">
+    </div>
+    <div>
+        <label for="filter-node-id">ID Узла:</label>
+        <input type="number" id="filter-node-id" placeholder="напр., 15">
+    </div>
+     <div>
+        <label for="filter-assignment-id">ID Задания:</label>
+        <input type="number" id="filter-assignment-id" placeholder="напр., 101">
+    </div>
+    <div>
+        <label for="filter-related">Связ. сущность/ID:</label>
+        <input type="text" id="filter-related" placeholder="напр., FILE/имя.zpru">
+    </div>
+    <!-- Кнопка применения фильтров -->
+    <button id="apply-filters-btn">Применить фильтры</button>
+</div>
+
+<!-- Контейнер для списка событий -->
+<ul id="event-list-container" class="event-list">
+    <!-- Начальное сообщение -->
+    <li><p class="loading-message">Загрузка событий...</p></li>
+</ul>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- Элементы DOM ---
+    const eventContainer = document.getElementById('event-list-container');
+    const severityFilter = document.getElementById('filter-severity');
+    const eventTypeFilter = document.getElementById('filter-event-type');
+    const objectIdFilter = document.getElementById('filter-object-id');
+    const nodeIdFilter = document.getElementById('filter-node-id');
+    const assignmentIdFilter = document.getElementById('filter-assignment-id'); // Новый фильтр
+    const relatedFilter = document.getElementById('filter-related');
+    const applyBtn = document.getElementById('apply-filters-btn');
+
+    // --- URL API ---
+    const API_URL_EVENTS = "{{ url_for('events.api_get_system_events') }}";
+
+    // --- Функции ---
+    async function fetchEvents() {
+        if (!eventContainer) { console.error("Контейнер event-list-container не найден!"); return; }
+
+        // Собираем параметры запроса из фильтров
+        const params = new URLSearchParams();
+        if (severityFilter.value) params.append('severity', severityFilter.value);
+        if (eventTypeFilter.value.trim()) params.append('event_type', eventTypeFilter.value.trim());
+        if (objectIdFilter.value) params.append('object_id', objectIdFilter.value);
+        if (nodeIdFilter.value) params.append('node_id', nodeIdFilter.value);
+        if (assignmentIdFilter.value) params.append('assignment_id', assignmentIdFilter.value); // Добавляем assignment_id
+
+        const relatedValue = relatedFilter.value.trim();
+        if (relatedValue) {
+            const parts = relatedValue.split('/');
+            if (parts[0]) params.append('related_entity', parts[0].toUpperCase());
+            // Ищем по ID, даже если не указана сущность
+            if (parts.length > 1 && parts[1]) params.append('related_entity_id', parts[1]);
+            else if (parts.length === 1 && parts[0]) params.append('related_entity_id', parts[0]); // Если только ID
+        }
+        // Можно добавить limit и offset для пагинации в будущем
+        params.append('limit', 200); // Ограничим вывод пока
+
+        const apiUrlWithParams = `${API_URL_EVENTS}?${params.toString()}`;
+        console.debug("Запрос системных событий:", apiUrlWithParams);
+
+        try {
+            eventContainer.innerHTML = '<li><p class="loading-message">Загрузка событий...</p></li>';
+            const response = await fetch(apiUrlWithParams);
+            if (!response.ok) {
+                 let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
+                 try { const errorData = await response.json(); if (errorData.error) errorText += ` - ${errorData.error}`; } catch (e) { /* ignore */ }
+                 throw new Error(errorText);
+            }
+            const events = await response.json();
+            console.debug("События получены:", events);
+            renderEvents(events);
+        } catch (error) {
+            console.error("Ошибка загрузки системных событий:", error);
+            if (eventContainer) { eventContainer.innerHTML = `<li><p class="error-message">Ошибка загрузки: ${error.message}</p></li>`; }
+        }
+    }
+
+    function renderEvents(events) {
+        if (!eventContainer) return;
+        if (!Array.isArray(events) || events.length === 0) {
+            eventContainer.innerHTML = '<li><p>Нет событий, соответствующих фильтрам.</p></li>';
+            return;
+        }
+
+        try {
+            let html = events.map(event => {
+                // Базовая проверка объекта события
+                if (!event || !event.event_type || !event.message || !event.severity || !event.event_time) {
+                    console.warn("Пропущено некорректное событие:", event);
+                    return ''; // Пропускаем некорректные
+                }
+
+                // Форматируем детали (если есть)
+                let detailsHtml = '';
+                if (event.details && typeof event.details === 'object' && Object.keys(event.details).length > 0) {
+                    try {
+                        // Используем pre для сохранения форматирования JSON
+                        detailsHtml = `<pre class="event-details">${JSON.stringify(event.details, null, 2)}</pre>`;
+                    } catch (e) {
+                         console.error("Ошибка JSON.stringify для деталей события:", event.details, e);
+                         detailsHtml = `<div class="event-details error-message">[Ошибка отображения деталей]</div>`;
+                    }
+                }
+
+                // Формируем ссылки для быстрой фильтрации
+                let linksHtml = '<span class="event-links">';
+                if (event.object_id) linksHtml += ` <a href="#" title="Фильтр по Объекту ${event.object_id}" onclick="setFilter('object_id', ${event.object_id})">Об:${event.object_id}</a>`;
+                if (event.node_id) linksHtml += ` <a href="#" title="Фильтр по Узлу ${event.node_id}" onclick="setFilter('node_id', ${event.node_id})">Уз:${event.node_id}</a>`;
+                if (event.assignment_id) linksHtml += ` <a href="#" title="Фильтр по Заданию ${event.assignment_id}" onclick="setFilter('assignment_id', ${event.assignment_id})">Зад:${event.assignment_id}</a>`;
+                // Добавить ссылку для node_check_id, если нужно
+                if (event.related_entity && event.related_entity_id) {
+                    const relatedText = `${event.related_entity}:${event.related_entity_id}`;
+                     linksHtml += ` <a href="#" title="Фильтр по ${relatedText}" onclick="setFilter('related', '${event.related_entity}/${event.related_entity_id}')">${relatedText}</a>`;
+                }
+                 linksHtml += '</span>';
+
+                // Определяем класс важности
+                const severityClass = event.severity || 'INFO';
+                const formattedTime = formatDateTime(event.event_time); // Используем общую функцию
+
+                // Собираем строку события
+                return `
+                    <li class="event-entry ${severityClass}">
+                        <span class="event-time">${formattedTime}</span>
+                        <span class="event-severity ${severityClass}">${severityClass}</span>
+                        <span class="event-type">${event.event_type}</span>
+                        <span class="event-source">${event.source || 'N/A'}</span>
+                        ${linksHtml}
+                        <div class="event-message">${event.message}</div>
+                        ${detailsHtml}
+                    </li>`;
+            }).join(''); // Объединяем все строки в одну HTML строку
+
+            eventContainer.innerHTML = html; // Вставляем в контейнер
+
+        } catch (renderError) {
+            console.error("Ошибка во время рендеринга событий:", renderError);
+            eventContainer.innerHTML = `<li><p class="error-message">Ошибка отображения событий.</p></li>`;
+        }
+    }
+
+    // Функция для установки значения фильтра и перезагрузки событий
+    function setFilter(filterType, value) {
+        event.preventDefault(); // Предотвращаем переход по ссылке '#'
+        console.debug(`Установка фильтра: ${filterType}=${value}`);
+
+        // Сбрасываем другие ID-фильтры для ясности? Опционально.
+        // objectIdFilter.value = ''; nodeIdFilter.value = ''; assignmentIdFilter.value = ''; relatedFilter.value = '';
+
+        // Устанавливаем нужный фильтр
+        if (filterType === 'object_id') objectIdFilter.value = value;
+        else if (filterType === 'node_id') nodeIdFilter.value = value;
+        else if (filterType === 'assignment_id') assignmentIdFilter.value = value;
+        else if (filterType === 'related') relatedFilter.value = value;
+        else if (filterType === 'severity') severityFilter.value = value;
+        else if (filterType === 'event_type') eventTypeFilter.value = value;
+
+        fetchEvents(); // Перезагружаем события с новым фильтром
+    }
+
+    // --- Инициализация и Обработчики ---
+    function initializePage() {
+        if (!eventContainer || !applyBtn || !severityFilter || !eventTypeFilter || !objectIdFilter || !nodeIdFilter || !assignmentIdFilter || !relatedFilter) {
+             console.error("Критическая ошибка: Не найдены все необходимые элементы DOM для страницы событий!");
+             showGlobalError("Ошибка инициализации страницы событий.");
+             return;
+        }
+
+        // Обработчик для кнопки "Применить фильтры"
+        applyBtn.addEventListener('click', fetchEvents);
+
+        // Обработчики для нажатия Enter в полях ввода
+        const inputFilters = [eventTypeFilter, objectIdFilter, nodeIdFilter, assignmentIdFilter, relatedFilter];
+        inputFilters.forEach(input => {
+            input.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    fetchEvents();
+                }
+            });
+        });
+         // Обработчик для изменения select'а
+         severityFilter.addEventListener('change', fetchEvents);
+
+
+        fetchEvents(); // Загружаем события при первой загрузке страницы
+        // Автообновление каждые 30 секунд (опционально)
+         setInterval(fetchEvents, 30000);
+    }
+
+    // Запускаем инициализацию после загрузки DOM
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializePage);
+    } else {
+        initializePage();
+    }
+</script>
+{% endblock %}
+
+

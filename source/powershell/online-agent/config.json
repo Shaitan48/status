@@ -1,0 +1,10 @@
+{
+    "object_id": 1516,
+    "config_type": "online_multi_check_agent_v3",
+    "apiBaseUrl": "http://localhost:48030/api",
+    "api_key": "T5G-x-QNbvG-iXU7pO0fOtpPqMRrfxvfUNhPCf4sxGQ",
+    "api_poll_interval_seconds": 60,
+    "default_check_interval_seconds": 120,
+    "logFile": "online_check.log",
+    "LogLevel": "Debug"
+}

@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  sqlserver2017:
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    container_name: sqlserver2017
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "escort123"
+    ports:
+      - "48010:1433"
+    restart: unless-stopped
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+      - ./init-db.sql:/init-db.sql
+      - ./insert_revised_data.sql:/insert_revised_data.sql
+
+  db_init:
+    image: mcr.microsoft.com/mssql-tools
+    depends_on:
+      - sqlserver2017
+    volumes:
+      - ./init-db.sql:/init-db.sql
+      - ./insert_revised_data.sql:/insert_revised_data.sql
+    command: >
+      bash -c "
+        sleep 30 &&
+        /opt/mssql-tools/bin/sqlcmd -S sqlserver2017 -U sa -P escort123 -i /init-db.sql &&
+        /opt/mssql-tools/bin/sqlcmd -S sqlserver2017 -U sa -P escort123 -d kaskad -i /insert_revised_data.sql
+      "
+
+volumes:
+  sqlserver-data:

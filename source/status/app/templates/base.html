@@ -1,0 +1,169 @@
+﻿<!-- status/app/templates/base.html (Улучшенная компоновка) -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Мониторинг ПТК{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+    <!-- <<< Добавим стили прямо сюда для наглядности >>> -->
+    <style>
+        body {
+            display: flex; /* Используем Flexbox для основного layout */
+            flex-direction: column; /* Элементы располагаются вертикально */
+            min-height: 100vh; /* Минимальная высота - весь экран */
+            margin: 0;
+            background-color: #f4f7f6; /* Чуть более светлый фон */
+        }
+
+        .navbar {
+            flex-shrink: 0; /* Не сжимать навбар */
+            /* Стили навбара остаются из style.css */
+            position: sticky; /* Делаем навбар "липким" */
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Контейнер для основного контента */
+        .main-container {
+            flex-grow: 1; /* Занимает все доступное пространство */
+            width: 100%;
+            max-width: 1600px; /* <<< Ограничиваем максимальную ширину контента */
+            margin: 0 auto; /* Центрируем контейнер */
+            padding: 1rem 1.5rem; /* Внутренние отступы */
+            box-sizing: border-box; /* Padding включен в ширину */
+        }
+
+        /* Стили для выпадающего меню управления */
+        .navbar-links .dropdown {
+            position: relative; /* Для позиционирования подменю */
+        }
+        .navbar-links .dropdown-content {
+            display: none; /* Скрыто по умолчанию */
+            position: absolute;
+            background-color: var(--navbar-bg);
+            min-width: 180px; /* Ширина подменю */
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.3);
+            z-index: 1;
+            border-radius: 0 0 4px 4px;
+            padding: 5px 0; /* Небольшие отступы сверху/снизу */
+            top: 100%; /* Появляется под родительским элементом */
+            left: 0; /* Выравнивание по левому краю */
+        }
+        .navbar-links .dropdown-content a {
+            color: var(--navbar-text);
+            padding: 8px 15px; /* Отступы внутри пунктов */
+            text-decoration: none;
+            display: block;
+            font-size: 1em; /* Размер шрифта чуть меньше */
+            border-bottom: none !important; /* Убираем подчеркивание от .navbar-links a */
+            white-space: nowrap; /* Запрещаем перенос текста */
+        }
+        .navbar-links .dropdown-content a:hover {
+            background-color: #555; /* Фон при наведении */
+            color: var(--info-color); /* Цвет текста при наведении */
+        }
+        .navbar-links .dropdown:hover .dropdown-content {
+            display: block; /* Показываем при наведении на родительский li */
+        }
+        /* Стиль для активной ссылки в выпадающем меню */
+        .navbar-links .dropdown-content a.active {
+             background-color: #444; /* Выделяем активный пункт */
+             color: var(--info-color);
+        }
+
+        /* Адаптивность (пример) */
+        @media (max-width: 768px) {
+            .main-container {
+                padding: 0.5rem; /* Уменьшаем отступы на маленьких экранах */
+            }
+            .navbar-links {
+                 gap: 0.8rem; /* Уменьшаем расстояние между ссылками */
+            }
+             .navbar-links a {
+                 font-size: 1em; /* Уменьшаем шрифт */
+             }
+             .navbar-brand {
+                 font-size: 1.2em;
+             }
+             .current-time {
+                 display: none; /* Можно скрыть время на мобильных */
+             }
+             /* Скрытие/показ выпадающего меню по клику на мобильных (если нужно) */
+             /* Потребует JS для переключения класса */
+        }
+
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <!-- Навигационная панель (без изменений структуры) -->
+    <nav class="navbar">
+        <a href="{{ url_for('html.dashboard') }}" class="navbar-brand">Мониторинг</a>
+        <ul class="navbar-links">
+            {# Ссылки на страницы просмотра доступны всем #}
+            <li><a href="{{ url_for('html.dashboard') }}" class="{{ 'active' if request.endpoint == 'html.dashboard' else '' }}">Сводка</a></li>
+            <li><a href="{{ url_for('html.status_detailed') }}" class="{{ 'active' if request.endpoint == 'html.status_detailed' else '' }}">Детальный статус</a></li>
+            <li><a href="{{ url_for('html.system_events_page') }}" class="{{ 'active' if request.endpoint == 'html.system_events_page' else '' }}">События</a></li>
+
+            {# Меню Управление - только для аутентифицированных #}
+            {% if current_user.is_authenticated %}
+            <li class="dropdown">
+                <a href="#">Управление ▾</a>
+                <ul class="dropdown-content">
+                    <li><a href="{{ url_for('html.manage_subdivisions_page') }}" class="{{ 'active' if request.endpoint == 'html.manage_subdivisions_page' else '' }}">Подразделения</a></li>
+                    <li><a href="{{ url_for('html.manage_nodes_page') }}" class="{{ 'active' if request.endpoint == 'html.manage_nodes_page' else '' }}">Узлы</a></li>
+                    <li><a href="{{ url_for('html.manage_assignments_page') }}" class="{{ 'active' if request.endpoint == 'html.manage_assignments_page' else '' }}">Задания</a></li>
+                    <li><a href="{{ url_for('html.manage_types_page') }}" class="{{ 'active' if request.endpoint == 'html.manage_types_page' else '' }}">Типы Узлов</a></li>
+                    <li><a href="{{ url_for('html.manage_api_keys_page') }}" class="{{ 'active' if request.endpoint == 'html.manage_api_keys_page' else '' }}">API Ключи</a></li> {# <<< ДОБАВЛЕНО #}
+                </ul>
+            </li>
+            {% endif %}
+        </ul>
+        {# Ссылки Вход/Выход справа #}
+        <div class="navbar-auth-links">
+             {% if current_user.is_authenticated %}
+                 <span style="margin-right: 15px; color: #ccc;">Пользователь: {{ current_user.username }}</span>
+                 <a href="{{ url_for('auth.logout') }}" style="color: var(--warning-color);">Выход</a>
+             {% else %}
+                 <a href="{{ url_for('auth.login') }}" style="color: var(--info-color);">Вход</a>
+             {% endif %}
+             <div id="current-time" class="current-time" style="display: inline-block; margin-left: 15px;"></div>
+        </div>
+    </nav>
+
+    <!-- Основной контент страницы внутри контейнера -->
+    <main class="main-container"> <!-- <<< Добавлен контейнер >>> -->
+        {% block content %}
+        <!-- Содержимое будет вставлено здесь -->
+        {% endblock %}
+    </main>
+
+    <!-- Общие скрипты для всех страниц (без изменений) -->
+    <script>
+        function formatDateTime(dateStr) {
+            if (!dateStr) return 'N/A';
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) { console.warn("Неверный формат даты:", dateStr); return 'Неверная дата'; }
+                return date.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch (e) { console.error("Ошибка форматирования даты:", dateStr, e); return 'Ошибка даты'; }
+        }
+        function updateCurrentTime() {
+            const timeElement = document.getElementById('current-time');
+            if (timeElement) {
+                const now = new Date();
+                timeElement.textContent = now.toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+        }
+        setInterval(updateCurrentTime, 1000);
+        document.addEventListener('DOMContentLoaded', updateCurrentTime);
+        function showGlobalError(message) { /* ... (функция показа ошибок без изменений) ... */ }
+    </script>
+
+    <!-- Дополнительные скрипты для конкретных страниц -->
+    {% block scripts %}{% endblock %}
+</body>
+</html>

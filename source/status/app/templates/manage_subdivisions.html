@@ -1,0 +1,519 @@
+﻿<!-- status/app/templates/manage_subdivisions.html -->
+{% extends "base.html" %}
+{% block title %}Управление Подразделениями - Мониторинг ПТК{% endblock %}
+
+{% block head_extra %}
+<style>
+    /* Стили для страницы управления */
+    .manage-container { display: grid; grid-template-columns: minmax(350px, 1fr) 2fr; gap: 2rem; align-items: start; margin-top: 1rem; } /* Увеличил minmax */
+    .form-section { background-color: var(--card-bg); padding: 1.5rem; border-radius: 5px; box-shadow: var(--card-shadow); position: sticky; top: 80px; /* Делаем форму "липкой" */}
+    .form-section h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 0.8rem; margin-bottom: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.95em; }
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group select,
+    .form-group textarea {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box; /* Учитывает padding в ширине */
+        font-size: 1em;
+    }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+    .form-actions { margin-top: 1.5rem; text-align: right; display: flex; justify-content: flex-end; gap: 0.5rem; }
+    /* Стили для кнопок в форме */
+    #submit-btn, #cancel-edit-btn { padding: 8px 15px; }
+    #cancel-edit-btn { background-color: var(--secondary-color); }
+    #cancel-edit-btn:hover { background-color: #5a6268; }
+
+    .list-section { background-color: var(--card-bg); padding: 1.5rem; border-radius: 5px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); } /* Добавил рамку */
+    .list-section h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 0.8rem; margin-bottom: 1rem; }
+    .subdivision-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .subdivision-table th, .subdivision-table td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; vertical-align: middle; }
+    .subdivision-table th { background-color: var(--light-grey); font-weight: 600; white-space: nowrap; }
+    .subdivision-table .actions { text-align: center; white-space: nowrap; width: 90px; } /* Фикс ширина */
+    .subdivision-table .actions button { padding: 4px 8px; font-size: 0.9em; margin-right: 5px; cursor: pointer; border: none; border-radius: 3px; color: white; }
+    .subdivision-table .edit-btn { background-color: var(--warning-color); color: #333; }
+    .subdivision-table .delete-btn { background-color: var(--danger-color); }
+    .subdivision-table .edit-btn:hover { background-color: #e0a800; }
+    .subdivision-table .delete-btn:hover { background-color: #c82333; }
+    /* Стиль для иерархии */
+    .subdivision-table .level-0 { font-weight: bold; background-color: #f8f9fa;}
+    .subdivision-table .level-1 td:first-child { padding-left: 30px !important; }
+    .subdivision-table .level-2 td:first-child { padding-left: 50px !important; }
+    .subdivision-table .level-3 td:first-child { padding-left: 70px !important; }
+    .subdivision-table td:first-child { word-break: break-word; } /* Перенос для длинных имен */
+    .subdivision-table small { color: #6c757d; font-size: 0.85em; display: block; } /* Стиль для полного имени */
+    .subdivision-table .icon-cell { text-align: center; width: 60px; } /* Центрирование иконки */
+    .subdivision-table .icon-cell img { max-width: 24px; max-height: 24px; vertical-align: middle; }
+
+    /* Стили для сообщений фидбека */
+    .feedback-area { min-height: 1.5em; margin-top: 1rem; font-weight: 500; text-align: center; padding: 5px; border-radius: 3px; }
+    .feedback-area.error-feedback { color: var(--danger-color); background-color: #f8d7da; border: 1px solid #f5c6cb; }
+    .feedback-area.success-feedback { color: var(--success-color); background-color: #d4edda; border: 1px solid #c3e6cb;}
+    .error-feedback { color: var(--danger-color); font-size: 0.9em; margin-top: 5px; } /* Ошибки полей формы */
+    #form-feedback { /* Общие ошибки/сообщения формы */ }
+    #list-feedback { /* Сообщения над списком */ }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Управление Подразделениями</h2>
+
+<div id="list-feedback" class="feedback-area"></div> <!-- Сообщения для списка над таблицей -->
+
+<div class="manage-container">
+
+    <!-- Секция с формой добавления/редактирования -->
+    <section class="form-section">
+        <h3 id="form-title">Добавить Подразделение</h3>
+        <form id="subdivision-form">
+            <input type="hidden" id="subdivision-id"> <!-- Для режима редактирования -->
+
+            <div class="form-group">
+                <label for="object-id">Внешний ID (ObjectID) *</label>
+                <input type="number" id="object-id" required>
+                <div class="error-feedback" id="object-id-error"></div>
+            </div>
+            <div class="form-group">
+                <label for="short-name">Короткое имя *</label>
+                <input type="text" id="short-name" required maxlength="100">
+                 <div class="error-feedback" id="short-name-error"></div>
+            </div>
+            <div class="form-group">
+                <label for="full-name">Полное имя</label>
+                <input type="text" id="full-name">
+            </div>
+            <div class="form-group">
+                <label for="parent-id">Родительское подразделение</label>
+                <select id="parent-id">
+                    <option value="">-- Нет (Корневое) --</option>
+                    <!-- Опции будут загружены динамически -->
+                </select>
+                 <div class="error-feedback" id="parent-id-error"></div>
+            </div>
+            <div class="form-group">
+                <label for="domain-name">Имя домена</label>
+                <input type="text" id="domain-name">
+            </div>
+            <div class="form-group">
+                <label for="transport-code">Код трансп. системы</label>
+                <input type="text" id="transport-code" maxlength="10">
+                 <div class="error-feedback" id="transport-code-error"></div>
+            </div>
+             <div class="form-group">
+                <label for="priority">Приоритет (меньше = выше)</label>
+                <input type="number" id="priority" value="10" min="0">
+                 <div class="error-feedback" id="priority-error"></div> <!-- Добавил ID для ошибки -->
+            </div>
+             <div class="form-group">
+                <label for="icon-filename">Имя файла иконки (в /static/images/subdivisions/)</label>
+                <input type="text" id="icon-filename" placeholder="например, office.png" maxlength="100">
+                <div class="error-feedback" id="icon-filename-error"></div>
+            </div>
+            <div class="form-group">
+                <label for="comment">Комментарий</label>
+                <textarea id="comment"></textarea>
+            </div>
+
+            <div id="form-feedback" class="feedback-area"></div> <!-- Общие ошибки/сообщения формы -->
+            <div class="form-actions">
+                <button type="button" id="cancel-edit-btn" style="display: none;">Отмена</button>
+                <button type="submit" id="submit-btn">Добавить</button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Секция со списком подразделений -->
+    <section class="list-section">
+        <h3>Список Подразделений</h3>
+        <table class="subdivision-table">
+            <thead>
+                <tr>
+                    <th>Имя (Короткое / <small>Полное</small>)</th>
+                    <th>ObjectID</th>
+                    <th>Родитель</th>
+                    <th>Иконка</th>
+                    <th>Код ТС</th>
+                    <th>Приоритет</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="subdivision-list">
+                <tr><td colspan="7" class="loading-message">Загрузка списка...</td></tr>
+            </tbody>
+        </table>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- Элементы DOM ---
+    const form = document.getElementById('subdivision-form');
+    const formTitle = document.getElementById('form-title');
+    const submitBtn = document.getElementById('submit-btn');
+    const cancelBtn = document.getElementById('cancel-edit-btn');
+    const subdivisionList = document.getElementById('subdivision-list');
+    const parentSelect = document.getElementById('parent-id');
+    const formFeedback = document.getElementById('form-feedback');
+    const listFeedback = document.getElementById('list-feedback');
+    // Поля формы
+    const idInput = document.getElementById('subdivision-id');
+    const objectIdInput = document.getElementById('object-id');
+    const shortNameInput = document.getElementById('short-name');
+    const fullNameInput = document.getElementById('full-name');
+    const domainNameInput = document.getElementById('domain-name');
+    const transportCodeInput = document.getElementById('transport-code');
+    const priorityInput = document.getElementById('priority');
+    const iconFilenameInput = document.getElementById('icon-filename');
+    const commentInput = document.getElementById('comment');
+
+    // --- API URL ---
+    const API_URL_SUBDIVISIONS = "{{ url_for('subdivisions.api_get_subdivisions') }}";
+    const API_URL_SUBDIVISION_DETAIL_TPL = "{{ url_for('subdivisions.api_get_subdivision', subdivision_id=0) }}";
+    const SUBDIVISION_IMAGES_BASE_URL_JS = "{{ url_for('static', filename='images/subdivisions/') }}";
+
+    // --- Переменные состояния ---
+    let subdivisionsData = []; // Кэш данных списка
+    let currentEditId = null; // ID редактируемого подразделения
+
+    // --- Функции ---
+
+    async function fetchData(url, options = {}) {
+        listFeedback.textContent = 'Загрузка...';
+        listFeedback.className = 'feedback-area';
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
+                let errorDetails = null; let errorCode = 'NETWORK_ERROR';
+                try {
+                     const errorData = await response.json();
+                     if (errorData && errorData.error) {
+                        errorCode = errorData.error.code || 'API_ERROR';
+                        if (errorData.error.message) { errorText += ` - ${errorData.error.message}`; }
+                        else if (typeof errorData.error === 'string') { errorText += ` - ${errorData.error}`; }
+                        errorDetails = errorData.error.details || errorData.error.message || errorData.error;
+                     } else if (errorData && typeof errorData === 'string') { errorText += ` - ${errorData}`; errorDetails = errorData; }
+                     else { errorDetails = errorData; }
+                } catch (e) {
+                    console.warn("Не удалось разобрать JSON ответа с ошибкой:", e);
+                    try { const rawErrorText = await response.text(); errorText += ` - ${rawErrorText}`; errorDetails = rawErrorText; } catch (e2) {}
+                }
+                const error = new Error(errorText); error.details = errorDetails; error.code = errorCode; error.status = response.status; throw error;
+            }
+            listFeedback.textContent = ''; // Очищаем при успехе
+            if (response.status === 204) return null;
+            const text = await response.text();
+            try { return text ? JSON.parse(text) : null; }
+            catch (e) { console.warn("Не удалось распарсить JSON успешного ответа:", text); return { rawText: text }; }
+        } catch (error) {
+             console.error("Ошибка fetchData:", error);
+             showListFeedback(`Ошибка сети: ${error.message}`, true);
+             throw error;
+        }
+    }
+
+    // Отображение ошибок валидации
+    function displayValidationErrors(errors, prefix = 'subdivision-') {
+         clearValidationErrors(prefix); let firstErrorField = null;
+         if (errors && typeof errors === 'object') {
+             for (const field in errors) {
+                  const fieldId = field.replace(/_([a-z])/g, (match, p1) => p1.toUpperCase()).replace(/Id$/, '');
+                  // Используем префикс по умолчанию, если не задан
+                  const inputId = fieldId === 'objectId' ? 'object-id' : (fieldId === 'shortName' ? 'short-name' : fieldId); // Особые случаи
+                  const errorElement = document.getElementById(`${inputId}-error`); // ID ошибки соответствует ID поля + '-error'
+                  const fieldElement = document.getElementById(inputId);
+                  if (errorElement) { errorElement.textContent = errors[field]; if (!firstErrorField) firstErrorField = fieldElement || errorElement; }
+                  else { showFormFeedback(errors[field], true); break; }
+             }
+         } else if (typeof errors === 'string') { showFormFeedback(errors, true); }
+         if(firstErrorField) { firstErrorField.focus(); }
+    }
+    // Очистка ошибок валидации
+    function clearValidationErrors(prefix = 'subdivision-') {
+         showFormFeedback(''); // Очищаем общий фидбек формы
+         document.querySelectorAll(`#${prefix}form .error-feedback`).forEach(el => el.textContent = '');
+    }
+    // Показ сообщений над списком
+    function showListFeedback(message, isError = false) {
+          listFeedback.textContent = message;
+          listFeedback.className = 'feedback-area ' + (isError ? 'error-feedback' : 'success-feedback');
+    }
+    // Показ сообщений внутри формы
+    function showFormFeedback(message, isError = false) {
+        formFeedback.textContent = message;
+        formFeedback.className = 'feedback-area ' + (isError ? 'error-feedback' : 'success-feedback');
+    }
+
+    // <<< ИЗМЕНЕНО: loadAndRenderSubdivisions >>>
+    async function loadAndRenderSubdivisions() {
+        console.debug("loadAndRenderSubdivisions: Начало");
+        subdivisionList.innerHTML = `<tr><td colspan="7" class="loading-message">Загрузка списка...</td></tr>`;
+        parentSelect.innerHTML = '<option value="">-- Нет (Корневое) --</option>';
+        // listFeedback очистится в fetchData
+
+        try {
+            console.debug("loadAndRenderSubdivisions: Вызов fetchData...");
+            const responseData = await fetchData(API_URL_SUBDIVISIONS); // Запрашиваем все
+            console.debug("loadAndRenderSubdivisions: Данные получены:", responseData);
+
+            if (responseData && Array.isArray(responseData.items)) {
+                subdivisionsData = responseData.items;
+                console.debug(`loadAndRenderSubdivisions: Присвоено ${subdivisionsData.length} подразделений.`);
+            } else {
+                 console.error("API /subdivisions не вернул ожидаемую структуру {items: [...]}:", responseData);
+                 subdivisionsData = [];
+                 throw new Error("Некорректный ответ от API при загрузке подразделений.");
+            }
+
+            console.debug("loadAndRenderSubdivisions: Вызов renderSubdivisionTable...");
+            renderSubdivisionTable(subdivisionsData);
+            console.debug("loadAndRenderSubdivisions: Вызов populateParentSelect...");
+            populateParentSelect(subdivisionsData, currentEditId);
+            console.debug("loadAndRenderSubdivisions: Завершено успешно.");
+
+        } catch (error) {
+            // Ошибка уже залогирована и показана в fetchData
+            console.error("loadAndRenderSubdivisions: Ошибка:", error);
+            subdivisionList.innerHTML = `<tr><td colspan="7" class="error-message">Ошибка загрузки списка подразделений.</td></tr>`;
+            // showListFeedback(`Ошибка загрузки: ${error.message}`, true); // Уже сделано в fetchData
+        }
+    }
+
+    // Рендеринг таблицы
+    function renderSubdivisionTable(subdivisions) {
+        console.debug("renderSubdivisionTable: Начало, получено:", subdivisions);
+         if (!Array.isArray(subdivisions)) {
+             console.error("renderSubdivisionTable ожидает массив, получено:", typeof subdivisions, subdivisions);
+             subdivisionList.innerHTML = `<tr><td colspan="7" class="error-message">Ошибка отображения: некорректные данные.</td></tr>`;
+             return;
+         }
+         const map = {}; const roots = [];
+         // Строим карту и определяем корни
+         subdivisions.forEach(s => { map[s.id] = { ...s, children: [] }; });
+         subdivisions.forEach(s => {
+             if (s.parent_id === null) { roots.push(s.id); }
+             else if (map[s.parent_id]) { map[s.parent_id].children.push(s.id); }
+             else { roots.push(s.id); console.warn(`Родитель ${s.parent_id} для ${s.id} (${s.short_name}) не найден, делаем корневым.`); }
+         });
+        console.debug(`renderSubdivisionTable: Найдено ${roots.length} корневых элементов.`);
+
+         let tableHtml = '';
+         function renderRowRecursive(subId, level) {
+              const s = map[subId];
+              if (!s) { console.warn(`renderRowRecursive: Элемент с ID ${subId} не найден в карте.`); return; }
+              const parentName = s.parent_id ? (map[s.parent_id]?.short_name || `ID: ${s.parent_id}`) : '---';
+              const nameCell = `<td title="${s.full_name || ''}" style="padding-left: ${10 + level * 20}px;">${s.short_name || 'N/A'} ${s.full_name ? `<small>${s.full_name}</small>` : ''}</td>`;
+              const iconPath = s.icon_filename ? `${SUBDIVISION_IMAGES_BASE_URL_JS}${encodeURIComponent(s.icon_filename)}` : ''; // Кодируем имя файла
+              const iconHtml = s.icon_filename ? `<img src="${iconPath}" alt="Иконка" title="${s.icon_filename}">` : '---';
+
+              tableHtml += `
+                  <tr class="level-${level}" data-id="${s.id}">
+                      ${nameCell}
+                      <td>${s.object_id ?? 'N/A'}</td> <!-- Используем ?? для NULL object_id -->
+                      <td>${parentName}</td>
+                      <td class="icon-cell">${iconHtml}</td>
+                      <td>${s.transport_system_code || '---'}</td>
+                      <td>${s.priority ?? 'N/A'}</td>
+                      <td class="actions">
+                          <button class="edit-btn" data-id="${s.id}" title="Редактировать">✏️</button>
+                          <button class="delete-btn" data-id="${s.id}" data-name="${s.short_name || 'N/A'}" title="Удалить">🗑️</button>
+                      </td>
+                  </tr>`;
+              // Рекурсивно рендерим дочерние, отсортировав их
+              s.children
+                .map(childId => map[childId]) // Получаем объекты детей
+                .filter(child => child) // Убираем отсутствующих (если были ошибки в данных)
+                .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999) || (a.short_name || '').localeCompare(b.short_name || ''))
+                .forEach(child => renderRowRecursive(child.id, level + 1));
+         }
+
+         // Сортируем и рендерим корневые элементы
+         roots
+            .map(rootId => map[rootId])
+            .filter(root => root)
+            .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999) || (a.short_name || '').localeCompare(b.short_name || ''))
+            .forEach(root => renderRowRecursive(root.id, 0));
+
+         subdivisionList.innerHTML = tableHtml || `<tr><td colspan="7" style="text-align: center;">Подразделения не найдены.</td></tr>`;
+         console.debug("renderSubdivisionTable: Рендеринг завершен.");
+    }
+
+    // Заполнение селекта родителей
+    function populateParentSelect(subdivisions, currentSubId = null) {
+        console.debug("populateParentSelect: Начало, currentSubId:", currentSubId);
+        const currentSelectedValue = parentSelect.value;
+        parentSelect.innerHTML = '<option value="">-- Нет (Корневое) --</option>';
+        if (!Array.isArray(subdivisions)) { console.error("populateParentSelect ожидает массив."); return; }
+
+        const map = {}; const roots = []; const descendantIds = new Set();
+        function getDescendants(subId) { if (!map[subId] || !map[subId].rawChildren) return; map[subId].rawChildren.forEach(childId => { descendantIds.add(childId); getDescendants(childId); }); }
+        subdivisions.forEach(s => { map[s.id] = { ...s, rawChildren: [] }; });
+        subdivisions.forEach(s => { if (s.parent_id !== null && map[s.parent_id]) { map[s.parent_id].rawChildren.push(s.id); } });
+        if (currentSubId !== null) { descendantIds.add(currentSubId); getDescendants(currentSubId); console.debug("populateParentSelect: Исключаемые ID (потомки + текущий):", Array.from(descendantIds)); }
+
+        const selectMap = {};
+        subdivisions.forEach(s => { if (!descendantIds.has(s.id)) { selectMap[s.id] = { ...s, children: [] }; if (s.parent_id === null || !selectMap[s.parent_id]) { if (!roots.includes(s.id)) roots.push(s.id); } else if (selectMap[s.parent_id]) { selectMap[s.parent_id].children.push(s.id); } } });
+
+        function addOption(subId, level) {
+             const s = selectMap[subId]; if (!s) return;
+             const option = document.createElement('option'); option.value = s.id;
+             option.textContent = '\u00A0'.repeat(level * 3) + s.short_name + ` (ID: ${s.id})`;
+             parentSelect.appendChild(option);
+             s.children
+                .map(childId => selectMap[childId])
+                .filter(child => child)
+                .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999) || (a.short_name || '').localeCompare(b.short_name || ''))
+                .forEach(child => addOption(child.id, level + 1));
+        }
+        roots
+            .map(rootId => selectMap[rootId])
+            .filter(root => root)
+            .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999) || (a.short_name || '').localeCompare(b.short_name || ''))
+            .forEach(root => addOption(root.id, 0));
+
+        if (currentSelectedValue && parentSelect.querySelector(`option[value="${currentSelectedValue}"]`)) { parentSelect.value = currentSelectedValue; }
+        else if (currentEditId === null) { parentSelect.value = ""; } // Сброс только если добавляем новое
+        console.debug("populateParentSelect: Завершено.");
+    }
+
+    // Сброс формы
+    function resetForm() {
+        form.reset();
+        idInput.value = '';
+        currentEditId = null;
+        formTitle.textContent = 'Добавить Подразделение';
+        submitBtn.textContent = 'Добавить';
+        submitBtn.disabled = false;
+        cancelBtn.style.display = 'none';
+        objectIdInput.disabled = false;
+        clearValidationErrors();
+        showFormFeedback('');
+        populateParentSelect(subdivisionsData); // Обновляем селект для режима добавления
+    }
+
+    // Заполнение формы для редактирования
+    function fillFormForEdit(subdivision) {
+        if (!subdivision) { console.error("fillFormForEdit: получено undefined subdivision"); return; }
+        console.debug("fillFormForEdit: Заполнение формы для ID", subdivision.id);
+        clearValidationErrors();
+        currentEditId = subdivision.id;
+        idInput.value = subdivision.id;
+        objectIdInput.value = subdivision.object_id;
+        objectIdInput.disabled = true;
+        shortNameInput.value = subdivision.short_name;
+        fullNameInput.value = subdivision.full_name || '';
+        domainNameInput.value = subdivision.domain_name || '';
+        transportCodeInput.value = subdivision.transport_system_code || '';
+        priorityInput.value = subdivision.priority ?? 10; // Значение по умолчанию, если priority null
+        iconFilenameInput.value = subdivision.icon_filename || '';
+        commentInput.value = subdivision.comment || '';
+        populateParentSelect(subdivisionsData, currentEditId); // Исключаем текущий и потомков
+        parentSelect.value = subdivision.parent_id || ''; // Устанавливаем родителя
+        formTitle.textContent = 'Редактировать Подразделение';
+        submitBtn.textContent = 'Сохранить';
+        cancelBtn.style.display = 'inline-block';
+        window.scrollTo({ top: form.offsetTop - 20, behavior: 'smooth' });
+        shortNameInput.focus(); // Фокус на короткое имя
+    }
+
+    // Обработка отправки формы
+    async function handleFormSubmit(event) {
+        event.preventDefault();
+        clearValidationErrors(); showFormFeedback('');
+        submitBtn.disabled = true;
+        submitBtn.textContent = currentEditId ? 'Сохранение...' : 'Добавление...';
+
+        const formData = {
+            object_id: currentEditId ? undefined : (objectIdInput.value ? parseInt(objectIdInput.value, 10) : null),
+            short_name: shortNameInput.value.trim(),
+            full_name: fullNameInput.value.trim() || null,
+            parent_id: parentSelect.value ? parseInt(parentSelect.value, 10) : null,
+            domain_name: domainNameInput.value.trim() || null,
+            transport_system_code: transportCodeInput.value.trim() || null,
+            priority: priorityInput.value ? parseInt(priorityInput.value, 10) : 10,
+            icon_filename: iconFilenameInput.value.trim() || null,
+            comment: commentInput.value.trim() || null
+        };
+         if (formData.object_id === undefined) { delete formData.object_id; }
+
+        // Клиентская валидация
+        let clientErrors = {};
+        if (!currentEditId && (formData.object_id === null || isNaN(formData.object_id))) clientErrors['object-id'] = "ObjectID обязателен и должен быть числом при добавлении.";
+        if (!formData.short_name) clientErrors['short-name'] = "Короткое имя обязательно.";
+        if (formData.transport_system_code && !/^[A-Za-z0-9]{1,10}$/.test(formData.transport_system_code)) { clientErrors['transport-code'] = "Код ТС: 1-10 лат. букв/цифр."; }
+        if (isNaN(formData.priority) || formData.priority < 0) { clientErrors['priority'] = "Приоритет должен быть неотрицательным числом."; }
+        if (formData.icon_filename && formData.icon_filename.length > 100) { clientErrors['icon-filename'] = "Имя файла иконки не более 100 символов."; }
+        if (Object.keys(clientErrors).length > 0) {
+            displayValidationErrors(clientErrors);
+            submitBtn.disabled = false;
+            submitBtn.textContent = currentEditId ? 'Сохранить' : 'Добавить';
+            return;
+        }
+
+        const url = currentEditId ? API_URL_SUBDIVISION_DETAIL_TPL.replace('/0', `/${currentEditId}`) : API_URL_SUBDIVISIONS;
+        const method = currentEditId ? 'PUT' : 'POST';
+
+        try {
+            const resultData = await fetchData(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
+            showListFeedback(`Подразделение успешно ${currentEditId ? 'обновлено' : 'добавлено'}!`, false);
+            resetForm();
+            await loadAndRenderSubdivisions(); // Обновляем список и селект
+        } catch (error) {
+             console.error(`Ошибка ${method} подразделения:`, error);
+             if (error.details) { displayValidationErrors(error.details); }
+             else { showFormFeedback(`Ошибка: ${error.message}`, true); }
+             showListFeedback(`Ошибка ${currentEditId ? 'обновления' : 'добавления'} подразделения.`, true);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = currentEditId ? 'Сохранить' : 'Добавить';
+        }
+    }
+
+    // Редактирование
+    async function handleEditClick(subdivisionId) {
+         const url = API_URL_SUBDIVISION_DETAIL_TPL.replace('/0', `/${subdivisionId}`);
+         try {
+             const subdivision = await fetchData(url); // Покажет "Загрузка..."
+             if (subdivision) { fillFormForEdit(subdivision); }
+             else { showListFeedback(`Ошибка: Подразделение ID ${subdivisionId} не найдено.`, true); }
+         } catch (error) {
+              console.error("Ошибка загрузки данных для редактирования:", error);
+              if (currentEditId === subdivisionId) resetForm();
+         }
+    }
+
+    // Удаление
+    async function handleDeleteClick(subdivisionId, subdivisionName) {
+        if (!confirm(`Вы уверены, что хотите удалить подразделение "${subdivisionName}" (ID: ${subdivisionId})? Связанные УЗЛЫ также будут удалены!`)) return;
+        const url = API_URL_SUBDIVISION_DETAIL_TPL.replace('/0', `/${subdivisionId}`);
+        try {
+             await fetchData(url, { method: 'DELETE' });
+             showListFeedback(`Подразделение "${subdivisionName}" успешно удалено.`, false);
+             if (currentEditId === subdivisionId) { resetForm(); }
+             await loadAndRenderSubdivisions();
+        } catch (error) {
+             console.error("Ошибка удаления:", error);
+             // Сообщение покажет fetchData
+        }
+    }
+
+    // --- Инициализация и обработчики ---
+    form.addEventListener('submit', handleFormSubmit);
+    cancelBtn.addEventListener('click', resetForm);
+
+    subdivisionList.addEventListener('click', (event) => {
+        const editBtn = event.target.closest('.edit-btn');
+        const deleteBtn = event.target.closest('.delete-btn');
+        if (editBtn) { handleEditClick(parseInt(editBtn.dataset.id, 10)); }
+        else if (deleteBtn) { handleDeleteClick(parseInt(deleteBtn.dataset.id, 10), deleteBtn.dataset.name); }
+    });
+
+    document.addEventListener('DOMContentLoaded', loadAndRenderSubdivisions);
+
+</script>
+{% endblock %}

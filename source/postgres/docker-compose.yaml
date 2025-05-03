@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14                        # используем официальный образ PostgreSQL 14
+    environment:
+      POSTGRES_USER: pu_user                  # стандартный пользователь БД
+      POSTGRES_PASSWORD: pu_password          # пароль для pu_user
+      POSTGRES_DB: pu_db                      # создаваемая БД
+      TZ: Europe/Moscow                       # настройка часового пояса внутри контейнера
+    volumes:
+      # Монтируем ВСЕ подпапки со скриптами в docker-entrypoint-initdb.d
+      # Docker выполнит их в алфавитном порядке ИМЕН ФАЙЛОВ (не путей)
+      # Монтируем каждый SQL файл индивидуально, сохраняя префиксы для порядка
+      # --- DB Schema ---
+      - ./db_schema/001_create_tables.sql:/docker-entrypoint-initdb.d/01_001_create_tables.sql
+      - ./db_schema/002_create_indexes.sql:/docker-entrypoint-initdb.d/01_002_create_indexes.sql
+      - ./db_schema/003_create_functions_procedures.sql:/docker-entrypoint-initdb.d/01_003_create_functions_procedures.sql
+      - ./db_schema/004_create_views.sql:/docker-entrypoint-initdb.d/01_004_create_views.sql
+      - ./db_schema/005_add_foreign_keys.sql:/docker-entrypoint-initdb.d/01_005_add_foreign_keys.sql
+      # --- DB Core Data ---
+      - ./db_core_data/001_settings.sql:/docker-entrypoint-initdb.d/02_001_settings.sql
+      - ./db_core_data/002_check_methods.sql:/docker-entrypoint-initdb.d/02_002_check_methods.sql
+      - ./db_core_data/003_node_property_types.sql:/docker-entrypoint-initdb.d/02_003_node_property_types.sql
+      - ./db_core_data/004_node_types.sql:/docker-entrypoint-initdb.d/02_004_node_types.sql
+      - ./db_core_data/005_node_properties_base.sql:/docker-entrypoint-initdb.d/02_005_node_properties_base.sql
+      # --- DB Seed Data (General) ---
+      - ./db_seed_data/general/001_system_events.sql:/docker-entrypoint-initdb.d/03_001_general_system_events.sql
+      # --- DB Seed Data (Subdivisions - Пример) ---
+      # Сначала создание всех подразделений
+      - ./db_seed_data/subdivisions/001_create_subdivisions.sql:/docker-entrypoint-initdb.d/03_100_create_subdivisions.sql
+      # Затем данные для конкретных подразделений (порядок важен, если есть зависимости)
+      - ./db_seed_data/subdivisions/ZRPU/001_nodes.sql:/docker-entrypoint-initdb.d/03_101_zrpu_nodes.sql
+      - ./db_seed_data/subdivisions/ZRPU/002_assignments.sql:/docker-entrypoint-initdb.d/03_102_zrpu_assignments.sql
+      - ./db_seed_data/subdivisions/OTRPK/001_nodes.sql:/docker-entrypoint-initdb.d/03_103_otrpk_nodes.sql
+      - ./db_seed_data/subdivisions/OTRPK/002_assignments.sql:/docker-entrypoint-initdb.d/03_104_otrpk_assignments.sql
+      # ---->>>> СТРОКА С ПРОБРОСОМ ПАПКИ ДАННЫХ БД УДАЛЕНА/ЗАКОММЕНТИРОВАНА <<<<----
+      # Если у вас была строка типа:
+      # - postgres_data:/var/lib/postgresql/data
+      # ее нужно удалить или закомментировать вот так:
+      # #- postgres_data:/var/lib/postgresql/data
+      # В вашем исходном файле она отсутствовала явно под сервисом postgres,
+      # но мы также удалим ее определение ниже, чтобы гарантировать отсутствие персистентности.
+
+    ports:
+      - "48036:5432"                           # проброс порта 5432 → 48036 на хосте
+    networks:
+      - pu_db                                  # изолированная сеть для БД
+      - pu_share                               # общая сеть для доступа из других стеков
+    restart: unless-stopped                    # автоперезапуск при падении
+
+  pgadmin:
+    image: dpage/pgadmin4:9                    # pgAdmin v4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com   # логин в интерфейсе pgAdmin
+      PGADMIN_DEFAULT_PASSWORD: admin          # пароль в интерфейсе pgAdmin
+      TZ: Europe/Moscow                        # часовой пояс
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin           # сохраняем настройки pgAdmin между перезапусками
+      # Оставляем том для pgAdmin, чтобы не настраивать его каждый раз
+    ports:
+      - "48035:80"                              # интерфейс pgAdmin доступен на 48035
+    depends_on:
+      - postgres                               # ждём запуска postgres перед pgAdmin
+    networks:
+      - pu_db                                  # общая сеть только для БД‑сервисов
+      - pu_share                               # (опционально) чтобы видеть другие сервисы
+    restart: unless-stopped
+
+volumes:
+  # ---->>>> ОПРЕДЕЛЕНИЕ ТОМА ДЛЯ ДАННЫХ POSTGRES УДАЛЕНО/ЗАКОММЕНТИРОВАНО <<<<----
+  # postgres_data:
+  pgadmin_data:                               # том для данных pgAdmin (оставляем)
+
+networks:
+  pu_db:
+    driver: bridge                            # приватная сеть БД
+  pu_share:
+    external: true                            # общая внешняя сеть (создана вручную)

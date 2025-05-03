@@ -1,0 +1,551 @@
+﻿<!-- status/app/templates/manage_nodes.html -->
+{% extends "base.html" %}
+{% block title %}Управление Узлами - Мониторинг ПТК{% endblock %}
+
+{% block head_extra %}
+<style>
+    /* Стили похожи на manage_assignments */
+    .manage-container { display: flex; flex-direction: column; gap: 1.5rem; }
+    .form-section-collapsible { background-color: var(--card-bg); padding: 0; border-radius: 5px; box-shadow: var(--card-shadow); margin-bottom: 1.5rem; border: 1px solid var(--border-color); overflow: hidden;}
+    .form-section-header { background-color: var(--light-grey); padding: 0.8rem 1.5rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .form-section-header h3 { margin: 0; font-size: 1.2em; }
+    .form-section-header span { font-size: 1.5em; transition: transform 0.3s ease; }
+    .form-section-content { padding: 1.5rem; display: none; border-top: 1px solid var(--border-color); }
+    .form-section-collapsible.open .form-section-content { display: block; }
+    .form-section-collapsible.open .form-section-header span { transform: rotate(180deg); }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem 1.5rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; }
+    .form-group select,
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group textarea {
+        width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1em;
+    }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+    .form-actions { margin-top: 1.5rem; text-align: right; display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+    .list-section { background-color: var(--card-bg); padding: 1.5rem; border-radius: 5px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); }
+    .list-section h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 0.8rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;} /* Добавлен flex-wrap и gap */
+
+    /* Стили для фильтров с чекбоксами */
+    .filter-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 15px; }
+    .filter-group { display: flex; align-items: center; gap: 5px; }
+    .filter-group label { margin-bottom: 0; font-weight: normal; font-size: 0.9em; } /* Убираем отступ снизу у лейблов */
+    .filter-group input[type="checkbox"] { margin-right: 3px; vertical-align: middle; }
+    .filter-controls select, .filter-controls input { padding: 4px 6px; font-size: 0.9em; border-radius: 3px; border: 1px solid #ccc; }
+    .filter-controls label[for^="filter-"] { white-space: nowrap; font-weight: 500;} /* Лейблы для селектов */
+    .filter-group label.checkbox-label { font-weight: normal; cursor: pointer; } /* Лейблы для чекбоксов */
+
+
+    .nodes-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .nodes-table th, .nodes-table td { border: 1px solid var(--border-color); padding: 8px 10px; text-align: left; vertical-align: middle; word-wrap: break-word; }
+    .nodes-table th { background-color: var(--light-grey); white-space: nowrap; }
+    .nodes-table td:first-child { width: 60px; text-align: center; } /* ID */
+    .nodes-table .actions { text-align: center; white-space: nowrap; width: 90px; } /* Фикс. ширина */
+    .nodes-table .actions button { padding: 4px 8px; font-size: 0.9em; margin-right: 5px; cursor: pointer; border: none; border-radius: 3px; color: white; }
+    .nodes-table .edit-btn { background-color: var(--warning-color); color: #333; }
+    .nodes-table .delete-btn { background-color: var(--danger-color); }
+
+    /* Стили пагинации */
+    .pagination-controls { margin-top: 1.5rem; text-align: center; }
+    .pagination-controls button, .pagination-controls span { display: inline-block; padding: 5px 10px; margin: 0 3px; border: 1px solid #ccc; border-radius: 3px; background-color: #fff; cursor: pointer; font-size: 0.9em; }
+    .pagination-controls button:disabled { background-color: #eee; color: #aaa; cursor: not-allowed; }
+    .pagination-controls span.current-page { background-color: var(--primary-color); color: white; border-color: var(--primary-color); cursor: default; }
+
+    /* Общие стили фидбека */
+    .error-feedback { color: var(--danger-color); font-size: 0.9em; margin-top: 5px; }
+    .success-feedback { color: var(--success-color); font-size: 0.9em; margin-top: 5px; }
+    .feedback-area { min-height: 1.5em; margin-top: 1rem; font-weight: 500; text-align: center; padding: 5px; border-radius: 3px; }
+    .feedback-area.error-feedback { color: var(--danger-color); background-color: #f8d7da; border: 1px solid #f5c6cb; }
+    .feedback-area.success-feedback { color: var(--success-color); background-color: #d4edda; border: 1px solid #c3e6cb;}
+    #form-feedback { /* Ошибки формы */ }
+    #list-feedback { /* Сообщения над списком */ }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>Управление Узлами Мониторинга</h2>
+
+<div id="list-feedback" class="feedback-area"></div> <!-- Область сообщений над списком -->
+
+<div class="manage-container">
+
+    <!-- Форма добавления/редактирования -->
+    <section class="form-section-collapsible open" id="form-section"> <!-- По умолчанию открыта -->
+         <div class="form-section-header" onclick="toggleForm()">
+            <h3 id="form-title">Добавить Узел</h3>
+            <span id="form-toggle-icon">🔼</span> <!-- Стрелка вверх по умолчанию -->
+        </div>
+        <div class="form-section-content" style="display: block;"> <!-- По умолчанию открыт -->
+            <form id="node-form">
+                <input type="hidden" id="node-edit-id">
+
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="node-name">Имя узла (Hostname) *</label>
+                        <input type="text" id="node-name" required maxlength="255">
+                        <div class="error-feedback" id="node-name-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="node-subdivision">Подразделение *</label>
+                        <select id="node-subdivision" required>
+                            <option value="">-- Выберите подразделение --</option>
+                            <!-- Динамическая загрузка -->
+                        </select>
+                        <div class="error-feedback" id="node-subdivision-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="node-ip">IP-адрес</label>
+                        <input type="text" id="node-ip" placeholder="XXX.XXX.XXX.XXX" maxlength="45">
+                         <div class="error-feedback" id="node-ip-error"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="node-type">Тип узла</label>
+                        <select id="node-type">
+                            <option value="">-- Выберите тип --</option>
+                            <!-- Динамическая загрузка -->
+                        </select>
+                        <div class="error-feedback" id="node-type-error"></div>
+                    </div>
+                </div> <!-- end form-grid -->
+
+                <div class="form-group">
+                    <label for="node-description">Описание</label>
+                    <textarea id="node-description"></textarea>
+                </div>
+
+                <div id="form-feedback" class="feedback-area"></div> <!-- Общие ошибки/сообщения формы -->
+                <div class="form-actions">
+                    <button type="button" id="cancel-edit-btn" style="display: none;">Отмена</button>
+                    <button type="submit" id="submit-btn">Добавить Узел</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- Список узлов -->
+    <section class="list-section">
+         <h3>
+            <span>Список Узлов</span>
+            <span class="filter-controls">
+                 <div class="filter-group">
+                     <label for="filter-subdivision">Подразделение:</label>
+                     <select id="filter-subdivision">
+                         <option value="">Все</option>
+                         <!-- Динамическая загрузка -->
+                     </select>
+                     <input type="checkbox" id="filter-subdivision-include-children" title="Включить дочерние подразделения">
+                     <label for="filter-subdivision-include-children" class="checkbox-label">Вкл. дочерние</label>
+                 </div>
+                  <div class="filter-group">
+                     <label for="filter-type">Тип:</label>
+                     <select id="filter-type">
+                         <option value="">Все</option>
+                         <!-- Динамическая загрузка -->
+                     </select>
+                      <input type="checkbox" id="filter-type-include-nested" title="Включить вложенные типы">
+                      <label for="filter-type-include-nested" class="checkbox-label">Вкл. вложенные</label>
+                 </div>
+            </span>
+        </h3>
+        <table class="nodes-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Имя</th>
+                    <th>IP Адрес</th>
+                    <th>Подразделение</th>
+                    <th>Тип узла</th>
+                    <th>Описание</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="node-list">
+                <tr><td colspan="7" class="loading-message">Загрузка списка узлов...</td></tr>
+            </tbody>
+        </table>
+         <!-- Пагинация -->
+         <div class="pagination-controls" id="pagination-controls" style="display: none;"> <!-- Скрыта по умолчанию -->
+             <button id="prev-page" disabled>« Назад</button>
+             <span id="page-info">Страница - из -</span>
+             <button id="next-page" disabled>Вперед »</button>
+         </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // --- Элементы DOM ---
+    const formSection = document.getElementById('form-section');
+    const formContent = formSection.querySelector('.form-section-content');
+    const formToggleIcon = document.getElementById('form-toggle-icon');
+    const form = document.getElementById('node-form');
+    const formTitle = document.getElementById('form-title');
+    const submitBtn = document.getElementById('submit-btn');
+    const cancelBtn = document.getElementById('cancel-edit-btn');
+    const nodeList = document.getElementById('node-list');
+    const formFeedback = document.getElementById('form-feedback');
+    const listFeedback = document.getElementById('list-feedback');
+    // Поля формы
+    const idInput = document.getElementById('node-edit-id');
+    const nameInput = document.getElementById('node-name');
+    const subdivisionSelect = document.getElementById('node-subdivision');
+    const ipInput = document.getElementById('node-ip');
+    const typeSelect = document.getElementById('node-type');
+    const descriptionTextarea = document.getElementById('node-description');
+    // Фильтры
+    const filterSubdivisionSelect = document.getElementById('filter-subdivision');
+    const filterTypeSelect = document.getElementById('filter-type');
+    const filterSubdivisionIncludeChildren = document.getElementById('filter-subdivision-include-children');
+    const filterTypeIncludeNested = document.getElementById('filter-type-include-nested');
+    // Пагинация
+    const paginationControls = document.getElementById('pagination-controls');
+    const prevPageBtn = document.getElementById('prev-page');
+    const nextPageBtn = document.getElementById('next-page');
+    const pageInfoSpan = document.getElementById('page-info');
+
+    // --- API URL ---
+    const API_URL_NODES = "{{ url_for('nodes.api_get_nodes') }}"; // GET (list/filtered), POST
+    const API_URL_NODE_DETAIL_TPL = "{{ url_for('nodes.api_get_node', node_id=0) }}"; // GET, PUT, DELETE
+    const API_URL_SUBDIVISIONS = "{{ url_for('subdivisions.api_get_subdivisions') }}";
+    const API_URL_NODE_TYPES = "{{ url_for('node_types.api_get_node_types') }}";
+
+    // --- Переменные состояния ---
+    let nodesData = [];         // Кэш узлов ТЕКУЩЕЙ СТРАНИЦЫ
+    let subdivisionsData = [];  // Кэш ВСЕХ подразделений
+    let nodeTypesData = [];     // Кэш ВСЕХ типов узлов
+    let currentEditId = null;
+    let isFormOpen = true; // Форма открыта по умолчанию
+    let currentPage = 1;
+    let itemsPerPage = 25; // Количество узлов на странице
+    let totalNodes = 0; // Общее количество узлов (по фильтрам)
+
+    // --- Функции ---
+
+    async function fetchData(url, options = {}) {
+        listFeedback.textContent = 'Загрузка...';
+        listFeedback.className = 'feedback-area';
+        try {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+                let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
+                let errorDetails = null; let errorCode = 'NETWORK_ERROR';
+                try {
+                     const errorData = await response.json();
+                     if (errorData && errorData.error) {
+                        errorCode = errorData.error.code || 'API_ERROR';
+                        if (errorData.error.message) { errorText += ` - ${errorData.error.message}`; }
+                        else if (typeof errorData.error === 'string') { errorText += ` - ${errorData.error}`; }
+                        errorDetails = errorData.error.details || errorData.error.message || errorData.error;
+                     } else if (errorData && typeof errorData === 'string') { errorText += ` - ${errorData}`; errorDetails = errorData; }
+                     else { errorDetails = errorData; }
+                } catch (e) {
+                    console.warn("Не удалось разобрать JSON ответа с ошибкой:", e);
+                    try { const rawErrorText = await response.text(); errorText += ` - ${rawErrorText}`; errorDetails = rawErrorText; } catch (e2) {}
+                }
+                const error = new Error(errorText); error.details = errorDetails; error.code = errorCode; error.status = response.status; throw error;
+            }
+            listFeedback.textContent = '';
+            if (response.status === 204) return null;
+            const text = await response.text();
+            try { return text ? JSON.parse(text) : null; }
+            catch (e) { console.warn("Не удалось распарсить JSON успешного ответа:", text); return { rawText: text }; }
+        } catch (error) {
+             console.error("Ошибка fetchData:", error);
+             showListFeedback(`Ошибка сети: ${error.message}`, true);
+             throw error;
+        }
+    }
+
+    // Отображение ошибок валидации формы
+     function displayValidationErrors(errors, prefix = 'node-') {
+         clearValidationErrors(prefix); let firstErrorField = null;
+         if (errors && typeof errors === 'object') {
+             for (const field in errors) {
+                  const fieldId = field.replace(/_([a-z])/g, (match, p1) => p1.toUpperCase()).replace(/Id$/, '');
+                  const inputId = fieldId === 'parentSubdivision' ? 'node-subdivision' : fieldId === 'nodeType' ? 'node-type' : `${prefix}${fieldId}`;
+                  const errorElement = document.getElementById(`${inputId}-error`);
+                  const fieldElement = document.getElementById(inputId);
+                  if (errorElement) { errorElement.textContent = errors[field]; if (!firstErrorField) firstErrorField = fieldElement || errorElement; }
+                  else { showFormFeedback(errors[field], true); break; }
+             }
+         } else if (typeof errors === 'string') { showFormFeedback(errors, true); }
+         if(firstErrorField) { firstErrorField.focus(); }
+     }
+    // Очистка ошибок валидации формы
+    function clearValidationErrors(prefix = 'node-') {
+        showFormFeedback('');
+        document.querySelectorAll(`#${prefix}form .error-feedback`).forEach(el => el.textContent = '');
+    }
+    // Показ сообщений над списком
+    function showListFeedback(message, isError = false) {
+        listFeedback.textContent = message;
+        listFeedback.className = 'feedback-area ' + (isError ? 'error-feedback' : 'success-feedback');
+    }
+    // Показ сообщений внутри формы
+     function showFormFeedback(message, isError = false) {
+        formFeedback.textContent = message;
+        formFeedback.className = 'feedback-area ' + (isError ? 'error-feedback' : 'success-feedback');
+    }
+
+    // Переключение видимости формы
+    function toggleForm() {
+         isFormOpen = !isFormOpen;
+         formSection.classList.toggle('open', isFormOpen);
+         formContent.style.display = isFormOpen ? 'block' : 'none';
+         formToggleIcon.textContent = isFormOpen ? '🔼' : '🔽';
+         if (isFormOpen && !currentEditId) { nameInput.focus(); }
+         else if (!isFormOpen && currentEditId) { resetForm(); }
+    }
+
+    // --- Загрузка данных ---
+    // Заполнение селекта (универсальная)
+    function populateSelect(selectElement, items, valueField, textField, placeholder, addHierarchy = false, excludeId = null) {
+         const currentSelectedValue = selectElement.value;
+         selectElement.innerHTML = `<option value="">${placeholder}</option>`;
+         if (!items || items.length === 0) { console.warn(`populateSelect для ${selectElement.id}: нет данных`); return; }
+
+         if (addHierarchy) {
+             const map = {}; const roots = []; const descendantIds = new Set();
+             function getDescendants(itemId) { if (!map[itemId]?.rawChildren) return; map[itemId].rawChildren.forEach(childId => { descendantIds.add(childId); getDescendants(childId); }); }
+             items.forEach(item => { map[item[valueField]] = { ...item, rawChildren: [] }; });
+             items.forEach(item => {
+                 const parentField = valueField === 'id' && item.parent_id !== undefined ? 'parent_id' : (valueField === 'id' && item.parent_type_id !== undefined ? 'parent_type_id' : null);
+                 if (parentField && map[item[parentField]]) { map[item[parentField]].rawChildren.push(item[valueField]); }
+             });
+             if (excludeId !== null) { descendantIds.add(excludeId); getDescendants(excludeId); }
+             const selectMap = {};
+             items.forEach(item => {
+                 const itemId = item[valueField];
+                 if (!descendantIds.has(itemId)) {
+                     selectMap[itemId] = { ...item, children: [] };
+                     const parentField = valueField === 'id' && item.parent_id !== undefined ? 'parent_id' : (valueField === 'id' && item.parent_type_id !== undefined ? 'parent_type_id' : null);
+                     if (!parentField || item[parentField] === null || !selectMap[item[parentField]]) { if (!roots.includes(itemId)) roots.push(itemId); }
+                     else if (selectMap[item[parentField]]) { selectMap[item[parentField]].children.push(itemId); }
+                 }
+             });
+             function addOption(itemId, level) {
+                 const item = selectMap[itemId]; if (!item) return;
+                 const option = document.createElement('option'); option.value = item[valueField];
+                 const name = item.short_name || item[textField];
+                 option.textContent = '\u00A0'.repeat(level * 3) + name;
+                 selectElement.appendChild(option);
+                 item.children.sort((a, b) => (selectMap[a].priority || 0) - (selectMap[b].priority || 0) || (selectMap[a].short_name || selectMap[a][textField]).localeCompare(selectMap[b].short_name || selectMap[b][textField]))
+                    .forEach(childId => addOption(childId, level + 1));
+             }
+             roots.sort((a, b) => (selectMap[a].priority || 0) - (selectMap[b].priority || 0) || (selectMap[a].short_name || selectMap[a][textField]).localeCompare(selectMap[b].short_name || selectMap[b][textField]))
+                 .forEach(rootId => addOption(rootId, 0));
+         } else { // Плоский список
+             items.sort((a, b) => (a[textField] || '').localeCompare(b[textField] || ''))
+                 .forEach(item => {
+                     const option = document.createElement('option'); option.value = item[valueField]; option.textContent = item[textField]; selectElement.appendChild(option);
+                 });
+         }
+         if (currentSelectedValue && selectElement.querySelector(`option[value="${currentSelectedValue}"]`)) {
+             selectElement.value = currentSelectedValue;
+         } else if (!addHierarchy || excludeId === null) {
+             selectElement.value = "";
+         }
+    }
+
+    // Загрузка начальных данных (справочников)
+    async function loadInitialData() {
+        showListFeedback("Загрузка справочников...");
+        try {
+            const [subdivisionsRes, nodeTypesRes] = await Promise.all([
+                fetchData(API_URL_SUBDIVISIONS), fetchData(API_URL_NODE_TYPES)
+            ]);
+            subdivisionsData = (subdivisionsRes && subdivisionsRes.items) ? subdivisionsRes.items : [];
+            nodeTypesData = (nodeTypesRes && nodeTypesRes.items) ? nodeTypesRes.items : [];
+            if (subdivisionsData.length === 0) console.warn("Справочник подразделений пуст.");
+            if (nodeTypesData.length === 0) console.warn("Справочник типов узлов пуст.");
+            // Заполнение селектов
+            populateSelect(subdivisionSelect, subdivisionsData, 'id', 'short_name', '-- Выберите подразделение --', true);
+            populateSelect(typeSelect, nodeTypesData, 'id', 'name', '-- Выберите тип --', true);
+            populateSelect(filterSubdivisionSelect, subdivisionsData, 'id', 'short_name', 'Все подразделения', true);
+            populateSelect(filterTypeSelect, nodeTypesData, 'id', 'name', 'Все типы', true);
+            showListFeedback("");
+            await loadAndRenderNodes(); // Загружаем первую страницу узлов
+        } catch (error) { console.error("Ошибка загрузки начальных данных:", error); }
+    }
+
+    // Загрузка и рендеринг списка узлов с пагинацией
+    async function loadAndRenderNodes(page = 1) {
+        nodeList.innerHTML = `<tr><td colspan="7" class="loading-message">Загрузка списка узлов (страница ${page})...</td></tr>`;
+        currentPage = page;
+        const offset = (currentPage - 1) * itemsPerPage;
+
+        const params = new URLSearchParams();
+        params.append('limit', itemsPerPage);
+        params.append('offset', offset);
+        if (filterSubdivisionSelect.value) {
+             params.append('subdivision_id', filterSubdivisionSelect.value);
+             if (filterSubdivisionIncludeChildren.checked) params.append('include_child_subdivisions', 'true');
+        }
+        if (filterTypeSelect.value) {
+            params.append('node_type_id', filterTypeSelect.value);
+             if (filterTypeIncludeNested.checked) params.append('include_nested_types', 'true');
+        }
+
+        try {
+            const url = `${API_URL_NODES}?${params.toString()}`;
+            const responseData = await fetchData(url); // Ожидаем {items: [], total_count: N, ...}
+            nodesData = (responseData && responseData.items) ? responseData.items : []; // Кэшируем только ТЕКУЩУЮ страницу
+            totalNodes = (responseData && responseData.total_count !== undefined) ? responseData.total_count : nodesData.length;
+            renderNodeTable(nodesData);
+            renderPagination();
+        } catch (error) {
+            console.error("Ошибка загрузки узлов:", error);
+            nodeList.innerHTML = `<tr><td colspan="7" class="error-message">Ошибка загрузки узлов.</td></tr>`;
+            renderPagination(); // Показываем пагинацию с 0 записей
+        }
+    }
+
+    // Рендеринг таблицы узлов
+    function renderNodeTable(nodesToRender) {
+         const subdivisionMap = Object.fromEntries(subdivisionsData.map(s => [s.id, s.short_name]));
+         const typeMap = Object.fromEntries(nodeTypesData.map(t => [t.id, t.name]));
+         let tableHtml = '';
+         if (nodesToRender.length === 0) {
+              tableHtml = `<tr><td colspan="7" style="text-align: center;">Узлы не найдены${filterSubdivisionSelect.value || filterTypeSelect.value ? ' (с учетом фильтров)' : ''}.</td></tr>`;
+         } else {
+             tableHtml = nodesToRender
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                .map(n => {
+                     const subdivisionName = subdivisionMap[n.subdivision_id] || `ID: ${n.subdivision_id}`;
+                     const typeName = n.node_type_id ? (typeMap[n.node_type_id] || `ID: ${n.node_type_id}`) : '---';
+                     return `
+                         <tr data-id="${n.id}">
+                             <td>${n.id}</td>
+                             <td>${n.name || 'N/A'}</td>
+                             <td>${n.ip_address || '---'}</td>
+                             <td title="ID: ${n.subdivision_id}">${subdivisionName}</td>
+                             <td title="ID: ${n.node_type_id}">${typeName}</td>
+                             <td>${n.description || '---'}</td>
+                             <td class="actions">
+                                  <button class="edit-btn" data-id="${n.id}" title="Редактировать">✏️</button>
+                                  <button class="delete-btn" data-id="${n.id}" data-name="${n.name || 'N/A'}" title="Удалить">🗑️</button>
+                             </td>
+                         </tr>`;
+                 }).join('');
+         }
+         nodeList.innerHTML = tableHtml;
+    }
+
+    // Рендер пагинации
+    function renderPagination() {
+        if (!paginationControls || !pageInfoSpan || !prevPageBtn || !nextPageBtn) return;
+        const totalPages = Math.ceil(totalNodes / itemsPerPage);
+        pageInfoSpan.textContent = `Страница ${currentPage} из ${totalPages} (Всего: ${totalNodes})`;
+        prevPageBtn.disabled = currentPage <= 1;
+        nextPageBtn.disabled = currentPage >= totalPages;
+        paginationControls.style.display = totalPages > 1 ? 'block' : 'none';
+    }
+
+    // --- Форма и CRUD ---
+    function resetForm() {
+        form.reset(); idInput.value = ''; currentEditId = null;
+        formTitle.textContent = 'Добавить Узел'; submitBtn.textContent = 'Добавить Узел';
+        submitBtn.disabled = false; cancelBtn.style.display = 'none';
+        clearValidationErrors(); showFormFeedback('');
+    }
+    function fillFormForEdit(node) {
+        if (!node) { console.error("fillFormForEdit: получено undefined node"); return; }
+        clearValidationErrors(); currentEditId = node.id; idInput.value = node.id;
+        nameInput.value = node.name; subdivisionSelect.value = node.subdivision_id || '';
+        ipInput.value = node.ip_address || ''; typeSelect.value = node.node_type_id || '';
+        descriptionTextarea.value = node.description || '';
+        formTitle.textContent = 'Редактировать Узел'; submitBtn.textContent = 'Сохранить';
+        cancelBtn.style.display = 'inline-block';
+        if (!isFormOpen) { toggleForm(); }
+        window.scrollTo({ top: formSection.offsetTop - 20, behavior: 'smooth' });
+        nameInput.focus();
+    }
+    async function handleFormSubmit(event) {
+        event.preventDefault(); clearValidationErrors(); showFormFeedback('');
+        submitBtn.disabled = true; submitBtn.textContent = currentEditId ? 'Сохранение...' : 'Добавление...';
+        const formData = {
+            name: nameInput.value.trim(),
+            parent_subdivision_id: subdivisionSelect.value ? parseInt(subdivisionSelect.value, 10) : null,
+            ip_address: ipInput.value.trim() || null,
+            node_type_id: typeSelect.value ? parseInt(typeSelect.value, 10) : null,
+            description: descriptionTextarea.value.trim() || null
+        };
+        let clientErrors = {};
+        if (!formData.name) clientErrors['name'] = "Имя узла обязательно.";
+        if (!formData.parent_subdivision_id) clientErrors['parent_subdivision_id'] = "Подразделение обязательно.";
+        if (formData.ip_address && !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(formData.ip_address)) { clientErrors['ip_address'] = "Некорректный формат IP-адреса."; }
+        if (Object.keys(clientErrors).length > 0) {
+            displayValidationErrors(clientErrors); submitBtn.disabled = false;
+            submitBtn.textContent = currentEditId ? 'Сохранить' : 'Добавить Узел'; return;
+        }
+        const url = currentEditId ? API_URL_NODE_DETAIL_TPL.replace('/0', `/${currentEditId}`) : API_URL_NODES;
+        const method = currentEditId ? 'PUT' : 'POST';
+        try {
+            const resultData = await fetchData(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(formData) });
+            showListFeedback(`Узел успешно ${currentEditId ? 'обновлен' : 'добавлен'}!`, false);
+            resetForm();
+            await loadAndRenderNodes(currentEditId ? currentPage : 1); // Обновляем текущую или первую страницу
+            if (isFormOpen && currentEditId) { toggleForm(); }
+            else if (isFormOpen && !currentEditId) { nameInput.focus(); }
+        } catch (error) {
+            console.error(`Ошибка ${method} узла:`, error);
+            if (error.details) { displayValidationErrors(error.details); }
+            else { showFormFeedback(`Ошибка: ${error.message}`, true); }
+            showListFeedback(`Ошибка ${currentEditId ? 'обновления' : 'добавления'} узла.`, true);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = currentEditId ? 'Сохранить' : 'Добавить Узел';
+        }
+    }
+    async function handleEditClick(nodeId) {
+         const url = API_URL_NODE_DETAIL_TPL.replace('/0', `/${nodeId}`);
+         try {
+             const node = await fetchData(url);
+             if (node) { fillFormForEdit(node); }
+             else { showListFeedback(`Ошибка: Узел ID ${nodeId} не найден (API вернул null).`, true); }
+         } catch (error) {
+              console.error("Ошибка загрузки узла для редактирования:", error);
+              if (currentEditId === nodeId) resetForm();
+         }
+    }
+    async function handleDeleteClick(nodeId, nodeName) {
+        if (!confirm(`Уверены, что хотите удалить узел "${nodeName}" (ID: ${nodeId})? Связанные задания и история проверок также будут удалены!`)) return;
+        const url = API_URL_NODE_DETAIL_TPL.replace('/0', `/${nodeId}`);
+        try {
+             await fetchData(url, { method: 'DELETE' });
+             showListFeedback(`Узел "${nodeName}" успешно удален.`, false);
+             if (currentEditId === nodeId) { resetForm(); }
+             // Перезагружаем текущую страницу, чтобы не прыгать на первую
+             await loadAndRenderNodes(currentPage);
+        } catch (error) { console.error("Ошибка удаления узла:", error); }
+    }
+
+    // --- Инициализация и обработчики ---
+    form.addEventListener('submit', handleFormSubmit);
+    cancelBtn.addEventListener('click', resetForm);
+    nodeList.addEventListener('click', (event) => {
+        const editBtn = event.target.closest('.edit-btn');
+        const deleteBtn = event.target.closest('.delete-btn');
+        if (editBtn) { handleEditClick(parseInt(editBtn.dataset.id, 10)); }
+        else if (deleteBtn) { handleDeleteClick(parseInt(deleteBtn.dataset.id, 10), deleteBtn.dataset.name); }
+    });
+    // Обработчики фильтров
+    filterSubdivisionSelect.addEventListener('change', () => loadAndRenderNodes(1));
+    filterTypeSelect.addEventListener('change', () => loadAndRenderNodes(1));
+    filterSubdivisionIncludeChildren.addEventListener('change', () => loadAndRenderNodes(1));
+    filterTypeIncludeNested.addEventListener('change', () => loadAndRenderNodes(1));
+    // Обработчики пагинации
+    prevPageBtn.addEventListener('click', () => { if (currentPage > 1) loadAndRenderNodes(currentPage - 1); });
+    nextPageBtn.addEventListener('click', () => { if (currentPage * itemsPerPage < totalNodes) loadAndRenderNodes(currentPage + 1); });
+
+    document.addEventListener('DOMContentLoaded', loadInitialData);
+
+</script>
+{% endblock %}

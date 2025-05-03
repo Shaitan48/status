@@ -1,0 +1,259 @@
+﻿<!-- status/app/templates/dashboard.html -->
+{% extends "base.html" %}
+{% block title %}Сводка - Мониторинг ПТК{% endblock %}
+
+{% block content %}
+<h2>Сводка состояния узлов</h2>
+<div id="dashboard-grid" class="dashboard-grid">
+    <!-- Начальное сообщение -->
+    <p class="loading-message">Загрузка данных...</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const dashboardContainer = document.getElementById('dashboard-grid');
+    const API_URL_DASHBOARD = "{{ url_for('data.api_dashboard_data') }}";
+    const ICONS_BASE_URL_JS = "{{ url_for('static', filename='icons/') }}";
+    const SUBDIVISION_IMAGES_BASE_URL_JS = "{{ url_for('static', filename='images/subdivisions/') }}";
+
+    let dashboardDataCache = null; // Кэш для предыдущих данных
+
+    // --- Функция для создания HTML элемента узла ---
+    function createNodeElement(node) {
+        if (!node || typeof node.name !== 'string' || typeof node.status_class !== 'string') {
+            console.warn(`createNodeElement: Пропущен некорректный узел:`, node);
+            return null; // Возвращаем null, если узел некорректен
+        }
+        const span = document.createElement('span');
+        span.className = `node-icon-display ${node.status_class}`;
+        span.dataset.nodeId = node.id; // Уникальный ID для поиска
+
+        const titleParts = [
+            `Узел: ${node.name || 'N/A'}`,
+            `IP: ${node.ip_address || 'N/A'}`,
+            `Статус: ${node.status_text || 'N/A'}`,
+            `Тип: ${node.node_type_path || 'N/A'}`,
+            `Проверка (агент): ${formatDateTime(node.check_timestamp)}`,
+            `Проверка (БД): ${formatDateTime(node.last_checked)}`
+        ];
+        span.title = titleParts.join('\n');
+
+        const iconFilename = node.icon_filename || 'other.svg';
+        const iconUrl = `${ICONS_BASE_URL_JS}${encodeURIComponent(iconFilename)}`;
+        // Используем CSS переменные или напрямую стили для маски
+        span.style.webkitMaskImage = `url(${iconUrl})`;
+        span.style.maskImage = `url(${iconUrl})`;
+        // Цвет фона уже задается классом status_class
+
+        return span;
+    }
+
+    // --- Функция для обновления существующего элемента узла ---
+    function updateNodeElement(element, node) {
+         if (!element || !node) return;
+
+         const newStatusClass = `node-icon-display ${node.status_class}`;
+         if (element.className !== newStatusClass) {
+             element.className = newStatusClass;
+         }
+
+         const titleParts = [
+            `Узел: ${node.name || 'N/A'}`,
+            `IP: ${node.ip_address || 'N/A'}`,
+            `Статус: ${node.status_text || 'N/A'}`,
+            `Тип: ${node.node_type_path || 'N/A'}`,
+            `Проверка (агент): ${formatDateTime(node.check_timestamp)}`,
+            `Проверка (БД): ${formatDateTime(node.last_checked)}`
+        ];
+        const newTitle = titleParts.join('\n');
+        if (element.title !== newTitle) {
+            element.title = newTitle;
+        }
+
+        // Обновляем иконку, если она изменилась (маловероятно, но возможно)
+        const iconFilename = node.icon_filename || 'other.svg';
+        const iconUrl = `${ICONS_BASE_URL_JS}${encodeURIComponent(iconFilename)}`;
+        const currentMask = element.style.webkitMaskImage || element.style.maskImage;
+        if (currentMask !== `url("${iconUrl}")`) { // Сравниваем строки URL
+             element.style.webkitMaskImage = `url(${iconUrl})`;
+             element.style.maskImage = `url(${iconUrl})`;
+        }
+    }
+
+
+    // --- Функция для создания HTML элемента подразделения ---
+    function createSubdivisionElement(subdivision) {
+        if (!subdivision || typeof subdivision.short_name !== 'string' || !Array.isArray(subdivision.nodes)) {
+            console.warn("createSubdivisionElement: Пропущено некорректное подразделение:", subdivision);
+            return null;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'group-card';
+        card.dataset.subdivisionId = subdivision.id; // Уникальный ID
+
+        const onlineNodes = subdivision.nodes.filter(n => n.status_class === 'available').length;
+        const totalNodes = subdivision.nodes.length;
+
+        const subdivisionIconHtml = subdivision.icon_filename
+          ? `<img src="${SUBDIVISION_IMAGES_BASE_URL_JS}${encodeURIComponent(subdivision.icon_filename)}" alt="" style="width: 24px; height: 24px; margin-right: 8px; vertical-align: middle;" title="${subdivision.icon_filename}">`
+          : '';
+
+        const header = document.createElement('h3');
+        header.innerHTML = `${subdivisionIconHtml}${subdivision.short_name} (<span class="subdivision-stats">${onlineNodes}/${totalNodes}</span>)`; // Добавляем span для статистики
+
+        const grid = document.createElement('div');
+        grid.className = 'node-status-grid';
+
+        subdivision.nodes.forEach(node => {
+            const nodeElement = createNodeElement(node);
+            if (nodeElement) {
+                grid.appendChild(nodeElement);
+            }
+        });
+
+        card.appendChild(header);
+        card.appendChild(grid);
+        return card;
+    }
+
+     // --- Основная функция получения и рендеринга/обновления ---
+    async function fetchAndUpdateDashboard() {
+        if (!dashboardContainer) { console.error("Элемент dashboard-grid не найден!"); return; }
+        console.debug("Запрос данных для сводки...");
+        // Не очищаем контейнер сразу, чтобы избежать мигания при ошибке
+
+        let newSubdivisionsData = null;
+        try {
+            const response = await fetch(API_URL_DASHBOARD);
+            if (!response.ok) { /* ... (обработка ошибки сети/API как раньше) ... */
+                 let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
+                 try { const errorData = await response.json(); if (errorData.error) errorText += ` - ${JSON.stringify(errorData.error)}`; } catch (e) {}
+                 throw new Error(errorText);
+            }
+            newSubdivisionsData = await response.json();
+            console.debug("Данные для сводки получены:", newSubdivisionsData);
+
+            if (!Array.isArray(newSubdivisionsData)) {
+                 throw new Error("API вернул некорректные данные (не массив).");
+            }
+
+        } catch (error) {
+            console.error("Ошибка загрузки данных сводки:", error);
+            // Показываем ошибку только если данных еще не было
+            if (!dashboardDataCache) {
+                 dashboardContainer.innerHTML = `<p class="error-message">Ошибка загрузки данных: ${error.message}</p>`;
+            } else {
+                 // Можно показать временное сообщение об ошибке обновления где-то еще
+                 console.warn("Не удалось обновить данные сводки, используются предыдущие.");
+                 showGlobalError(`Ошибка обновления сводки: ${error.message}`); // Показываем глобальную ошибку
+            }
+            return; // Прерываем выполнение при ошибке
+        }
+
+        // --- Логика обновления DOM ---
+        const currentCards = dashboardContainer.querySelectorAll('.group-card[data-subdivision-id]');
+        const currentCardMap = new Map();
+        currentCards.forEach(card => card.dataset.subdivisionId && currentCardMap.set(parseInt(card.dataset.subdivisionId, 10), card));
+
+        const newSubdivisionIds = new Set();
+        const fragment = document.createDocumentFragment(); // Используем фрагмент для эффективности
+
+        newSubdivisionsData.forEach(subData => {
+            if (!subData || subData.id === null || subData.id === undefined) {
+                 console.warn("Пропущено подразделение без ID:", subData);
+                 return; // Пропускаем подразделения без ID
+            }
+            newSubdivisionIds.add(subData.id);
+            const existingCard = currentCardMap.get(subData.id);
+
+            if (existingCard) {
+                // --- Обновляем существующую карточку ---
+                console.debug(`Обновление карточки для subdivision ID: ${subData.id}`);
+                // Обновляем заголовок (статистику)
+                const onlineNodes = subData.nodes.filter(n => n.status_class === 'available').length;
+                const totalNodes = subData.nodes.length;
+                const statsSpan = existingCard.querySelector('h3 span.subdivision-stats');
+                if (statsSpan) { statsSpan.textContent = `${onlineNodes}/${totalNodes}`; }
+                // Можно обновить иконку подразделения, если нужно
+
+                // Обновляем узлы внутри карточки
+                const nodeGrid = existingCard.querySelector('.node-status-grid');
+                if (nodeGrid) {
+                    const currentNodeSpans = nodeGrid.querySelectorAll('.node-icon-display[data-node-id]');
+                    const currentNodeMap = new Map();
+                    currentNodeSpans.forEach(span => span.dataset.nodeId && currentNodeMap.set(parseInt(span.dataset.nodeId, 10), span));
+                    const newNodeIds = new Set();
+
+                    subData.nodes.forEach(nodeData => {
+                        if (!nodeData || nodeData.id === null || nodeData.id === undefined) {
+                            console.warn("Пропущен узел без ID в подразделении", subData.id, ":", nodeData);
+                            return;
+                        }
+                        newNodeIds.add(nodeData.id);
+                        const existingNodeSpan = currentNodeMap.get(nodeData.id);
+                        if (existingNodeSpan) {
+                            // Обновляем существующий узел
+                            updateNodeElement(existingNodeSpan, nodeData);
+                        } else {
+                            // Добавляем новый узел
+                            const newNodeElement = createNodeElement(nodeData);
+                            if (newNodeElement) nodeGrid.appendChild(newNodeElement);
+                        }
+                    });
+
+                    // Удаляем узлы, которых больше нет в этом подразделении
+                    currentNodeSpans.forEach(span => {
+                        const nodeId = parseInt(span.dataset.nodeId, 10);
+                        if (!newNodeIds.has(nodeId)) {
+                             console.debug(`Удаление узла ID ${nodeId} из подразделения ${subData.id}`);
+                             span.remove();
+                        }
+                    });
+                }
+                currentCardMap.delete(subData.id); // Удаляем из карты обработанные
+
+            } else {
+                // --- Создаем новую карточку ---
+                console.debug(`Создание новой карточки для subdivision ID: ${subData.id}`);
+                const newCardElement = createSubdivisionElement(subData);
+                 if (newCardElement) {
+                     fragment.appendChild(newCardElement); // Добавляем во фрагмент
+                 }
+            }
+        });
+
+        // Удаляем карточки подразделений, которых больше нет
+        currentCardMap.forEach((cardToRemove, idToRemove) => {
+             console.debug(`Удаление карточки для subdivision ID: ${idToRemove}`);
+             cardToRemove.remove();
+        });
+
+        // Добавляем новые карточки из фрагмента
+        if (fragment.childElementCount > 0) {
+            dashboardContainer.appendChild(fragment);
+        }
+
+        // Если после всех манипуляций контейнер пуст (например, все подразделения удалены)
+        if (dashboardContainer.childElementCount === 0 && newSubdivisionsData.length === 0) {
+             dashboardContainer.innerHTML = "<p>Нет данных подразделений для отображения.</p>";
+        } else if (dashboardContainer.querySelector('.loading-message')) {
+            // Убираем сообщение "Загрузка", если оно там было и появились карточки
+            dashboardContainer.querySelector('.loading-message').remove();
+        }
+
+
+        // Обновляем кэш
+        dashboardDataCache = newSubdivisionsData;
+        console.debug("Обновление DOM завершено.");
+    }
+
+    // --- Инициализация ---
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchAndUpdateDashboard(); // Первая загрузка
+        setInterval(fetchAndUpdateDashboard, 15000); // Автообновление
+    });
+
+</script>
+{% endblock %}

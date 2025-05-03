@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .                              # собираем образ из локального Dockerfile
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://pu_user:pu_password@postgres:5432/pu_db
+      # подключаемся к postgres по DNS‑имени сервиса в pu_share
+      FLASK_ENV: production                   # режим работы Flask
+      TZ: Europe/Moscow                       # часовой пояс внутри контейнера
+    expose:
+      - "5000"                                 # открываем порт 5000 только внутри Docker‑сети
+    networks:
+      - pu_status                              # приватная сеть status‑стека
+      - pu_share                               # общая сеть для связи с БД
+    restart: unless-stopped
+    env_file:
+      - .env                                   # подгружаем дополнительные переменные
+
+  nginx:
+    image: nginx:1.25                         # обратный прокси на базе Nginx
+    environment:
+      TZ: Europe/Moscow                       # часовой пояс для логов
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # монтируем конфиг nginx из локальной папки (read-only)
+      - ./app/static:/app/static:ro           # статические файлы из Flask
+    ports:
+      - "48030:80"                             # доступ к приложению через порт 48030
+    depends_on:
+      - web                                   # ждём поднятия web перед nginx
+    networks:
+      - pu_status                              # приватная сеть для status‑стека
+      - pu_share                               # общая сеть для связи с БД
+    restart: unless-stopped
+
+networks:
+  pu_status:
+    driver: bridge                            # приватная сеть для web + nginx
+  pu_share:
+    external: true                            # общая внешняя сеть (создана вручную)

@@ -1,0 +1,11 @@
+{
+    "api_base_url": "http://localhost:48030/api",
+    "api_key": "jehKRDz5rQN0Xeak5-J2lh18yL8I5zJ4UGSUtaIG8j0",
+    "check_folder": "F:\\status\\builds\\results_offline", 
+    "log_file": "F:\\status\\builds\\Logs\\result_loader.log",
+    "log_level": "Info",
+    "scan_interval_seconds": 30, 
+    "api_timeout_sec": 30,
+    "max_api_retries": 3, 
+    "retry_delay_sec": 5
+  }
