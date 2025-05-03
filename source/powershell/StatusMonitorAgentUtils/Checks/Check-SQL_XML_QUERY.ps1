@@ -1,67 +1,67 @@
-<#
+п»ї<#
 .SYNOPSIS
-    Выполняет SQL-запрос, извлекает XML из указанного столбца
-    и парсит значения по ключам.
+    Р’С‹РїРѕР»РЅСЏРµС‚ SQL-Р·Р°РїСЂРѕСЃ, РёР·РІР»РµРєР°РµС‚ XML РёР· СѓРєР°Р·Р°РЅРЅРѕРіРѕ СЃС‚РѕР»Р±С†Р°
+    Рё РїР°СЂСЃРёС‚ Р·РЅР°С‡РµРЅРёСЏ РїРѕ РєР»СЋС‡Р°Рј.
 .DESCRIPTION
-    Подключается к MS SQL Server, выполняет SQL-запрос, ожидает XML
-    в указанном столбце первой строки результата, парсит XML и извлекает
-    текстовые значения элементов по заданному списку ключей.
+    РџРѕРґРєР»СЋС‡Р°РµС‚СЃСЏ Рє MS SQL Server, РІС‹РїРѕР»РЅСЏРµС‚ SQL-Р·Р°РїСЂРѕСЃ, РѕР¶РёРґР°РµС‚ XML
+    РІ СѓРєР°Р·Р°РЅРЅРѕРј СЃС‚РѕР»Р±С†Рµ РїРµСЂРІРѕР№ СЃС‚СЂРѕРєРё СЂРµР·СѓР»СЊС‚Р°С‚Р°, РїР°СЂСЃРёС‚ XML Рё РёР·РІР»РµРєР°РµС‚
+    С‚РµРєСЃС‚РѕРІС‹Рµ Р·РЅР°С‡РµРЅРёСЏ СЌР»РµРјРµРЅС‚РѕРІ РїРѕ Р·Р°РґР°РЅРЅРѕРјСѓ СЃРїРёСЃРєСѓ РєР»СЋС‡РµР№.
 .PARAMETER TargetIP
-    [string] Имя или IP-адрес SQL Server instance (например, "SERVER\SQLEXPRESS").
+    [string] РРјСЏ РёР»Рё IP-Р°РґСЂРµСЃ SQL Server instance (РЅР°РїСЂРёРјРµСЂ, "SERVER\SQLEXPRESS").
 .PARAMETER Parameters
-    [hashtable] Обязательный. Содержит параметры:
-    - sql_database (string):   Имя базы данных. Обязательно.
-    - sql_query (string):      SQL-запрос. Должен возвращать столбец с XML. Обязательно.
-    - xml_column_name (string): Имя столбца с XML. Обязательно.
-    - keys_to_extract (string[]): Массив имен XML-элементов (ключей) для извлечения. Обязательно.
-    - sql_username (string):   Имя пользователя SQL Server (опционально).
-    - sql_password (string):   Пароль пользователя SQL Server (опционально, небезопасно).
-    - query_timeout_sec (int): Таймаут запроса в секундах (опционально, по умолч. 30).
+    [hashtable] РћР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РЎРѕРґРµСЂР¶РёС‚ РїР°СЂР°РјРµС‚СЂС‹:
+    - sql_database (string):   РРјСЏ Р±Р°Р·С‹ РґР°РЅРЅС‹С…. РћР±СЏР·Р°С‚РµР»СЊРЅРѕ.
+    - sql_query (string):      SQL-Р·Р°РїСЂРѕСЃ. Р”РѕР»Р¶РµРЅ РІРѕР·РІСЂР°С‰Р°С‚СЊ СЃС‚РѕР»Р±РµС† СЃ XML. РћР±СЏР·Р°С‚РµР»СЊРЅРѕ.
+    - xml_column_name (string): РРјСЏ СЃС‚РѕР»Р±С†Р° СЃ XML. РћР±СЏР·Р°С‚РµР»СЊРЅРѕ.
+    - keys_to_extract (string[]): РњР°СЃСЃРёРІ РёРјРµРЅ XML-СЌР»РµРјРµРЅС‚РѕРІ (РєР»СЋС‡РµР№) РґР»СЏ РёР·РІР»РµС‡РµРЅРёСЏ. РћР±СЏР·Р°С‚РµР»СЊРЅРѕ.
+    - sql_username (string):   РРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ SQL Server (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ).
+    - sql_password (string):   РџР°СЂРѕР»СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ SQL Server (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ, РЅРµР±РµР·РѕРїР°СЃРЅРѕ).
+    - query_timeout_sec (int): РўР°Р№РјР°СѓС‚ Р·Р°РїСЂРѕСЃР° РІ СЃРµРєСѓРЅРґР°С… (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ, РїРѕ СѓРјРѕР»С‡. 30).
 .PARAMETER SuccessCriteria
-    [hashtable] Необязательный. Критерии успеха (ПОКА НЕ РЕАЛИЗОВАНЫ).
+    [hashtable] РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РљСЂРёС‚РµСЂРёРё СѓСЃРїРµС…Р° (РџРћРљРђ РќР• Р Р•РђР›РР—РћР’РђРќР«).
 .PARAMETER NodeName
-    [string] Необязательный. Имя узла для логирования.
+    [string] РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РРјСЏ СѓР·Р»Р° РґР»СЏ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ.
 .OUTPUTS
-    Hashtable - Стандартизированный объект результата проверки
+    Hashtable - РЎС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё
                 (IsAvailable, CheckSuccess, Timestamp, Details, ErrorMessage).
-                Details содержит хеш-таблицу 'extracted_data'.
+                Details СЃРѕРґРµСЂР¶РёС‚ С…РµС€-С‚Р°Р±Р»РёС†Сѓ 'extracted_data'.
 .NOTES
-    Версия: 1.1 (Добавлен параметр SuccessCriteria, но без реализации логики).
-    Зависит от функции New-CheckResultObject и модуля SqlServer.
-    Требует прав доступа к SQL Server.
+    Р’РµСЂСЃРёСЏ: 1.1 (Р”РѕР±Р°РІР»РµРЅ РїР°СЂР°РјРµС‚СЂ SuccessCriteria, РЅРѕ Р±РµР· СЂРµР°Р»РёР·Р°С†РёРё Р»РѕРіРёРєРё).
+    Р—Р°РІРёСЃРёС‚ РѕС‚ С„СѓРЅРєС†РёРё New-CheckResultObject Рё РјРѕРґСѓР»СЏ SqlServer.
+    РўСЂРµР±СѓРµС‚ РїСЂР°РІ РґРѕСЃС‚СѓРїР° Рє SQL Server.
 #>
 param(
     [Parameter(Mandatory=$true)]
-    [string]$TargetIP, # Используется как ServerInstance
+    [string]$TargetIP, # РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РєР°Рє ServerInstance
 
     [Parameter(Mandatory=$true)]
     [hashtable]$Parameters,
 
-    [Parameter(Mandatory=$false)] # <<<< ДОБАВЛЕН ПАРАМЕТР
+    [Parameter(Mandatory=$false)] # <<<< Р”РћР‘РђР’Р›Р•Рќ РџРђР РђРњР•РўР 
     [hashtable]$SuccessCriteria = $null,
 
     [Parameter(Mandatory=$false)]
     [string]$NodeName = "Unknown Node"
 )
 
-# --- Загрузка вспомогательной функции ---
+# --- Р—Р°РіСЂСѓР·РєР° РІСЃРїРѕРјРѕРіР°С‚РµР»СЊРЅРѕР№ С„СѓРЅРєС†РёРё ---
 if (-not (Get-Command New-CheckResultObject -ErrorAction SilentlyContinue)) {
     try {
         $commonFunctionsPath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils.psm1"
         if(Test-Path $commonFunctionsPath) { . $commonFunctionsPath }
-        else { throw "Не найден файл общего модуля: $commonFunctionsPath" }
+        else { throw "РќРµ РЅР°Р№РґРµРЅ С„Р°Р№Р» РѕР±С‰РµРіРѕ РјРѕРґСѓР»СЏ: $commonFunctionsPath" }
     } catch {
-        Write-Error "Check-SQL_XML_QUERY: Критическая ошибка: Не удалось загрузить New-CheckResultObject! $($_.Exception.Message)"
+        Write-Error "Check-SQL_XML_QUERY: РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ New-CheckResultObject! $($_.Exception.Message)"
         function New-CheckResultObject { param($IsAvailable, $CheckSuccess=$null, $Details=$null, $ErrorMessage=$null) return @{IsAvailable=$IsAvailable; CheckSuccess=$CheckSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$Details; ErrorMessage=$ErrorMessage} }
     }
 }
 
-# --- Инициализация результата ---
+# --- РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЂРµР·СѓР»СЊС‚Р°С‚Р° ---
 $resultData = @{
     IsAvailable = $false
     CheckSuccess = $null
     Details = @{
-        extracted_data = @{} # Для извлеченных данных
+        extracted_data = @{} # Р”Р»СЏ РёР·РІР»РµС‡РµРЅРЅС‹С… РґР°РЅРЅС‹С…
         query_executed = $null
         xml_source_column = $null
         rows_returned = 0
@@ -69,10 +69,10 @@ $resultData = @{
     ErrorMessage = $null
 }
 
-Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Начало выполнения SQL XML запроса на $TargetIP"
+Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: РќР°С‡Р°Р»Рѕ РІС‹РїРѕР»РЅРµРЅРёСЏ SQL XML Р·Р°РїСЂРѕСЃР° РЅР° $TargetIP"
 
 try {
-    # 1. Валидация и извлечение параметров
+    # 1. Р’Р°Р»РёРґР°С†РёСЏ Рё РёР·РІР»РµС‡РµРЅРёРµ РїР°СЂР°РјРµС‚СЂРѕРІ
     $SqlServerInstance = $TargetIP
     $DatabaseName = $Parameters.sql_database
     $SqlQuery = $Parameters.sql_query
@@ -82,42 +82,42 @@ try {
     $SqlPassword = $Parameters.sql_password
     $QueryTimeoutSec = $Parameters.query_timeout_sec | Get-OrElse 30
 
-    # Запись в Details для логгирования/отладки
+    # Р—Р°РїРёСЃСЊ РІ Details РґР»СЏ Р»РѕРіРіРёСЂРѕРІР°РЅРёСЏ/РѕС‚Р»Р°РґРєРё
     $resultData.Details.query_executed = $SqlQuery
     $resultData.Details.xml_source_column = $XmlColumnName
 
-    # Проверка обязательных параметров
-    if (-not $DatabaseName) { throw "Отсутствует обязательный параметр 'sql_database'." }
-    if (-not $SqlQuery) { throw "Отсутствует обязательный параметр 'sql_query'." }
-    if (-not $XmlColumnName) { throw "Отсутствует обязательный параметр 'xml_column_name'." }
+    # РџСЂРѕРІРµСЂРєР° РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… РїР°СЂР°РјРµС‚СЂРѕРІ
+    if (-not $DatabaseName) { throw "РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№ РїР°СЂР°РјРµС‚СЂ 'sql_database'." }
+    if (-not $SqlQuery) { throw "РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№ РїР°СЂР°РјРµС‚СЂ 'sql_query'." }
+    if (-not $XmlColumnName) { throw "РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№ РїР°СЂР°РјРµС‚СЂ 'xml_column_name'." }
     if (-not ($KeysToExtract -is [array]) -or $KeysToExtract.Count -eq 0) {
-        throw "Параметр 'keys_to_extract' должен быть непустым массивом строк."
+        throw "РџР°СЂР°РјРµС‚СЂ 'keys_to_extract' РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµРїСѓСЃС‚С‹Рј РјР°СЃСЃРёРІРѕРј СЃС‚СЂРѕРє."
     }
-    if ($SqlUsername -and (-not $SqlPassword)) { throw "Параметр 'sql_password' обязателен при указании 'sql_username'." }
+    if ($SqlUsername -and (-not $SqlPassword)) { throw "РџР°СЂР°РјРµС‚СЂ 'sql_password' РѕР±СЏР·Р°С‚РµР»РµРЅ РїСЂРё СѓРєР°Р·Р°РЅРёРё 'sql_username'." }
     if (-not ([int]::TryParse($QueryTimeoutSec, [ref]$null)) -or $QueryTimeoutSec -le 0) {
-         Write-Warning "[$NodeName] Некорректное значение query_timeout_sec ('$($Parameters.query_timeout_sec)'). Используется 30 сек."; $QueryTimeoutSec = 30
+         Write-Warning "[$NodeName] РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ query_timeout_sec ('$($Parameters.query_timeout_sec)'). РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ 30 СЃРµРє."; $QueryTimeoutSec = 30
     }
 
-    # 2. Формирование параметров для Invoke-Sqlcmd
+    # 2. Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ РїР°СЂР°РјРµС‚СЂРѕРІ РґР»СЏ Invoke-Sqlcmd
     $invokeSqlParams = @{ ServerInstance = $SqlServerInstance; Database = $DatabaseName; Query = $SqlQuery; QueryTimeout = $QueryTimeoutSec; ErrorAction = 'Stop' }
     if ($SqlUsername) {
-        Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Используется SQL аутентификация для '$SqlUsername'."
+        Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ SQL Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ РґР»СЏ '$SqlUsername'."
         $securePassword = ConvertTo-SecureString -String $SqlPassword -AsPlainText -Force
         $invokeSqlParams.Credential = New-Object System.Management.Automation.PSCredential($SqlUsername, $securePassword)
-    } else { Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Используется Windows аутентификация." }
+    } else { Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Windows Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ." }
 
-    # 3. Проверка модуля SqlServer
+    # 3. РџСЂРѕРІРµСЂРєР° РјРѕРґСѓР»СЏ SqlServer
     if (-not (Get-Command Invoke-Sqlcmd -ErrorAction SilentlyContinue)) {
-        if (-not (Get-Module -ListAvailable -Name SqlServer)) { throw "Модуль 'SqlServer' не найден. Установите его." }
-        try { Import-Module SqlServer -ErrorAction Stop } catch { throw "Не удалось загрузить модуль 'SqlServer'. Ошибка: $($_.Exception.Message)" }
+        if (-not (Get-Module -ListAvailable -Name SqlServer)) { throw "РњРѕРґСѓР»СЊ 'SqlServer' РЅРµ РЅР°Р№РґРµРЅ. РЈСЃС‚Р°РЅРѕРІРёС‚Рµ РµРіРѕ." }
+        try { Import-Module SqlServer -ErrorAction Stop } catch { throw "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РјРѕРґСѓР»СЊ 'SqlServer'. РћС€РёР±РєР°: $($_.Exception.Message)" }
     }
 
-    # 4. Выполнение SQL-запроса
-    Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Выполнение запроса к '$SqlServerInstance/$DatabaseName'..."
+    # 4. Р’С‹РїРѕР»РЅРµРЅРёРµ SQL-Р·Р°РїСЂРѕСЃР°
+    Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Р’С‹РїРѕР»РЅРµРЅРёРµ Р·Р°РїСЂРѕСЃР° Рє '$SqlServerInstance/$DatabaseName'..."
     $queryResult = Invoke-Sqlcmd @invokeSqlParams
-    $resultData.IsAvailable = $true # Если нет ошибки, запрос прошел
+    $resultData.IsAvailable = $true # Р•СЃР»Рё РЅРµС‚ РѕС€РёР±РєРё, Р·Р°РїСЂРѕСЃ РїСЂРѕС€РµР»
 
-    # 5. Обработка результата
+    # 5. РћР±СЂР°Р±РѕС‚РєР° СЂРµР·СѓР»СЊС‚Р°С‚Р°
     $xmlString = $null
     if ($queryResult -ne $null) {
         if ($queryResult -isnot [array]) { $queryResult = @($queryResult) }
@@ -125,80 +125,80 @@ try {
 
         if ($queryResult.Count -gt 0) {
             $firstRow = $queryResult[0]
-            Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Запрос вернул строк: $($queryResult.Count). Обработка первой строки."
+            Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Р—Р°РїСЂРѕСЃ РІРµСЂРЅСѓР» СЃС‚СЂРѕРє: $($queryResult.Count). РћР±СЂР°Р±РѕС‚РєР° РїРµСЂРІРѕР№ СЃС‚СЂРѕРєРё."
             if ($firstRow.PSObject.Properties.Name -contains $XmlColumnName) {
                 $xmlValue = $firstRow.$XmlColumnName
                 if ($xmlValue -ne $null -and $xmlValue -ne [System.DBNull]::Value) {
                     $xmlString = $xmlValue.ToString()
-                    Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Получен XML из столбца '$XmlColumnName'."
-                } else { $resultData.ErrorMessage = "Столбец '$XmlColumnName' в первой строке пуст (NULL)."; $resultData.CheckSuccess = $false }
-            } else { $resultData.ErrorMessage = "Столбец '$XmlColumnName' не найден в результате запроса."; $resultData.CheckSuccess = $false }
-        } else { $resultData.Details.message = "Запрос не вернул строк."; $resultData.CheckSuccess = $true }
-    } else { $resultData.Details.message = "Запрос не вернул данных (возможно, non-query?)."; $resultData.CheckSuccess = $true }
+                    Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: РџРѕР»СѓС‡РµРЅ XML РёР· СЃС‚РѕР»Р±С†Р° '$XmlColumnName'."
+                } else { $resultData.ErrorMessage = "РЎС‚РѕР»Р±РµС† '$XmlColumnName' РІ РїРµСЂРІРѕР№ СЃС‚СЂРѕРєРµ РїСѓСЃС‚ (NULL)."; $resultData.CheckSuccess = $false }
+            } else { $resultData.ErrorMessage = "РЎС‚РѕР»Р±РµС† '$XmlColumnName' РЅРµ РЅР°Р№РґРµРЅ РІ СЂРµР·СѓР»СЊС‚Р°С‚Рµ Р·Р°РїСЂРѕСЃР°."; $resultData.CheckSuccess = $false }
+        } else { $resultData.Details.message = "Р—Р°РїСЂРѕСЃ РЅРµ РІРµСЂРЅСѓР» СЃС‚СЂРѕРє."; $resultData.CheckSuccess = $true }
+    } else { $resultData.Details.message = "Р—Р°РїСЂРѕСЃ РЅРµ РІРµСЂРЅСѓР» РґР°РЅРЅС‹С… (РІРѕР·РјРѕР¶РЅРѕ, non-query?)."; $resultData.CheckSuccess = $true }
 
-    # 6. Парсинг XML и извлечение ключей
-    if ($xmlString -and $resultData.CheckSuccess -ne $false) { # Парсим только если есть XML и не было ошибки ранее
-        Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Парсинг XML..."
+    # 6. РџР°СЂСЃРёРЅРі XML Рё РёР·РІР»РµС‡РµРЅРёРµ РєР»СЋС‡РµР№
+    if ($xmlString -and $resultData.CheckSuccess -ne $false) { # РџР°СЂСЃРёРј С‚РѕР»СЊРєРѕ РµСЃР»Рё РµСЃС‚СЊ XML Рё РЅРµ Р±С‹Р»Рѕ РѕС€РёР±РєРё СЂР°РЅРµРµ
+        Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: РџР°СЂСЃРёРЅРі XML..."
         try {
             [xml]$xmlDoc = $xmlString
-            Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: XML успешно распарсен."
-            if ($null -eq $xmlDoc.DocumentElement) { throw "Корневой элемент в XML не найден." }
+            Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: XML СѓСЃРїРµС€РЅРѕ СЂР°СЃРїР°СЂСЃРµРЅ."
+            if ($null -eq $xmlDoc.DocumentElement) { throw "РљРѕСЂРЅРµРІРѕР№ СЌР»РµРјРµРЅС‚ РІ XML РЅРµ РЅР°Р№РґРµРЅ." }
 
             $extractedData = @{}
             foreach ($key in $KeysToExtract) {
                 $value = $null
-                # Ищем элемент с таким именем среди дочерних корневого
-                $xmlElement = $xmlDoc.DocumentElement.SelectSingleNode("./*[local-name()='$key']") # Устойчивость к namespace
+                # РС‰РµРј СЌР»РµРјРµРЅС‚ СЃ С‚Р°РєРёРј РёРјРµРЅРµРј СЃСЂРµРґРё РґРѕС‡РµСЂРЅРёС… РєРѕСЂРЅРµРІРѕРіРѕ
+                $xmlElement = $xmlDoc.DocumentElement.SelectSingleNode("./*[local-name()='$key']") # РЈСЃС‚РѕР№С‡РёРІРѕСЃС‚СЊ Рє namespace
                 if ($xmlElement -ne $null) {
-                    $value = $xmlElement.InnerText # Получаем текстовое содержимое
+                    $value = $xmlElement.InnerText # РџРѕР»СѓС‡Р°РµРј С‚РµРєСЃС‚РѕРІРѕРµ СЃРѕРґРµСЂР¶РёРјРѕРµ
                 }
-                $extractedData[$key] = $value # Сохраняем значение (или null)
-                Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Ключ '$key', Значение: '$value'"
+                $extractedData[$key] = $value # РЎРѕС…СЂР°РЅСЏРµРј Р·РЅР°С‡РµРЅРёРµ (РёР»Рё null)
+                Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: РљР»СЋС‡ '$key', Р—РЅР°С‡РµРЅРёРµ: '$value'"
             }
             $resultData.Details.extracted_data = $extractedData
-            $resultData.CheckSuccess = $true # Если дошли сюда, парсинг успешен
+            $resultData.CheckSuccess = $true # Р•СЃР»Рё РґРѕС€Р»Рё СЃСЋРґР°, РїР°СЂСЃРёРЅРі СѓСЃРїРµС€РµРЅ
 
         } catch {
-            # Ошибка парсинга XML
-            $errorMessage = "Ошибка парсинга XML из столбца '$XmlColumnName': $($_.Exception.Message)"
+            # РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР° XML
+            $errorMessage = "РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР° XML РёР· СЃС‚РѕР»Р±С†Р° '$XmlColumnName': $($_.Exception.Message)"
             if ($errorMessage.Length -gt 500) { $errorMessage = $errorMessage.Substring(0, 500) + "..." }
             $resultData.ErrorMessage = $errorMessage
             $resultData.Details.error = $errorMessage
             $resultData.Details.xml_content_sample = $xmlString.Substring(0, [math]::Min($xmlString.Length, 200)) + "..."
-            $resultData.CheckSuccess = $false # Парсинг не удался
+            $resultData.CheckSuccess = $false # РџР°СЂСЃРёРЅРі РЅРµ СѓРґР°Р»СЃСЏ
         }
     }
 
-    # 7. Обработка SuccessCriteria (ПОКА НЕ РЕАЛИЗОВАНА)
+    # 7. РћР±СЂР°Р±РѕС‚РєР° SuccessCriteria (РџРћРљРђ РќР• Р Р•РђР›РР—РћР’РђРќРђ)
     if ($resultData.IsAvailable -and $resultData.CheckSuccess -and $SuccessCriteria -ne $null) {
-        Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: SuccessCriteria переданы, но их обработка пока не реализована."
-        # Здесь можно сравнивать значения из $resultData.Details.extracted_data с $SuccessCriteria
+        Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: SuccessCriteria РїРµСЂРµРґР°РЅС‹, РЅРѕ РёС… РѕР±СЂР°Р±РѕС‚РєР° РїРѕРєР° РЅРµ СЂРµР°Р»РёР·РѕРІР°РЅР°."
+        # Р—РґРµСЃСЊ РјРѕР¶РЅРѕ СЃСЂР°РІРЅРёРІР°С‚СЊ Р·РЅР°С‡РµРЅРёСЏ РёР· $resultData.Details.extracted_data СЃ $SuccessCriteria
         # if ($resultData.Details.extracted_data.VersionStat -ne $SuccessCriteria.expected_version) {
         #     $resultData.CheckSuccess = $false
-        #     $resultData.ErrorMessage = "Значение VersionStat не совпадает с ожидаемым."
+        #     $resultData.ErrorMessage = "Р—РЅР°С‡РµРЅРёРµ VersionStat РЅРµ СЃРѕРІРїР°РґР°РµС‚ СЃ РѕР¶РёРґР°РµРјС‹Рј."
         # }
     }
 
 
 } catch {
-    # Обработка ошибок Invoke-Sqlcmd или других
+    # РћР±СЂР°Р±РѕС‚РєР° РѕС€РёР±РѕРє Invoke-Sqlcmd РёР»Рё РґСЂСѓРіРёС…
     $resultData.IsAvailable = $false
     $resultData.CheckSuccess = $null
     $exceptionMessage = $_.Exception.Message
     if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-    $errorMessage = "Ошибка выполнения SQL XML запроса: {0}" -f $exceptionMessage
+    $errorMessage = "РћС€РёР±РєР° РІС‹РїРѕР»РЅРµРЅРёСЏ SQL XML Р·Р°РїСЂРѕСЃР°: {0}" -f $exceptionMessage
     $resultData.ErrorMessage = $errorMessage
     if ($null -eq $resultData.Details) { $resultData.Details = @{} }
     $resultData.Details.error = $errorMessage
     $resultData.Details.ErrorRecord = $_.ToString()
-    Write-Error "[$NodeName] Check-SQL_XML_QUERY: Критическая ошибка: $errorMessage"
+    Write-Error "[$NodeName] Check-SQL_XML_QUERY: РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: $errorMessage"
 }
 
-# Финальная установка CheckSuccess, если ошибка сделала его null
+# Р¤РёРЅР°Р»СЊРЅР°СЏ СѓСЃС‚Р°РЅРѕРІРєР° CheckSuccess, РµСЃР»Рё РѕС€РёР±РєР° СЃРґРµР»Р°Р»Р° РµРіРѕ null
 if ($resultData.IsAvailable -eq $false) { $resultData.CheckSuccess = $null }
-elseif ($resultData.CheckSuccess -eq $null) { $resultData.CheckSuccess = $true } # Если IsAvailable=true и не было ошибок -> успех
+elseif ($resultData.CheckSuccess -eq $null) { $resultData.CheckSuccess = $true } # Р•СЃР»Рё IsAvailable=true Рё РЅРµ Р±С‹Р»Рѕ РѕС€РёР±РѕРє -> СѓСЃРїРµС…
 
-# Вызов New-CheckResultObject
+# Р’С‹Р·РѕРІ New-CheckResultObject
 $finalResult = New-CheckResultObject @resultData
-Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Завершение. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
+Write-Verbose "[$NodeName] Check-SQL_XML_QUERY: Р—Р°РІРµСЂС€РµРЅРёРµ. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
 return $finalResult

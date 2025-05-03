@@ -1,42 +1,42 @@
-<#
+п»ї<#
 .SYNOPSIS
-    Выполняет SQL-запрос и возвращает результат.
+    Р’С‹РїРѕР»РЅСЏРµС‚ SQL-Р·Р°РїСЂРѕСЃ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ СЂРµР·СѓР»СЊС‚Р°С‚.
 .DESCRIPTION
-    Подключается к MS SQL Server, выполняет указанный SQL-запрос
-    и возвращает результат в заданном формате (первая строка, все строки,
-    количество строк, скалярное значение или статус выполнения non-query).
-    Поддерживает проверку SuccessCriteria для скалярных результатов.
+    РџРѕРґРєР»СЋС‡Р°РµС‚СЃСЏ Рє MS SQL Server, РІС‹РїРѕР»РЅСЏРµС‚ СѓРєР°Р·Р°РЅРЅС‹Р№ SQL-Р·Р°РїСЂРѕСЃ
+    Рё РІРѕР·РІСЂР°С‰Р°РµС‚ СЂРµР·СѓР»СЊС‚Р°С‚ РІ Р·Р°РґР°РЅРЅРѕРј С„РѕСЂРјР°С‚Рµ (РїРµСЂРІР°СЏ СЃС‚СЂРѕРєР°, РІСЃРµ СЃС‚СЂРѕРєРё,
+    РєРѕР»РёС‡РµСЃС‚РІРѕ СЃС‚СЂРѕРє, СЃРєР°Р»СЏСЂРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ РёР»Рё СЃС‚Р°С‚СѓСЃ РІС‹РїРѕР»РЅРµРЅРёСЏ non-query).
+    РџРѕРґРґРµСЂР¶РёРІР°РµС‚ РїСЂРѕРІРµСЂРєСѓ SuccessCriteria РґР»СЏ СЃРєР°Р»СЏСЂРЅС‹С… СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ.
 .PARAMETER TargetIP
-    [string] Имя или IP-адрес SQL Server instance. Обязательный.
+    [string] РРјСЏ РёР»Рё IP-Р°РґСЂРµСЃ SQL Server instance. РћР±СЏР·Р°С‚РµР»СЊРЅС‹Р№.
 .PARAMETER Parameters
-    [hashtable] Обязательный. Содержит параметры подключения и запроса:
-    - sql_database (string):   Имя базы данных. Обязательно.
-    - sql_query (string):      SQL-запрос для выполнения. Обязательно.
-    - return_format (string):  Формат возвращаемого результата. Необязательный.
-                               Значения: 'first_row' (по умолч.), 'all_rows',
+    [hashtable] РћР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РЎРѕРґРµСЂР¶РёС‚ РїР°СЂР°РјРµС‚СЂС‹ РїРѕРґРєР»СЋС‡РµРЅРёСЏ Рё Р·Р°РїСЂРѕСЃР°:
+    - sql_database (string):   РРјСЏ Р±Р°Р·С‹ РґР°РЅРЅС‹С…. РћР±СЏР·Р°С‚РµР»СЊРЅРѕ.
+    - sql_query (string):      SQL-Р·Р°РїСЂРѕСЃ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ. РћР±СЏР·Р°С‚РµР»СЊРЅРѕ.
+    - return_format (string):  Р¤РѕСЂРјР°С‚ РІРѕР·РІСЂР°С‰Р°РµРјРѕРіРѕ СЂРµР·СѓР»СЊС‚Р°С‚Р°. РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№.
+                               Р—РЅР°С‡РµРЅРёСЏ: 'first_row' (РїРѕ СѓРјРѕР»С‡.), 'all_rows',
                                'row_count', 'scalar', 'non_query'.
-    - sql_username (string):   Имя пользователя для SQL Server аутентификации. Необязательный.
-    - sql_password (string):   Пароль для SQL Server аутентификации. Необязательный.
-                               (Использование не рекомендуется).
-    - query_timeout_sec (int): Таймаут выполнения SQL-запроса в секундах. (по умолч. 30).
+    - sql_username (string):   РРјСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ РґР»СЏ SQL Server Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё. РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№.
+    - sql_password (string):   РџР°СЂРѕР»СЊ РґР»СЏ SQL Server Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё. РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№.
+                               (РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ РЅРµ СЂРµРєРѕРјРµРЅРґСѓРµС‚СЃСЏ).
+    - query_timeout_sec (int): РўР°Р№РјР°СѓС‚ РІС‹РїРѕР»РЅРµРЅРёСЏ SQL-Р·Р°РїСЂРѕСЃР° РІ СЃРµРєСѓРЅРґР°С…. (РїРѕ СѓРјРѕР»С‡. 30).
 .PARAMETER SuccessCriteria
-    [hashtable] Необязательный. Критерии успеха.
-    Для return_format = 'scalar':
-    - expected_value (any): Ожидаемое точное значение (сравнивается как строка).
-    - value_greater_than (numeric): Числовое значение, которое результат должен превышать.
-    - value_less_than (numeric): Числовое значение, которого результат должен быть меньше.
-    (Другие форматы пока не поддерживают критерии).
+    [hashtable] РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РљСЂРёС‚РµСЂРёРё СѓСЃРїРµС…Р°.
+    Р”Р»СЏ return_format = 'scalar':
+    - expected_value (any): РћР¶РёРґР°РµРјРѕРµ С‚РѕС‡РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ (СЃСЂР°РІРЅРёРІР°РµС‚СЃСЏ РєР°Рє СЃС‚СЂРѕРєР°).
+    - value_greater_than (numeric): Р§РёСЃР»РѕРІРѕРµ Р·РЅР°С‡РµРЅРёРµ, РєРѕС‚РѕСЂРѕРµ СЂРµР·СѓР»СЊС‚Р°С‚ РґРѕР»Р¶РµРЅ РїСЂРµРІС‹С€Р°С‚СЊ.
+    - value_less_than (numeric): Р§РёСЃР»РѕРІРѕРµ Р·РЅР°С‡РµРЅРёРµ, РєРѕС‚РѕСЂРѕРіРѕ СЂРµР·СѓР»СЊС‚Р°С‚ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РјРµРЅСЊС€Рµ.
+    (Р”СЂСѓРіРёРµ С„РѕСЂРјР°С‚С‹ РїРѕРєР° РЅРµ РїРѕРґРґРµСЂР¶РёРІР°СЋС‚ РєСЂРёС‚РµСЂРёРё).
 .PARAMETER NodeName
-    [string] Необязательный. Имя узла для логирования.
+    [string] РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РРјСЏ СѓР·Р»Р° РґР»СЏ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ.
 .OUTPUTS
-    Hashtable - Стандартизированный объект результата проверки
+    Hashtable - РЎС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё
                 (IsAvailable, CheckSuccess, Timestamp, Details, ErrorMessage).
-                Содержимое Details зависит от 'return_format'.
+                РЎРѕРґРµСЂР¶РёРјРѕРµ Details Р·Р°РІРёСЃРёС‚ РѕС‚ 'return_format'.
 .NOTES
-    Версия: 1.1 (Добавлена обработка SuccessCriteria для scalar)
-    Зависит от функции New-CheckResultObject из родительского модуля.
-    Требует наличия модуля PowerShell 'SqlServer'.
-    Требует прав доступа к SQL Server и базе данных.
+    Р’РµСЂСЃРёСЏ: 1.1 (Р”РѕР±Р°РІР»РµРЅР° РѕР±СЂР°Р±РѕС‚РєР° SuccessCriteria РґР»СЏ scalar)
+    Р—Р°РІРёСЃРёС‚ РѕС‚ С„СѓРЅРєС†РёРё New-CheckResultObject РёР· СЂРѕРґРёС‚РµР»СЊСЃРєРѕРіРѕ РјРѕРґСѓР»СЏ.
+    РўСЂРµР±СѓРµС‚ РЅР°Р»РёС‡РёСЏ РјРѕРґСѓР»СЏ PowerShell 'SqlServer'.
+    РўСЂРµР±СѓРµС‚ РїСЂР°РІ РґРѕСЃС‚СѓРїР° Рє SQL Server Рё Р±Р°Р·Рµ РґР°РЅРЅС‹С….
 #>
 param(
     [Parameter(Mandatory=$true)]
@@ -46,41 +46,41 @@ param(
     [hashtable]$Parameters,
 
     [Parameter(Mandatory=$false)]
-    [hashtable]$SuccessCriteria = $null, # Добавлен параметр
+    [hashtable]$SuccessCriteria = $null, # Р”РѕР±Р°РІР»РµРЅ РїР°СЂР°РјРµС‚СЂ
 
     [Parameter(Mandatory=$false)]
     [string]$NodeName = "Unknown Node"
 )
 
-# --- Загрузка вспомогательной функции ---
+# --- Р—Р°РіСЂСѓР·РєР° РІСЃРїРѕРјРѕРіР°С‚РµР»СЊРЅРѕР№ С„СѓРЅРєС†РёРё ---
 if (-not (Get-Command New-CheckResultObject -ErrorAction SilentlyContinue)) {
     try {
         $commonFunctionsPath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils.psm1"
         if(Test-Path $commonFunctionsPath) { . $commonFunctionsPath }
-        else { throw "Не найден файл общего модуля: $commonFunctionsPath" }
+        else { throw "РќРµ РЅР°Р№РґРµРЅ С„Р°Р№Р» РѕР±С‰РµРіРѕ РјРѕРґСѓР»СЏ: $commonFunctionsPath" }
     } catch {
-        Write-Error "Check-SQL_QUERY_EXECUTE: Критическая ошибка: Не удалось загрузить New-CheckResultObject! $($_.Exception.Message)"
+        Write-Error "Check-SQL_QUERY_EXECUTE: РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ New-CheckResultObject! $($_.Exception.Message)"
         function New-CheckResultObject { param($IsAvailable, $CheckSuccess=$null, $Details=$null, $ErrorMessage=$null) return @{IsAvailable=$IsAvailable; CheckSuccess=$CheckSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$Details; ErrorMessage=$ErrorMessage} }
     }
 }
 
-# --- Инициализация результата ---
+# --- РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЂРµР·СѓР»СЊС‚Р°С‚Р° ---
 $resultData = @{
     IsAvailable = $false
     CheckSuccess = $null
-    Details = @{ # Пре-инициализируем поля Details
+    Details = @{ # РџСЂРµ-РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РїРѕР»СЏ Details
         server_instance = $TargetIP
         database_name = $null
         query_executed = $null
-        return_format_used = 'first_row' # Значение по умолчанию
+        return_format_used = 'first_row' # Р—РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
     }
     ErrorMessage = $null
 }
 
-Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Начало выполнения SQL на $TargetIP"
+Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РќР°С‡Р°Р»Рѕ РІС‹РїРѕР»РЅРµРЅРёСЏ SQL РЅР° $TargetIP"
 
 try {
-    # 1. Валидация и извлечение параметров
+    # 1. Р’Р°Р»РёРґР°С†РёСЏ Рё РёР·РІР»РµС‡РµРЅРёРµ РїР°СЂР°РјРµС‚СЂРѕРІ
     $SqlServerInstance = $TargetIP
     $DatabaseName = $Parameters.sql_database
     $SqlQuery = $Parameters.sql_query
@@ -89,64 +89,64 @@ try {
     $SqlPassword = $Parameters.sql_password
     $QueryTimeoutSec = $Parameters.query_timeout_sec | Get-OrElse 30
 
-    # Заполняем Details
+    # Р—Р°РїРѕР»РЅСЏРµРј Details
     $resultData.Details.database_name = $DatabaseName
     $resultData.Details.query_executed = $SqlQuery
     $resultData.Details.return_format_used = $ReturnFormat
 
-    # Проверка обязательных параметров
-    if (-not $DatabaseName) { throw "Отсутствует обязательный параметр 'sql_database'." }
-    if (-not $SqlQuery) { throw "Отсутствует обязательный параметр 'sql_query'." }
+    # РџСЂРѕРІРµСЂРєР° РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… РїР°СЂР°РјРµС‚СЂРѕРІ
+    if (-not $DatabaseName) { throw "РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№ РїР°СЂР°РјРµС‚СЂ 'sql_database'." }
+    if (-not $SqlQuery) { throw "РћС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№ РїР°СЂР°РјРµС‚СЂ 'sql_query'." }
     if ($ReturnFormat -notin @('first_row', 'all_rows', 'row_count', 'scalar', 'non_query')) {
-        throw "Недопустимое значение 'return_format': '$ReturnFormat'."
+        throw "РќРµРґРѕРїСѓСЃС‚РёРјРѕРµ Р·РЅР°С‡РµРЅРёРµ 'return_format': '$ReturnFormat'."
     }
-    if ($SqlUsername -and (-not $SqlPassword)) { throw "Параметр 'sql_password' обязателен при указании 'sql_username'." }
+    if ($SqlUsername -and (-not $SqlPassword)) { throw "РџР°СЂР°РјРµС‚СЂ 'sql_password' РѕР±СЏР·Р°С‚РµР»РµРЅ РїСЂРё СѓРєР°Р·Р°РЅРёРё 'sql_username'." }
     if (-not ([int]::TryParse($QueryTimeoutSec, [ref]$null)) -or $QueryTimeoutSec -le 0) {
-         Write-Warning "[$NodeName] Некорректное значение query_timeout_sec ('$($Parameters.query_timeout_sec)'). Используется 30 сек."; $QueryTimeoutSec = 30
+         Write-Warning "[$NodeName] РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ query_timeout_sec ('$($Parameters.query_timeout_sec)'). РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ 30 СЃРµРє."; $QueryTimeoutSec = 30
     }
 
 
-    # 2. Формирование параметров для Invoke-Sqlcmd
+    # 2. Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ РїР°СЂР°РјРµС‚СЂРѕРІ РґР»СЏ Invoke-Sqlcmd
     $invokeSqlParams = @{
         ServerInstance = $SqlServerInstance
         Database       = $DatabaseName
         Query          = $SqlQuery
         QueryTimeout   = $QueryTimeoutSec
-        ErrorAction    = 'Stop' # Важно для перехвата ошибок
+        ErrorAction    = 'Stop' # Р’Р°Р¶РЅРѕ РґР»СЏ РїРµСЂРµС…РІР°С‚Р° РѕС€РёР±РѕРє
     }
     if ($SqlUsername) {
-        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Используется SQL Server аутентификация для '$SqlUsername'."
+        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ SQL Server Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ РґР»СЏ '$SqlUsername'."
         $securePassword = ConvertTo-SecureString -String $SqlPassword -AsPlainText -Force
         $credential = New-Object System.Management.Automation.PSCredential($SqlUsername, $securePassword)
         $invokeSqlParams.Credential = $credential
     } else {
-        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Используется Windows аутентификация."
+        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Windows Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёСЏ."
     }
 
-    # 3. Проверка и загрузка модуля SqlServer
+    # 3. РџСЂРѕРІРµСЂРєР° Рё Р·Р°РіСЂСѓР·РєР° РјРѕРґСѓР»СЏ SqlServer
     if (-not (Get-Command Invoke-Sqlcmd -ErrorAction SilentlyContinue)) {
          if (-not (Get-Module -ListAvailable -Name SqlServer)) {
-              throw "Модуль PowerShell 'SqlServer' не найден. Установите его: Install-Module SqlServer -Scope CurrentUser -Force"
+              throw "РњРѕРґСѓР»СЊ PowerShell 'SqlServer' РЅРµ РЅР°Р№РґРµРЅ. РЈСЃС‚Р°РЅРѕРІРёС‚Рµ РµРіРѕ: Install-Module SqlServer -Scope CurrentUser -Force"
          }
          try {
-             Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Загрузка модуля SqlServer..."
+             Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р—Р°РіСЂСѓР·РєР° РјРѕРґСѓР»СЏ SqlServer..."
              Import-Module SqlServer -ErrorAction Stop
          } catch {
-              throw "Не удалось загрузить модуль 'SqlServer'. Ошибка: $($_.Exception.Message)"
+              throw "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РјРѕРґСѓР»СЊ 'SqlServer'. РћС€РёР±РєР°: $($_.Exception.Message)"
          }
     }
 
-    # 4. Выполнение SQL-запроса
-    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Выполнение запроса к '$SqlServerInstance/$DatabaseName'..."
+    # 4. Р’С‹РїРѕР»РЅРµРЅРёРµ SQL-Р·Р°РїСЂРѕСЃР°
+    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р’С‹РїРѕР»РЅРµРЅРёРµ Р·Р°РїСЂРѕСЃР° Рє '$SqlServerInstance/$DatabaseName'..."
     $queryResultData = Invoke-Sqlcmd @invokeSqlParams
 
-    # Запрос выполнен успешно (без ошибок)
+    # Р—Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ СѓСЃРїРµС€РЅРѕ (Р±РµР· РѕС€РёР±РѕРє)
     $resultData.IsAvailable = $true
-    $resultData.CheckSuccess = $true # По умолчанию считаем успешным, если не было ошибок И критерии прошли
+    $resultData.CheckSuccess = $true # РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ СЃС‡РёС‚Р°РµРј СѓСЃРїРµС€РЅС‹Рј, РµСЃР»Рё РЅРµ Р±С‹Р»Рѕ РѕС€РёР±РѕРє Р РєСЂРёС‚РµСЂРёРё РїСЂРѕС€Р»Рё
 
-    # 5. Обработка результата в зависимости от return_format
-    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Обработка результата (формат: $ReturnFormat)"
-    $scalarValueForCriteria = $null # Для проверки критериев
+    # 5. РћР±СЂР°Р±РѕС‚РєР° СЂРµР·СѓР»СЊС‚Р°С‚Р° РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ return_format
+    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РћР±СЂР°Р±РѕС‚РєР° СЂРµР·СѓР»СЊС‚Р°С‚Р° (С„РѕСЂРјР°С‚: $ReturnFormat)"
+    $scalarValueForCriteria = $null # Р”Р»СЏ РїСЂРѕРІРµСЂРєРё РєСЂРёС‚РµСЂРёРµРІ
 
     switch ($ReturnFormat) {
         'first_row' {
@@ -158,10 +158,10 @@ try {
                  }
                  $resultData.Details.query_result = $resultHashTable
                  $resultData.Details.rows_returned = if ($queryResultData -is [array]) { $queryResultData.Length } elseif($firstRow) { 1 } else { 0 }
-                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Возвращена первая строка."
+                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р’РѕР·РІСЂР°С‰РµРЅР° РїРµСЂРІР°СЏ СЃС‚СЂРѕРєР°."
             } else {
                  $resultData.Details.query_result = $null; $resultData.Details.rows_returned = 0
-                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Запрос не вернул строк."
+                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р—Р°РїСЂРѕСЃ РЅРµ РІРµСЂРЅСѓР» СЃС‚СЂРѕРє."
             }
         }
         'all_rows' {
@@ -173,21 +173,21 @@ try {
                       $allRowsList.Add($rowHashTable)
                  }
                  $resultData.Details.rows_returned = $allRowsList.Count
-                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Возвращено строк: $($allRowsList.Count)"
+                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р’РѕР·РІСЂР°С‰РµРЅРѕ СЃС‚СЂРѕРє: $($allRowsList.Count)"
             } else {
                 $resultData.Details.rows_returned = 0
-                Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Запрос не вернул строк."
+                Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р—Р°РїСЂРѕСЃ РЅРµ РІРµСЂРЅСѓР» СЃС‚СЂРѕРє."
             }
-             $resultData.Details.query_result = $allRowsList # Массив хеш-таблиц
+             $resultData.Details.query_result = $allRowsList # РњР°СЃСЃРёРІ С…РµС€-С‚Р°Р±Р»РёС†
         }
         'row_count' {
             if ($queryResultData -ne $null) {
                  $rowCount = if ($queryResultData -is [array]) { $queryResultData.Length } else { 1 }
                  $resultData.Details.row_count = $rowCount
-                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Количество строк: $rowCount"
+                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РљРѕР»РёС‡РµСЃС‚РІРѕ СЃС‚СЂРѕРє: $rowCount"
             } else {
                  $resultData.Details.row_count = 0
-                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Запрос не вернул строк."
+                 Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р—Р°РїСЂРѕСЃ РЅРµ РІРµСЂРЅСѓР» СЃС‚СЂРѕРє."
             }
         }
         'scalar' {
@@ -197,94 +197,94 @@ try {
                      $firstColumnName = ($firstRow.PSObject.Properties | Select-Object -First 1).Name
                      $scalarValue = $firstRow.$firstColumnName
                      $resultData.Details.scalar_value = $scalarValue
-                     $scalarValueForCriteria = $scalarValue # Сохраняем для проверки критериев
-                     Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Скалярное значение: '$scalarValue'"
-                 } else { $resultData.Details.scalar_value = $null; Write-Verbose "[...] Запрос не вернул строк для скаляра." }
-             } else { $resultData.Details.scalar_value = $null; Write-Verbose "[...] Запрос не вернул строк для скаляра." }
+                     $scalarValueForCriteria = $scalarValue # РЎРѕС…СЂР°РЅСЏРµРј РґР»СЏ РїСЂРѕРІРµСЂРєРё РєСЂРёС‚РµСЂРёРµРІ
+                     Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РЎРєР°Р»СЏСЂРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ: '$scalarValue'"
+                 } else { $resultData.Details.scalar_value = $null; Write-Verbose "[...] Р—Р°РїСЂРѕСЃ РЅРµ РІРµСЂРЅСѓР» СЃС‚СЂРѕРє РґР»СЏ СЃРєР°Р»СЏСЂР°." }
+             } else { $resultData.Details.scalar_value = $null; Write-Verbose "[...] Р—Р°РїСЂРѕСЃ РЅРµ РІРµСЂРЅСѓР» СЃС‚СЂРѕРє РґР»СЏ СЃРєР°Р»СЏСЂР°." }
         }
         'non_query' {
-            # Ошибки ловятся через ErrorAction=Stop, сам результат null для non-query
+            # РћС€РёР±РєРё Р»РѕРІСЏС‚СЃСЏ С‡РµСЂРµР· ErrorAction=Stop, СЃР°Рј СЂРµР·СѓР»СЊС‚Р°С‚ null РґР»СЏ non-query
             $resultData.Details.non_query_success = $true
-            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Non-query запрос выполнен успешно."
+            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Non-query Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ СѓСЃРїРµС€РЅРѕ."
         }
     }
 
-    # 6. Обработка SuccessCriteria (ПОКА ТОЛЬКО ДЛЯ SCALAR)
+    # 6. РћР±СЂР°Р±РѕС‚РєР° SuccessCriteria (РџРћРљРђ РўРћР›Р¬РљРћ Р”Р›РЇ SCALAR)
     if ($resultData.IsAvailable -and $ReturnFormat -eq 'scalar' -and $SuccessCriteria -ne $null) {
-        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Применение SuccessCriteria для скалярного значения..."
-        $checkSuccessResult = $true # Локальная переменная для результата проверки критериев
+        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РџСЂРёРјРµРЅРµРЅРёРµ SuccessCriteria РґР»СЏ СЃРєР°Р»СЏСЂРЅРѕРіРѕ Р·РЅР°С‡РµРЅРёСЏ..."
+        $checkSuccessResult = $true # Р›РѕРєР°Р»СЊРЅР°СЏ РїРµСЂРµРјРµРЅРЅР°СЏ РґР»СЏ СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё РєСЂРёС‚РµСЂРёРµРІ
         $failReason = $null
 
-        # Проверка на точное совпадение
+        # РџСЂРѕРІРµСЂРєР° РЅР° С‚РѕС‡РЅРѕРµ СЃРѕРІРїР°РґРµРЅРёРµ
         if ($SuccessCriteria.ContainsKey('expected_value')) {
             $expected = $SuccessCriteria.expected_value
-            # Сравниваем как строки, чтобы избежать проблем с типами
+            # РЎСЂР°РІРЅРёРІР°РµРј РєР°Рє СЃС‚СЂРѕРєРё, С‡С‚РѕР±С‹ РёР·Р±РµР¶Р°С‚СЊ РїСЂРѕР±Р»РµРј СЃ С‚РёРїР°РјРё
             if ("$scalarValueForCriteria" -ne "$expected") {
                 $checkSuccessResult = $false
-                $failReason = "Значение '$scalarValueForCriteria' не равно ожидаемому '$expected'."
+                $failReason = "Р—РЅР°С‡РµРЅРёРµ '$scalarValueForCriteria' РЅРµ СЂР°РІРЅРѕ РѕР¶РёРґР°РµРјРѕРјСѓ '$expected'."
             }
         }
-        # Проверка "больше чем"
+        # РџСЂРѕРІРµСЂРєР° "Р±РѕР»СЊС€Рµ С‡РµРј"
         if ($checkSuccessResult -and $SuccessCriteria.ContainsKey('value_greater_than')) {
             try {
                 $threshold = [double]$SuccessCriteria.value_greater_than
                 $currentValue = [double]$scalarValueForCriteria
                 if ($currentValue -le $threshold) {
                     $checkSuccessResult = $false
-                    $failReason = "Значение $currentValue не больше $threshold."
+                    $failReason = "Р—РЅР°С‡РµРЅРёРµ $currentValue РЅРµ Р±РѕР»СЊС€Рµ $threshold."
                 }
             } catch {
-                 $checkSuccessResult = $null # Ошибка сравнения -> CheckSuccess = null
-                 $failReason = "Ошибка сравнения: значение '$scalarValueForCriteria' или критерий '$($SuccessCriteria.value_greater_than)' не является числом."
+                 $checkSuccessResult = $null # РћС€РёР±РєР° СЃСЂР°РІРЅРµРЅРёСЏ -> CheckSuccess = null
+                 $failReason = "РћС€РёР±РєР° СЃСЂР°РІРЅРµРЅРёСЏ: Р·РЅР°С‡РµРЅРёРµ '$scalarValueForCriteria' РёР»Рё РєСЂРёС‚РµСЂРёР№ '$($SuccessCriteria.value_greater_than)' РЅРµ СЏРІР»СЏРµС‚СЃСЏ С‡РёСЃР»РѕРј."
             }
         }
-        # Проверка "меньше чем"
+        # РџСЂРѕРІРµСЂРєР° "РјРµРЅСЊС€Рµ С‡РµРј"
         if ($checkSuccessResult -and $SuccessCriteria.ContainsKey('value_less_than')) {
             try {
                 $threshold = [double]$SuccessCriteria.value_less_than
                 $currentValue = [double]$scalarValueForCriteria
                 if ($currentValue -ge $threshold) {
                     $checkSuccessResult = $false
-                    $failReason = "Значение $currentValue не меньше $threshold."
+                    $failReason = "Р—РЅР°С‡РµРЅРёРµ $currentValue РЅРµ РјРµРЅСЊС€Рµ $threshold."
                 }
             } catch {
-                 $checkSuccessResult = $null # Ошибка сравнения -> CheckSuccess = null
-                 $failReason = "Ошибка сравнения: значение '$scalarValueForCriteria' или критерий '$($SuccessCriteria.value_less_than)' не является числом."
+                 $checkSuccessResult = $null # РћС€РёР±РєР° СЃСЂР°РІРЅРµРЅРёСЏ -> CheckSuccess = null
+                 $failReason = "РћС€РёР±РєР° СЃСЂР°РІРЅРµРЅРёСЏ: Р·РЅР°С‡РµРЅРёРµ '$scalarValueForCriteria' РёР»Рё РєСЂРёС‚РµСЂРёР№ '$($SuccessCriteria.value_less_than)' РЅРµ СЏРІР»СЏРµС‚СЃСЏ С‡РёСЃР»РѕРј."
             }
         }
-        # ... можно добавить другие критерии (contains, not_contains, etc.)
+        # ... РјРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ РґСЂСѓРіРёРµ РєСЂРёС‚РµСЂРёРё (contains, not_contains, etc.)
 
-        # Обновляем итоговый результат
+        # РћР±РЅРѕРІР»СЏРµРј РёС‚РѕРіРѕРІС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚
         if ($failReason -ne $null) {
             $resultData.ErrorMessage = $failReason
             $resultData.CheckSuccess = if ($checkSuccessResult -eq $null) { $null } else { $false }
-            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Критерий не пройден: $failReason"
+            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: РљСЂРёС‚РµСЂРёР№ РЅРµ РїСЂРѕР№РґРµРЅ: $failReason"
         } else {
-            $resultData.CheckSuccess = $true # Все критерии пройдены
-            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Все критерии для скаляра пройдены."
+            $resultData.CheckSuccess = $true # Р’СЃРµ РєСЂРёС‚РµСЂРёРё РїСЂРѕР№РґРµРЅС‹
+            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р’СЃРµ РєСЂРёС‚РµСЂРёРё РґР»СЏ СЃРєР°Р»СЏСЂР° РїСЂРѕР№РґРµРЅС‹."
         }
     } elseif ($SuccessCriteria -ne $null) {
-         Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: SuccessCriteria переданы, но для формата '$ReturnFormat' их обработка пока не реализована."
+         Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: SuccessCriteria РїРµСЂРµРґР°РЅС‹, РЅРѕ РґР»СЏ С„РѕСЂРјР°С‚Р° '$ReturnFormat' РёС… РѕР±СЂР°Р±РѕС‚РєР° РїРѕРєР° РЅРµ СЂРµР°Р»РёР·РѕРІР°РЅР°."
     }
 
 
 } catch {
-    # Перехват ошибок Invoke-Sqlcmd или других (валидация, модуль)
+    # РџРµСЂРµС…РІР°С‚ РѕС€РёР±РѕРє Invoke-Sqlcmd РёР»Рё РґСЂСѓРіРёС… (РІР°Р»РёРґР°С†РёСЏ, РјРѕРґСѓР»СЊ)
     $resultData.IsAvailable = $false
     $resultData.CheckSuccess = $null
     $exceptionMessage = $_.Exception.Message
     if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-    $errorMessage = "Ошибка выполнения SQL-запроса: {0}" -f $exceptionMessage
+    $errorMessage = "РћС€РёР±РєР° РІС‹РїРѕР»РЅРµРЅРёСЏ SQL-Р·Р°РїСЂРѕСЃР°: {0}" -f $exceptionMessage
     $resultData.ErrorMessage = $errorMessage
-    # Добавляем детали ошибки
+    # Р”РѕР±Р°РІР»СЏРµРј РґРµС‚Р°Р»Рё РѕС€РёР±РєРё
     if ($null -eq $resultData.Details) { $resultData.Details = @{} }
     $resultData.Details.error = $errorMessage
     $resultData.Details.ErrorRecord = $_.ToString()
-    # Логируем ошибку
-    Write-Error "[$NodeName] Check-SQL_QUERY_EXECUTE: Критическая ошибка: $errorMessage"
+    # Р›РѕРіРёСЂСѓРµРј РѕС€РёР±РєСѓ
+    Write-Error "[$NodeName] Check-SQL_QUERY_EXECUTE: РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: $errorMessage"
 }
 
-# Вызов New-CheckResultObject для финальной стандартизации
+# Р’С‹Р·РѕРІ New-CheckResultObject РґР»СЏ С„РёРЅР°Р»СЊРЅРѕР№ СЃС‚Р°РЅРґР°СЂС‚РёР·Р°С†РёРё
 $finalResult = New-CheckResultObject @resultData
-Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Завершение. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
+Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Р—Р°РІРµСЂС€РµРЅРёРµ. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
 return $finalResult

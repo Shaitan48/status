@@ -1,29 +1,29 @@
-<#
+п»ї<#
 .SYNOPSIS
-    Проверяет статус указанной системной службы.
+    РџСЂРѕРІРµСЂСЏРµС‚ СЃС‚Р°С‚СѓСЃ СѓРєР°Р·Р°РЅРЅРѕР№ СЃРёСЃС‚РµРјРЅРѕР№ СЃР»СѓР¶Р±С‹.
 .DESCRIPTION
-    Обращается к службе локально или на удаленном узле, используя Get-Service для получения
-    текущего статуса. Сравнивает статус с ожидаемым в SuccessCriteria.
-    Возвращает стандартизированный объект результата проверки.
+    РћР±СЂР°С‰Р°РµС‚СЃСЏ Рє СЃР»СѓР¶Р±Рµ Р»РѕРєР°Р»СЊРЅРѕ РёР»Рё РЅР° СѓРґР°Р»РµРЅРЅРѕРј СѓР·Р»Рµ, РёСЃРїРѕР»СЊР·СѓСЏ Get-Service РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ
+    С‚РµРєСѓС‰РµРіРѕ СЃС‚Р°С‚СѓСЃР°. РЎСЂР°РІРЅРёРІР°РµС‚ СЃС‚Р°С‚СѓСЃ СЃ РѕР¶РёРґР°РµРјС‹Рј РІ SuccessCriteria.
+    Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё.
 .PARAMETER TargetIP
-    [string] IP или имя хоста для проверки (игнорируется локально).
-    Используется диспетчером для потенциального удаленного вызова.
+    [string] IP РёР»Рё РёРјСЏ С…РѕСЃС‚Р° РґР»СЏ РїСЂРѕРІРµСЂРєРё (РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ Р»РѕРєР°Р»СЊРЅРѕ).
+    РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґРёСЃРїРµС‚С‡РµСЂРѕРј РґР»СЏ РїРѕС‚РµРЅС†РёР°Р»СЊРЅРѕРіРѕ СѓРґР°Р»РµРЅРЅРѕРіРѕ РІС‹Р·РѕРІР°.
 .PARAMETER Parameters
-    [hashtable] Обязательный. Должен содержать ключ 'service_name'.
-    Пример: @{ service_name = "Spooler" }
+    [hashtable] РћР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. Р”РѕР»Р¶РµРЅ СЃРѕРґРµСЂР¶Р°С‚СЊ РєР»СЋС‡ 'service_name'.
+    РџСЂРёРјРµСЂ: @{ service_name = "Spooler" }
 .PARAMETER SuccessCriteria
-    [hashtable] Необязательный. Может содержать ключ 'status'.
-    Пример: @{ status = "Running" } (ожидаемый статус, по умолчанию 'Running').
-            @{ status = "Stopped" } (ожидаемый статус 'Stopped').
+    [hashtable] РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РњРѕР¶РµС‚ СЃРѕРґРµСЂР¶Р°С‚СЊ РєР»СЋС‡ 'status'.
+    РџСЂРёРјРµСЂ: @{ status = "Running" } (РѕР¶РёРґР°РµРјС‹Р№ СЃС‚Р°С‚СѓСЃ, РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 'Running').
+            @{ status = "Stopped" } (РѕР¶РёРґР°РµРјС‹Р№ СЃС‚Р°С‚СѓСЃ 'Stopped').
 .PARAMETER NodeName
-    [string] Необязательный. Имя узла для логирования.
+    [string] РќРµРѕР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РРјСЏ СѓР·Р»Р° РґР»СЏ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ.
 .OUTPUTS
-    Hashtable - Стандартизированный объект результата проверки
+    Hashtable - РЎС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё
                 (IsAvailable, CheckSuccess, Timestamp, Details, ErrorMessage).
 #>
 param(
     [Parameter(Mandatory=$true)]
-    [string]$TargetIP, # Реально используется только диспетчером для Invoke-Command
+    [string]$TargetIP, # Р РµР°Р»СЊРЅРѕ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РґРёСЃРїРµС‚С‡РµСЂРѕРј РґР»СЏ Invoke-Command
 
     [Parameter(Mandatory=$true)]
     [hashtable]$Parameters,
@@ -32,161 +32,161 @@ param(
     [hashtable]$SuccessCriteria = $null,
 
     [Parameter(Mandatory=$false)]
-    [string]$NodeName = "Unknown Node" # Для логов
+    [string]$NodeName = "Unknown Node" # Р”Р»СЏ Р»РѕРіРѕРІ
 )
 
-# Убеждаемся, что функция New-CheckResultObject доступна
-# (Обычно она в .psm1, но для автономного тестирования может понадобиться загрузка)
+# РЈР±РµР¶РґР°РµРјСЃСЏ, С‡С‚Рѕ С„СѓРЅРєС†РёСЏ New-CheckResultObject РґРѕСЃС‚СѓРїРЅР°
+# (РћР±С‹С‡РЅРѕ РѕРЅР° РІ .psm1, РЅРѕ РґР»СЏ Р°РІС‚РѕРЅРѕРјРЅРѕРіРѕ С‚РµСЃС‚РёСЂРѕРІР°РЅРёСЏ РјРѕР¶РµС‚ РїРѕРЅР°РґРѕР±РёС‚СЊСЃСЏ Р·Р°РіСЂСѓР·РєР°)
 if (-not (Get-Command New-CheckResultObject -ErrorAction SilentlyContinue)) {
     try {
-        $commonFunctionsPath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils.psm1" # Путь к основному модулю
+        $commonFunctionsPath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils.psm1" # РџСѓС‚СЊ Рє РѕСЃРЅРѕРІРЅРѕРјСѓ РјРѕРґСѓР»СЋ
         if(Test-Path $commonFunctionsPath) {
-            Write-Verbose "Check-SERVICE_STATUS: Загрузка функций из $commonFunctionsPath"
-             # Используем dot-sourcing для загрузки функций в текущую область видимости
+            Write-Verbose "Check-SERVICE_STATUS: Р—Р°РіСЂСѓР·РєР° С„СѓРЅРєС†РёР№ РёР· $commonFunctionsPath"
+             # РСЃРїРѕР»СЊР·СѓРµРј dot-sourcing РґР»СЏ Р·Р°РіСЂСѓР·РєРё С„СѓРЅРєС†РёР№ РІ С‚РµРєСѓС‰СѓСЋ РѕР±Р»Р°СЃС‚СЊ РІРёРґРёРјРѕСЃС‚Рё
             . $commonFunctionsPath
-        } else { throw "Не найден файл общего модуля: $commonFunctionsPath" }
+        } else { throw "РќРµ РЅР°Р№РґРµРЅ С„Р°Р№Р» РѕР±С‰РµРіРѕ РјРѕРґСѓР»СЏ: $commonFunctionsPath" }
     } catch {
-        Write-Error "Check-SERVICE_STATUS: Критическая ошибка: Не удалось загрузить New-CheckResultObject! $($_.Exception.Message)"
-        # Создаем заглушку, чтобы скрипт не упал полностью
+        Write-Error "Check-SERVICE_STATUS: РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ New-CheckResultObject! $($_.Exception.Message)"
+        # РЎРѕР·РґР°РµРј Р·Р°РіР»СѓС€РєСѓ, С‡С‚РѕР±С‹ СЃРєСЂРёРїС‚ РЅРµ СѓРїР°Р» РїРѕР»РЅРѕСЃС‚СЊСЋ
         function New-CheckResultObject { param($IsAvailable, $CheckSuccess=$null, $Details=$null, $ErrorMessage=$null) return @{IsAvailable=$IsAvailable; CheckSuccess=$CheckSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$Details; ErrorMessage=$ErrorMessage} }
     }
 }
 
-# --- Инициализация результата ---
-$resultData = @{ # Стандартная структура для возврата
+# --- РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ СЂРµР·СѓР»СЊС‚Р°С‚Р° ---
+$resultData = @{ # РЎС‚Р°РЅРґР°СЂС‚РЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° РґР»СЏ РІРѕР·РІСЂР°С‚Р°
     IsAvailable = $false
     CheckSuccess = $null
     Details = $null
     ErrorMessage = $null
 }
 
-Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Начало проверки для $TargetIP"
+Write-Verbose "[$NodeName] Check-SERVICE_STATUS: РќР°С‡Р°Р»Рѕ РїСЂРѕРІРµСЂРєРё РґР»СЏ $TargetIP"
 
 try {
-    # 1. Валидация обязательных параметров
+    # 1. Р’Р°Р»РёРґР°С†РёСЏ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… РїР°СЂР°РјРµС‚СЂРѕРІ
     $serviceName = $Parameters.service_name
     if (-not $serviceName -or $serviceName -isnot [string] -or $serviceName.Trim() -eq '') {
-        throw "Параметр 'service_name' отсутствует или пуст в Parameters."
+        throw "РџР°СЂР°РјРµС‚СЂ 'service_name' РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РёР»Рё РїСѓСЃС‚ РІ Parameters."
     }
     $serviceName = $serviceName.Trim()
-    Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Проверяемая служба '$serviceName'"
+    Write-Verbose "[$NodeName] Check-SERVICE_STATUS: РџСЂРѕРІРµСЂСЏРµРјР°СЏ СЃР»СѓР¶Р±Р° '$serviceName'"
 
-    # 2. Определение цели (локально или удаленно) - для Get-Service
-    # В модели StatusMonitor агент выполняет проверку сам, поэтому ComputerName обычно не нужен.
-    # Get-Service всегда выполняется локально в контексте агента.
-    # TargetIP используется для логирования и диспетчером для выбора контекста.
+    # 2. РћРїСЂРµРґРµР»РµРЅРёРµ С†РµР»Рё (Р»РѕРєР°Р»СЊРЅРѕ РёР»Рё СѓРґР°Р»РµРЅРЅРѕ) - РґР»СЏ Get-Service
+    # Р’ РјРѕРґРµР»Рё StatusMonitor Р°РіРµРЅС‚ РІС‹РїРѕР»РЅСЏРµС‚ РїСЂРѕРІРµСЂРєСѓ СЃР°Рј, РїРѕСЌС‚РѕРјСѓ ComputerName РѕР±С‹С‡РЅРѕ РЅРµ РЅСѓР¶РµРЅ.
+    # Get-Service РІСЃРµРіРґР° РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ Р»РѕРєР°Р»СЊРЅРѕ РІ РєРѕРЅС‚РµРєСЃС‚Рµ Р°РіРµРЅС‚Р°.
+    # TargetIP РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґР»СЏ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ Рё РґРёСЃРїРµС‚С‡РµСЂРѕРј РґР»СЏ РІС‹Р±РѕСЂР° РєРѕРЅС‚РµРєСЃС‚Р°.
     $ComputerNameParam = $null
     # if ($TargetIP -ne $env:COMPUTERNAME -and $TargetIP -ne 'localhost' -and $TargetIP -ne '127.0.0.1') {
     #     $ComputerNameParam = $TargetIP
-    #     Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Цель удаленная: $ComputerNameParam"
+    #     Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Р¦РµР»СЊ СѓРґР°Р»РµРЅРЅР°СЏ: $ComputerNameParam"
     # } else {
-         Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Цель локальная."
+         Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Р¦РµР»СЊ Р»РѕРєР°Р»СЊРЅР°СЏ."
     # }
 
-    # 3. Выполнение Get-Service
+    # 3. Р’С‹РїРѕР»РЅРµРЅРёРµ Get-Service
     $service = $null
-    $getServiceParams = @{ Name = $serviceName; ErrorAction = 'Stop' } # Stop, чтобы поймать ошибку, если службы нет
-    # if ($ComputerNameParam) { $getServiceParams.ComputerName = $ComputerNameParam } # Не добавляем ComputerName
+    $getServiceParams = @{ Name = $serviceName; ErrorAction = 'Stop' } # Stop, С‡С‚РѕР±С‹ РїРѕР№РјР°С‚СЊ РѕС€РёР±РєСѓ, РµСЃР»Рё СЃР»СѓР¶Р±С‹ РЅРµС‚
+    # if ($ComputerNameParam) { $getServiceParams.ComputerName = $ComputerNameParam } # РќРµ РґРѕР±Р°РІР»СЏРµРј ComputerName
 
-    try { # Внутренний try/catch для Get-Service
+    try { # Р’РЅСѓС‚СЂРµРЅРЅРёР№ try/catch РґР»СЏ Get-Service
         $service = Get-Service @getServiceParams
-        # --- УСПЕШНО ПОЛУЧИЛИ СЛУЖБУ ---
-        $resultData.IsAvailable = $true # Смогли выполнить проверку
+        # --- РЈРЎРџР•РЁРќРћ РџРћР›РЈР§РР›Р РЎР›РЈР–Р‘РЈ ---
+        $resultData.IsAvailable = $true # РЎРјРѕРіР»Рё РІС‹РїРѕР»РЅРёС‚СЊ РїСЂРѕРІРµСЂРєСѓ
         $currentStatus = $service.Status.ToString()
-        Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Служба '$serviceName' найдена. Статус: $currentStatus"
+        Write-Verbose "[$NodeName] Check-SERVICE_STATUS: РЎР»СѓР¶Р±Р° '$serviceName' РЅР°Р№РґРµРЅР°. РЎС‚Р°С‚СѓСЃ: $currentStatus"
 
-        # Заполняем Details
+        # Р—Р°РїРѕР»РЅСЏРµРј Details
         $resultData.Details = @{
             service_name = $serviceName
             status = $currentStatus
             display_name = $service.DisplayName
             start_type = $service.StartType.ToString()
             can_stop = $service.CanStop
-            # Можно добавить другие свойства службы при необходимости
+            # РњРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ РґСЂСѓРіРёРµ СЃРІРѕР№СЃС‚РІР° СЃР»СѓР¶Р±С‹ РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё
         }
 
-        # 4. Проверка SuccessCriteria (CheckSuccess)
-        $requiredStatus = 'Running' # Значение по умолчанию
+        # 4. РџСЂРѕРІРµСЂРєР° SuccessCriteria (CheckSuccess)
+        $requiredStatus = 'Running' # Р—РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
         $criteriaSource = 'Default'
-        $checkSuccessResult = $true # По умолчанию успешно, если доступно и нет критериев или критерии прошли
+        $checkSuccessResult = $true # РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ СѓСЃРїРµС€РЅРѕ, РµСЃР»Рё РґРѕСЃС‚СѓРїРЅРѕ Рё РЅРµС‚ РєСЂРёС‚РµСЂРёРµРІ РёР»Рё РєСЂРёС‚РµСЂРёРё РїСЂРѕС€Р»Рё
         $failReason = $null
 
         if ($SuccessCriteria -ne $null -and $SuccessCriteria.ContainsKey('status') -and -not [string]::IsNullOrWhiteSpace($SuccessCriteria.status)) {
-            # --- >>> НАЧАЛО ОБРАБОТКИ КРИТЕРИЯ <<< ---
-            $requiredStatus = $SuccessCriteria.status.ToString().Trim() # Приводим к строке и убираем пробелы
+            # --- >>> РќРђР§РђР›Рћ РћР‘Р РђР‘РћРўРљР РљР РРўР•Р РРЇ <<< ---
+            $requiredStatus = $SuccessCriteria.status.ToString().Trim() # РџСЂРёРІРѕРґРёРј Рє СЃС‚СЂРѕРєРµ Рё СѓР±РёСЂР°РµРј РїСЂРѕР±РµР»С‹
             $criteriaSource = 'Explicit'
-            Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Применяется явный критерий: status = '$requiredStatus'"
+            Write-Verbose "[$NodeName] Check-SERVICE_STATUS: РџСЂРёРјРµРЅСЏРµС‚СЃСЏ СЏРІРЅС‹Р№ РєСЂРёС‚РµСЂРёР№: status = '$requiredStatus'"
 
-            # Сравниваем текущий статус с требуемым (без учета регистра)
+            # РЎСЂР°РІРЅРёРІР°РµРј С‚РµРєСѓС‰РёР№ СЃС‚Р°С‚СѓСЃ СЃ С‚СЂРµР±СѓРµРјС‹Рј (Р±РµР· СѓС‡РµС‚Р° СЂРµРіРёСЃС‚СЂР°)
             if ($currentStatus -ne $requiredStatus) {
-                $checkSuccessResult = $false # Критерий не пройден
-                $failReason = "Текущий статус службы '$currentStatus' не соответствует требуемому '$requiredStatus'."
+                $checkSuccessResult = $false # РљСЂРёС‚РµСЂРёР№ РЅРµ РїСЂРѕР№РґРµРЅ
+                $failReason = "РўРµРєСѓС‰РёР№ СЃС‚Р°С‚СѓСЃ СЃР»СѓР¶Р±С‹ '$currentStatus' РЅРµ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ С‚СЂРµР±СѓРµРјРѕРјСѓ '$requiredStatus'."
                 Write-Verbose "[$NodeName] Check-SERVICE_STATUS: $failReason"
             } else {
-                $checkSuccessResult = $true # Критерий пройден
-                Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Статус '$currentStatus' соответствует критерию '$requiredStatus'."
+                $checkSuccessResult = $true # РљСЂРёС‚РµСЂРёР№ РїСЂРѕР№РґРµРЅ
+                Write-Verbose "[$NodeName] Check-SERVICE_STATUS: РЎС‚Р°С‚СѓСЃ '$currentStatus' СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ РєСЂРёС‚РµСЂРёСЋ '$requiredStatus'."
             }
-             # --- >>> КОНЕЦ ОБРАБОТКИ КРИТЕРИЯ <<< ---
+             # --- >>> РљРћРќР•Р¦ РћР‘Р РђР‘РћРўРљР РљР РРўР•Р РРЇ <<< ---
         } else {
-            # Критерии не заданы явно, используем стандартную логику (Running = OK)
-            Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Явный критерий 'status' не задан. Считаем успешным, если статус '$requiredStatus' (по умолчанию)."
+            # РљСЂРёС‚РµСЂРёРё РЅРµ Р·Р°РґР°РЅС‹ СЏРІРЅРѕ, РёСЃРїРѕР»СЊР·СѓРµРј СЃС‚Р°РЅРґР°СЂС‚РЅСѓСЋ Р»РѕРіРёРєСѓ (Running = OK)
+            Write-Verbose "[$NodeName] Check-SERVICE_STATUS: РЇРІРЅС‹Р№ РєСЂРёС‚РµСЂРёР№ 'status' РЅРµ Р·Р°РґР°РЅ. РЎС‡РёС‚Р°РµРј СѓСЃРїРµС€РЅС‹Рј, РµСЃР»Рё СЃС‚Р°С‚СѓСЃ '$requiredStatus' (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ)."
             if ($currentStatus -ne $requiredStatus) {
-                 # Статус не соответствует дефолтному Running, но т.к. критерий не задан ЯВНО,
-                 # считаем это успехом самой *проверки*, но не критерия.
-                 # CheckSuccess должен отражать соответствие КРИТЕРИЯМ.
-                 # Если критериев нет, CheckSuccess должен быть TRUE при IsAvailable = TRUE.
-                 # Если критерий есть, но не пройден -> CheckSuccess = FALSE.
-                 # $checkSuccessResult = $false # Неправильно, т.к. критерия не было
-                 $checkSuccessResult = $true # Правильно, т.к. критерия не было
-                 # $failReason = "Статус службы '$currentStatus', ожидался '$requiredStatus' (по умолчанию)." # Это сообщение не нужно в ErrorMessage, т.к. CheckSuccess=true
-                 # Write-Verbose "[$NodeName] Check-SERVICE_STATUS: $failReason" # Этот Verbose тоже лишний
+                 # РЎС‚Р°С‚СѓСЃ РЅРµ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ РґРµС„РѕР»С‚РЅРѕРјСѓ Running, РЅРѕ С‚.Рє. РєСЂРёС‚РµСЂРёР№ РЅРµ Р·Р°РґР°РЅ РЇР’РќРћ,
+                 # СЃС‡РёС‚Р°РµРј СЌС‚Рѕ СѓСЃРїРµС…РѕРј СЃР°РјРѕР№ *РїСЂРѕРІРµСЂРєРё*, РЅРѕ РЅРµ РєСЂРёС‚РµСЂРёСЏ.
+                 # CheckSuccess РґРѕР»Р¶РµРЅ РѕС‚СЂР°Р¶Р°С‚СЊ СЃРѕРѕС‚РІРµС‚СЃС‚РІРёРµ РљР РРўР•Р РРЇРњ.
+                 # Р•СЃР»Рё РєСЂРёС‚РµСЂРёРµРІ РЅРµС‚, CheckSuccess РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ TRUE РїСЂРё IsAvailable = TRUE.
+                 # Р•СЃР»Рё РєСЂРёС‚РµСЂРёР№ РµСЃС‚СЊ, РЅРѕ РЅРµ РїСЂРѕР№РґРµРЅ -> CheckSuccess = FALSE.
+                 # $checkSuccessResult = $false # РќРµРїСЂР°РІРёР»СЊРЅРѕ, С‚.Рє. РєСЂРёС‚РµСЂРёСЏ РЅРµ Р±С‹Р»Рѕ
+                 $checkSuccessResult = $true # РџСЂР°РІРёР»СЊРЅРѕ, С‚.Рє. РєСЂРёС‚РµСЂРёСЏ РЅРµ Р±С‹Р»Рѕ
+                 # $failReason = "РЎС‚Р°С‚СѓСЃ СЃР»СѓР¶Р±С‹ '$currentStatus', РѕР¶РёРґР°Р»СЃСЏ '$requiredStatus' (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ)." # Р­С‚Рѕ СЃРѕРѕР±С‰РµРЅРёРµ РЅРµ РЅСѓР¶РЅРѕ РІ ErrorMessage, С‚.Рє. CheckSuccess=true
+                 # Write-Verbose "[$NodeName] Check-SERVICE_STATUS: $failReason" # Р­С‚РѕС‚ Verbose С‚РѕР¶Рµ Р»РёС€РЅРёР№
             } else {
                 $checkSuccessResult = $true
             }
         }
-        # Устанавливаем $resultData.CheckSuccess и $resultData.ErrorMessage
+        # РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј $resultData.CheckSuccess Рё $resultData.ErrorMessage
         $resultData.CheckSuccess = $checkSuccessResult
-        # ErrorMessage заполняем ТОЛЬКО если CheckSuccess = false ИЛИ IsAvailable = false
+        # ErrorMessage Р·Р°РїРѕР»РЅСЏРµРј РўРћР›Р¬РљРћ РµСЃР»Рё CheckSuccess = false РР›Р IsAvailable = false
         if ($checkSuccessResult -eq $false) {
              $resultData.ErrorMessage = $failReason
         }
 
     } catch [Microsoft.PowerShell.Commands.ServiceCommandException] {
-        # --- ОШИБКА: Служба не найдена ---
-        $resultData.IsAvailable = $false # Не смогли выполнить проверку, т.к. службы нет
+        # --- РћРЁРР‘РљРђ: РЎР»СѓР¶Р±Р° РЅРµ РЅР°Р№РґРµРЅР° ---
+        $resultData.IsAvailable = $false # РќРµ СЃРјРѕРіР»Рё РІС‹РїРѕР»РЅРёС‚СЊ РїСЂРѕРІРµСЂРєСѓ, С‚.Рє. СЃР»СѓР¶Р±С‹ РЅРµС‚
         $resultData.CheckSuccess = $null
-        $resultData.ErrorMessage = "Служба '$serviceName' не найдена на '$($env:COMPUTERNAME)'."
+        $resultData.ErrorMessage = "РЎР»СѓР¶Р±Р° '$serviceName' РЅРµ РЅР°Р№РґРµРЅР° РЅР° '$($env:COMPUTERNAME)'."
         $resultData.Details = @{ error = $resultData.ErrorMessage; service_name = $serviceName }
         Write-Warning "[$NodeName] Check-SERVICE_STATUS: $($resultData.ErrorMessage)"
     } catch {
-        # --- ОШИБКА: Другая ошибка Get-Service (RPC недоступен и т.п., хотя мы делаем локально) ---
-        $resultData.IsAvailable = $false # Не смогли выполнить проверку
+        # --- РћРЁРР‘РљРђ: Р”СЂСѓРіР°СЏ РѕС€РёР±РєР° Get-Service (RPC РЅРµРґРѕСЃС‚СѓРїРµРЅ Рё С‚.Рї., С…РѕС‚СЏ РјС‹ РґРµР»Р°РµРј Р»РѕРєР°Р»СЊРЅРѕ) ---
+        $resultData.IsAvailable = $false # РќРµ СЃРјРѕРіР»Рё РІС‹РїРѕР»РЅРёС‚СЊ РїСЂРѕРІРµСЂРєСѓ
         $resultData.CheckSuccess = $null
-        $errorMessage = "Ошибка получения статуса службы '$serviceName' на '$($env:COMPUTERNAME)': $($_.Exception.Message)"
-        # Обрезаем слишком длинное сообщение
+        $errorMessage = "РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ СЃС‚Р°С‚СѓСЃР° СЃР»СѓР¶Р±С‹ '$serviceName' РЅР° '$($env:COMPUTERNAME)': $($_.Exception.Message)"
+        # РћР±СЂРµР·Р°РµРј СЃР»РёС€РєРѕРј РґР»РёРЅРЅРѕРµ СЃРѕРѕР±С‰РµРЅРёРµ
         if ($errorMessage.Length -gt 500) { $errorMessage = $errorMessage.Substring(0, 500) + "..." }
         $resultData.ErrorMessage = $errorMessage
         $resultData.Details = @{ error = $errorMessage; service_name = $serviceName; ErrorRecord = $_.ToString() }
-        Write-Warning "[$NodeName] Check-SERVICE_STATUS: Ошибка Get-Service: $($_.Exception.Message)"
+        Write-Warning "[$NodeName] Check-SERVICE_STATUS: РћС€РёР±РєР° Get-Service: $($_.Exception.Message)"
     }
 
 } catch {
-    # --- ОШИБКА: Общая ошибка скрипта Check-SERVICE_STATUS (например, валидация параметров) ---
+    # --- РћРЁРР‘РљРђ: РћР±С‰Р°СЏ РѕС€РёР±РєР° СЃРєСЂРёРїС‚Р° Check-SERVICE_STATUS (РЅР°РїСЂРёРјРµСЂ, РІР°Р»РёРґР°С†РёСЏ РїР°СЂР°РјРµС‚СЂРѕРІ) ---
     $resultData.IsAvailable = $false
     $resultData.CheckSuccess = $null
-    $errorMessage = "Внутренняя ошибка скрипта Check-SERVICE_STATUS: $($_.Exception.Message)"
+    $errorMessage = "Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ РѕС€РёР±РєР° СЃРєСЂРёРїС‚Р° Check-SERVICE_STATUS: $($_.Exception.Message)"
     if ($errorMessage.Length -gt 500) { $errorMessage = $errorMessage.Substring(0, 500) + "..." }
     $resultData.ErrorMessage = $errorMessage
     $resultData.Details = @{ error = $errorMessage; ErrorRecord = $_.ToString() }
-    Write-Error "[$NodeName] Check-SERVICE_STATUS: Критическая ошибка скрипта: $($_.Exception.Message)"
+    Write-Error "[$NodeName] Check-SERVICE_STATUS: РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° СЃРєСЂРёРїС‚Р°: $($_.Exception.Message)"
 }
 
-# Вызываем New-CheckResultObject для стандартизации и добавления Timestamp
-# Передаем рассчитанные значения
+# Р’С‹Р·С‹РІР°РµРј New-CheckResultObject РґР»СЏ СЃС‚Р°РЅРґР°СЂС‚РёР·Р°С†РёРё Рё РґРѕР±Р°РІР»РµРЅРёСЏ Timestamp
+# РџРµСЂРµРґР°РµРј СЂР°СЃСЃС‡РёС‚Р°РЅРЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ
 $finalResult = New-CheckResultObject -IsAvailable $resultData.IsAvailable `
                                      -CheckSuccess $resultData.CheckSuccess `
                                      -Details $resultData.Details `
                                      -ErrorMessage $resultData.ErrorMessage
 
-Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Завершение проверки. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
+Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Р—Р°РІРµСЂС€РµРЅРёРµ РїСЂРѕРІРµСЂРєРё. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
 return $finalResult

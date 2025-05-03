@@ -1,50 +1,50 @@
-# powershell/result_loader/result_loader.ps1
-# Загрузчик результатов оффлайн-агентов v3.18 (исправления -f через интерполяцию)
-# Исправлены ошибки ParameterBindingException путем замены оператора -f на строковую интерполяцию.
+п»ї# powershell/result_loader/result_loader.ps1
+# Р—Р°РіСЂСѓР·С‡РёРє СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РѕС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚РѕРІ v3.18 (РёСЃРїСЂР°РІР»РµРЅРёСЏ -f С‡РµСЂРµР· РёРЅС‚РµСЂРїРѕР»СЏС†РёСЋ)
+# РСЃРїСЂР°РІР»РµРЅС‹ РѕС€РёР±РєРё ParameterBindingException РїСѓС‚РµРј Р·Р°РјРµРЅС‹ РѕРїРµСЂР°С‚РѕСЂР° -f РЅР° СЃС‚СЂРѕРєРѕРІСѓСЋ РёРЅС‚РµСЂРїРѕР»СЏС†РёСЋ.
 <#
 .SYNOPSIS
-    Обрабатывает файлы *.zrpu от оффлайн-агентов
-    и отправляет данные пакетом в API Status Monitor (v3.18).
+    РћР±СЂР°Р±Р°С‚С‹РІР°РµС‚ С„Р°Р№Р»С‹ *.zrpu РѕС‚ РѕС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚РѕРІ
+    Рё РѕС‚РїСЂР°РІР»СЏРµС‚ РґР°РЅРЅС‹Рµ РїР°РєРµС‚РѕРј РІ API Status Monitor (v3.18).
 .DESCRIPTION
-    Скрипт-загрузчик результатов. Выполняется на машине, имеющей
-    доступ как к папке с результатами от оффлайн-агентов (`check_folder`),
-    так и к API сервера мониторинга (`api_base_url`).
+    РЎРєСЂРёРїС‚-Р·Р°РіСЂСѓР·С‡РёРє СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ. Р’С‹РїРѕР»РЅСЏРµС‚СЃСЏ РЅР° РјР°С€РёРЅРµ, РёРјРµСЋС‰РµР№
+    РґРѕСЃС‚СѓРї РєР°Рє Рє РїР°РїРєРµ СЃ СЂРµР·СѓР»СЊС‚Р°С‚Р°РјРё РѕС‚ РѕС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚РѕРІ (`check_folder`),
+    С‚Р°Рє Рё Рє API СЃРµСЂРІРµСЂР° РјРѕРЅРёС‚РѕСЂРёРЅРіР° (`api_base_url`).
 
-    Принцип работы:
-    1. Читает параметры конфигурации из 'config.json'.
-    2. В бесконечном цикле с интервалом (`scan_interval_seconds`):
-       a. Сканирует `check_folder` на наличие файлов `*_OfflineChecks.json.status*.zrpu`.
-       b. Для каждого найденного файла:
-          i.   Читает и парсит JSON.
-          ii.  Проверяет базовую структуру (наличие `results`, `agent_script_version`, `assignment_config_version`).
-          iii. Если файл валиден и содержит результаты:
-               - Формирует тело Bulk-запроса (весь распарсенный JSON).
-               - Отправляет ОДИН POST-запрос на `/api/v1/checks/bulk`, используя функцию `Invoke-ApiRequestWithRetry`.
-          iv.  Анализирует ответ от Bulk API (`status`, `processed`, `failed`, `errors`).
-          v.   Определяет итоговый статус обработки файла (`success`, `partial_error`, `error_api`, `error_local`).
-          vi.  Отправляет событие `FILE_PROCESSED` в API `/api/v1/events` с деталями обработки.
-          vii. Перемещает обработанный файл в подпапку `Processed` или `Error`.
-       c. Если файлов нет, ждет.
-    3. Ждет `scan_interval_seconds` и повторяет цикл.
-    4. Логирует все действия.
+    РџСЂРёРЅС†РёРї СЂР°Р±РѕС‚С‹:
+    1. Р§РёС‚Р°РµС‚ РїР°СЂР°РјРµС‚СЂС‹ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РёР· 'config.json'.
+    2. Р’ Р±РµСЃРєРѕРЅРµС‡РЅРѕРј С†РёРєР»Рµ СЃ РёРЅС‚РµСЂРІР°Р»РѕРј (`scan_interval_seconds`):
+       a. РЎРєР°РЅРёСЂСѓРµС‚ `check_folder` РЅР° РЅР°Р»РёС‡РёРµ С„Р°Р№Р»РѕРІ `*_OfflineChecks.json.status*.zrpu`.
+       b. Р”Р»СЏ РєР°Р¶РґРѕРіРѕ РЅР°Р№РґРµРЅРЅРѕРіРѕ С„Р°Р№Р»Р°:
+          i.   Р§РёС‚Р°РµС‚ Рё РїР°СЂСЃРёС‚ JSON.
+          ii.  РџСЂРѕРІРµСЂСЏРµС‚ Р±Р°Р·РѕРІСѓСЋ СЃС‚СЂСѓРєС‚СѓСЂСѓ (РЅР°Р»РёС‡РёРµ `results`, `agent_script_version`, `assignment_config_version`).
+          iii. Р•СЃР»Рё С„Р°Р№Р» РІР°Р»РёРґРµРЅ Рё СЃРѕРґРµСЂР¶РёС‚ СЂРµР·СѓР»СЊС‚Р°С‚С‹:
+               - Р¤РѕСЂРјРёСЂСѓРµС‚ С‚РµР»Рѕ Bulk-Р·Р°РїСЂРѕСЃР° (РІРµСЃСЊ СЂР°СЃРїР°СЂСЃРµРЅРЅС‹Р№ JSON).
+               - РћС‚РїСЂР°РІР»СЏРµС‚ РћР”РРќ POST-Р·Р°РїСЂРѕСЃ РЅР° `/api/v1/checks/bulk`, РёСЃРїРѕР»СЊР·СѓСЏ С„СѓРЅРєС†РёСЋ `Invoke-ApiRequestWithRetry`.
+          iv.  РђРЅР°Р»РёР·РёСЂСѓРµС‚ РѕС‚РІРµС‚ РѕС‚ Bulk API (`status`, `processed`, `failed`, `errors`).
+          v.   РћРїСЂРµРґРµР»СЏРµС‚ РёС‚РѕРіРѕРІС‹Р№ СЃС‚Р°С‚СѓСЃ РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р№Р»Р° (`success`, `partial_error`, `error_api`, `error_local`).
+          vi.  РћС‚РїСЂР°РІР»СЏРµС‚ СЃРѕР±С‹С‚РёРµ `FILE_PROCESSED` РІ API `/api/v1/events` СЃ РґРµС‚Р°Р»СЏРјРё РѕР±СЂР°Р±РѕС‚РєРё.
+          vii. РџРµСЂРµРјРµС‰Р°РµС‚ РѕР±СЂР°Р±РѕС‚Р°РЅРЅС‹Р№ С„Р°Р№Р» РІ РїРѕРґРїР°РїРєСѓ `Processed` РёР»Рё `Error`.
+       c. Р•СЃР»Рё С„Р°Р№Р»РѕРІ РЅРµС‚, Р¶РґРµС‚.
+    3. Р–РґРµС‚ `scan_interval_seconds` Рё РїРѕРІС‚РѕСЂСЏРµС‚ С†РёРєР».
+    4. Р›РѕРіРёСЂСѓРµС‚ РІСЃРµ РґРµР№СЃС‚РІРёСЏ.
 .PARAMETER ConfigFile
-    [string] Путь к файлу конфигурации загрузчика (JSON).
-    По умолчанию: "$PSScriptRoot\config.json".
-# ... (остальные параметры для переопределения) ...
+    [string] РџСѓС‚СЊ Рє С„Р°Р№Р»Сѓ РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р·Р°РіСЂСѓР·С‡РёРєР° (JSON).
+    РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ: "$PSScriptRoot\config.json".
+# ... (РѕСЃС‚Р°Р»СЊРЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹ РґР»СЏ РїРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёСЏ) ...
 .EXAMPLE
-    # Запуск с конфигом по умолчанию
+    # Р—Р°РїСѓСЃРє СЃ РєРѕРЅС„РёРіРѕРј РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
     .\result_loader.ps1
 .NOTES
-    Версия: 3.18
-    Дата: 2025-05-02
-    Изменения v3.18:
-        - Исправлены ошибки ParameterBindingException путем замены оператора -f на строковую интерполяцию в Invoke-ApiRequestWithRetry.
-    # ... (предыдущая история изменений) ...
-    Зависимости: PowerShell 5.1+, Сетевой доступ к API, Права доступа к папке check_folder.
+    Р’РµСЂСЃРёСЏ: 3.18
+    Р”Р°С‚Р°: 2025-05-02
+    РР·РјРµРЅРµРЅРёСЏ v3.18:
+        - РСЃРїСЂР°РІР»РµРЅС‹ РѕС€РёР±РєРё ParameterBindingException РїСѓС‚РµРј Р·Р°РјРµРЅС‹ РѕРїРµСЂР°С‚РѕСЂР° -f РЅР° СЃС‚СЂРѕРєРѕРІСѓСЋ РёРЅС‚РµСЂРїРѕР»СЏС†РёСЋ РІ Invoke-ApiRequestWithRetry.
+    # ... (РїСЂРµРґС‹РґСѓС‰Р°СЏ РёСЃС‚РѕСЂРёСЏ РёР·РјРµРЅРµРЅРёР№) ...
+    Р—Р°РІРёСЃРёРјРѕСЃС‚Рё: PowerShell 5.1+, РЎРµС‚РµРІРѕР№ РґРѕСЃС‚СѓРї Рє API, РџСЂР°РІР° РґРѕСЃС‚СѓРїР° Рє РїР°РїРєРµ check_folder.
 #>
 param(
     [string]$ConfigFile = "$PSScriptRoot\config.json",
-    # --- Параметры для переопределения конфига ---
+    # --- РџР°СЂР°РјРµС‚СЂС‹ РґР»СЏ РїРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёСЏ РєРѕРЅС„РёРіР° ---
     [string]$apiBaseUrl = $null,
     [string]$apiKey = $null,
     [string]$checkFolder = $null,
@@ -57,8 +57,8 @@ param(
     [int]$RetryDelaySeconds = $null
 )
 
-# --- Глобальные переменные и константы ---
-$ScriptVersion = "3.18" # Обновляем версию
+# --- Р“Р»РѕР±Р°Р»СЊРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ Рё РєРѕРЅСЃС‚Р°РЅС‚С‹ ---
+$ScriptVersion = "3.18" # РћР±РЅРѕРІР»СЏРµРј РІРµСЂСЃРёСЋ
 $script:Config = $null
 $script:EffectiveLogLevel = "Info"
 $script:logFilePath = $null
@@ -67,36 +67,36 @@ $DefaultLogLevel = "Info"; $DefaultScanInterval = 30; $DefaultApiTimeout = 30; $
 $ValidLogLevels = @("Debug", "Verbose", "Info", "Warn", "Error");
 $script:EffectiveApiKey = $null
 
-# --- Функции ---
+# --- Р¤СѓРЅРєС†РёРё ---
 
-#region Функции
+#region Р¤СѓРЅРєС†РёРё
 
 <#
-.SYNOPSIS Пишет сообщение в лог и/или консоль.
+.SYNOPSIS РџРёС€РµС‚ СЃРѕРѕР±С‰РµРЅРёРµ РІ Р»РѕРі Рё/РёР»Рё РєРѕРЅСЃРѕР»СЊ.
 #>
 function Write-Log{
     param ( [Parameter(Mandatory=$true)][string]$Message, [ValidateSet("Debug", "Verbose", "Info", "Warn", "Error", IgnoreCase = $true)][string]$Level = "Info" )
-    # ... (код функции Write-Log без изменений) ...
+    # ... (РєРѕРґ С„СѓРЅРєС†РёРё Write-Log Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
     if (-not $script:logFilePath) { Write-Host "[$Level] $Message"; return }
     $logLevels=@{"Debug"=4;"Verbose"=3;"Info"=2;"Warn"=1;"Error"=0}; $currentLevelValue=$logLevels[$script:EffectiveLogLevel]; if($null -eq $currentLevelValue){ $currentLevelValue = $logLevels["Info"] }; $messageLevelValue=$logLevels[$Level]; if($null -eq $messageLevelValue){ $messageLevelValue = $logLevels["Info"] };
-    if ($messageLevelValue -le $currentLevelValue) { $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logMessage = "[$timestamp] [$Level] [$($script:ComputerName)] - $Message"; $consoleColor = switch($Level){"Error"{"Red"};"Warn"{"Yellow"};"Info"{"White"};"Verbose"{"Gray"};"Debug"{"DarkGray"};Default{"Gray"}}; Write-Host $logMessage -ForegroundColor $consoleColor; if ($script:logFilePath) { try { $logDir = Split-Path $script:logFilePath -Parent; if ($logDir -and (-not(Test-Path $logDir -PathType Container))) { Write-Host "[INFO] Создание папки логов: '$logDir'"; New-Item -Path $logDir -ItemType Directory -Force -EA Stop | Out-Null }; Add-Content -Path $script:logFilePath -Value $logMessage -Encoding UTF8 -Force -EA Stop } catch { Write-Host ("[Error] Не удалось записать в лог '{0}': {1}" -f $script:logFilePath, $_.Exception.Message) -ForegroundColor Red } } }
+    if ($messageLevelValue -le $currentLevelValue) { $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logMessage = "[$timestamp] [$Level] [$($script:ComputerName)] - $Message"; $consoleColor = switch($Level){"Error"{"Red"};"Warn"{"Yellow"};"Info"{"White"};"Verbose"{"Gray"};"Debug"{"DarkGray"};Default{"Gray"}}; Write-Host $logMessage -ForegroundColor $consoleColor; if ($script:logFilePath) { try { $logDir = Split-Path $script:logFilePath -Parent; if ($logDir -and (-not(Test-Path $logDir -PathType Container))) { Write-Host "[INFO] РЎРѕР·РґР°РЅРёРµ РїР°РїРєРё Р»РѕРіРѕРІ: '$logDir'"; New-Item -Path $logDir -ItemType Directory -Force -EA Stop | Out-Null }; Add-Content -Path $script:logFilePath -Value $logMessage -Encoding UTF8 -Force -EA Stop } catch { Write-Host ("[Error] РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїРёСЃР°С‚СЊ РІ Р»РѕРі '{0}': {1}" -f $script:logFilePath, $_.Exception.Message) -ForegroundColor Red } } }
 
 }
 
 <#
-.SYNOPSIS Возвращает значение по умолчанию, если исходное пустое.
+.SYNOPSIS Р’РѕР·РІСЂР°С‰Р°РµС‚ Р·РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ, РµСЃР»Рё РёСЃС…РѕРґРЅРѕРµ РїСѓСЃС‚РѕРµ.
 #>
 filter Get-OrElse_Internal{ param([object]$DefaultValue); if ($_) { $_ } else { $DefaultValue } }
 
 <#
-.SYNOPSIS Выполняет HTTP-запрос к API с логикой повторных попыток.
+.SYNOPSIS Р’С‹РїРѕР»РЅСЏРµС‚ HTTP-Р·Р°РїСЂРѕСЃ Рє API СЃ Р»РѕРіРёРєРѕР№ РїРѕРІС‚РѕСЂРЅС‹С… РїРѕРїС‹С‚РѕРє.
 #>
 function Invoke-ApiRequestWithRetry {
     param(
         [Parameter(Mandatory=$true)] [string]$Uri,
         [Parameter(Mandatory=$true)] [string]$Method,
         [Parameter(Mandatory=$false)]$Body = $null,
-        [Parameter(Mandatory=$true)] [hashtable]$Headers, # Включая X-API-Key
+        [Parameter(Mandatory=$true)] [hashtable]$Headers, # Р’РєР»СЋС‡Р°СЏ X-API-Key
         [Parameter(Mandatory=$true)] [string]$Description
     )
 
@@ -116,52 +116,52 @@ function Invoke-ApiRequestWithRetry {
 
     while ($retryCount -lt $currentMaxRetries -and $response -eq $null) {
         try {
-            Write-Log ("Выполнение запроса ({0}): {1} {2}" -f $Description, $Method, $Uri) -Level Verbose
+            Write-Log ("Р’С‹РїРѕР»РЅРµРЅРёРµ Р·Р°РїСЂРѕСЃР° ({0}): {1} {2}" -f $Description, $Method, $Uri) -Level Verbose
             if ($invokeParams.Body) {
-                 if ($invokeParams.Body -is [array] -and $invokeParams.Body[0] -is [byte]) { Write-Log "Тело (байты): $($invokeParams.Body.Count) bytes" -Level Debug }
-                 else { Write-Log "Тело: $($invokeParams.Body | Out-String -Width 500)..." -Level Debug }
+                 if ($invokeParams.Body -is [array] -and $invokeParams.Body[0] -is [byte]) { Write-Log "РўРµР»Рѕ (Р±Р°Р№С‚С‹): $($invokeParams.Body.Count) bytes" -Level Debug }
+                 else { Write-Log "РўРµР»Рѕ: $($invokeParams.Body | Out-String -Width 500)..." -Level Debug }
             }
 
             $response = Invoke-RestMethod @invokeParams
 
             if ($null -eq $response -and $? -and ($Error.Count -eq 0)) {
-                 Write-Log ("API вернул успешный ответ без тела (вероятно, 204 No Content) для ({0})." -f $Description) -Level Verbose
+                 Write-Log ("API РІРµСЂРЅСѓР» СѓСЃРїРµС€РЅС‹Р№ РѕС‚РІРµС‚ Р±РµР· С‚РµР»Р° (РІРµСЂРѕСЏС‚РЅРѕ, 204 No Content) РґР»СЏ ({0})." -f $Description) -Level Verbose
                  return $true
             }
-            Write-Log ("Успешный ответ API ({0})." -f $Description) -Level Verbose
+            Write-Log ("РЈСЃРїРµС€РЅС‹Р№ РѕС‚РІРµС‚ API ({0})." -f $Description) -Level Verbose
             return $response
 
         } catch {
             $retryCount++
             $statusCode = $null; if ($_.Exception.Response) { try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {} }; $errorMessage = $_.Exception.Message;
-            $errorResponseBody = "[Не удалось прочитать тело ошибки]"; if ($_.Exception.Response) { try { $errorStream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($errorStream); $errorResponseBody = $reader.ReadToEnd(); $reader.Close(); $errorStream.Dispose() } catch { } };
-            # <<<< ИСПРАВЛЕНО: Используем СТРОКОВУЮ ИНТЕРПОЛЯЦИЮ >>>>
-            Write-Log "Ошибка API ($Description) (Попытка $retryCount/$currentMaxRetries). Код: $($statusCode | Get-OrElse_Internal 'N/A'). Error: $($errorMessage.Replace('{','{{').Replace('}','}}')). Ответ: $($errorResponseBody.Replace('{','{{').Replace('}','}}'))" "Error"
+            $errorResponseBody = "[РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ С‚РµР»Рѕ РѕС€РёР±РєРё]"; if ($_.Exception.Response) { try { $errorStream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($errorStream); $errorResponseBody = $reader.ReadToEnd(); $reader.Close(); $errorStream.Dispose() } catch { } };
+            # <<<< РРЎРџР РђР’Р›Р•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РЎРўР РћРљРћР’РЈР® РРќРўР•Р РџРћР›РЇР¦РР® >>>>
+            Write-Log "РћС€РёР±РєР° API ($Description) (РџРѕРїС‹С‚РєР° $retryCount/$currentMaxRetries). РљРѕРґ: $($statusCode | Get-OrElse_Internal 'N/A'). Error: $($errorMessage.Replace('{','{{').Replace('}','}}')). РћС‚РІРµС‚: $($errorResponseBody.Replace('{','{{').Replace('}','}}'))" "Error"
 
-            if ($statusCode -eq 401 -or $statusCode -eq 403) { Write-Log ("Критическая ошибка аутентификации/авторизации ({0}). Проверьте API ключ и его роль ('loader'). Завершение работы." -f $Description) -Level Error; exit 1 };
+            if ($statusCode -eq 401 -or $statusCode -eq 403) { Write-Log ("РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё/Р°РІС‚РѕСЂРёР·Р°С†РёРё ({0}). РџСЂРѕРІРµСЂСЊС‚Рµ API РєР»СЋС‡ Рё РµРіРѕ СЂРѕР»СЊ ('loader'). Р—Р°РІРµСЂС€РµРЅРёРµ СЂР°Р±РѕС‚С‹." -f $Description) -Level Error; exit 1 };
             if ($retryCount -ge $currentMaxRetries) {
-                 # <<<< ИСПРАВЛЕНО: Используем СТРОКОВУЮ ИНТЕРПОЛЯЦИЮ >>>>
-                 Write-Log "Превышено кол-во попыток ($currentMaxRetries) для ($Description)." -Level Error;
+                 # <<<< РРЎРџР РђР’Р›Р•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РЎРўР РћРљРћР’РЈР® РРќРўР•Р РџРћР›РЇР¦РР® >>>>
+                 Write-Log "РџСЂРµРІС‹С€РµРЅРѕ РєРѕР»-РІРѕ РїРѕРїС‹С‚РѕРє ($currentMaxRetries) РґР»СЏ ($Description)." -Level Error;
                  return $null
             };
-            Write-Log ("Пауза $currentRetryDelay сек перед повторной попыткой...") "Warn"; Start-Sleep -Seconds $currentRetryDelay
+            Write-Log ("РџР°СѓР·Р° $currentRetryDelay СЃРµРє РїРµСЂРµРґ РїРѕРІС‚РѕСЂРЅРѕР№ РїРѕРїС‹С‚РєРѕР№...") "Warn"; Start-Sleep -Seconds $currentRetryDelay
         }
-    } # Конец while
+    } # РљРѕРЅРµС† while
     return $null
 }
 
-#endregion Функции
+#endregion Р¤СѓРЅРєС†РёРё
 
-# --- Основная логика ---
+# --- РћСЃРЅРѕРІРЅР°СЏ Р»РѕРіРёРєР° ---
 
-# 1. Чтение и валидация конфигурации
-Write-Host "Запуск загрузчика результатов PowerShell v$ScriptVersion"
-Write-Log "Чтение конфигурации..." "Info"
-# ... (код чтения конфига без изменений) ...
+# 1. Р§С‚РµРЅРёРµ Рё РІР°Р»РёРґР°С†РёСЏ РєРѕРЅС„РёРіСѓСЂР°С†РёРё
+Write-Host "Р—Р°РїСѓСЃРє Р·Р°РіСЂСѓР·С‡РёРєР° СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ PowerShell v$ScriptVersion"
+Write-Log "Р§С‚РµРЅРёРµ РєРѕРЅС„РёРіСѓСЂР°С†РёРё..." "Info"
+# ... (РєРѕРґ С‡С‚РµРЅРёСЏ РєРѕРЅС„РёРіР° Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 if (Test-Path $ConfigFile -PathType Leaf) {
     try { $script:Config = Get-Content $ConfigFile -Raw -Enc UTF8 | ConvertFrom-Json -EA Stop }
-    catch { Write-Log ("Ошибка чтения/парсинга JSON из '{0}': {1}. Используются параметры по умолчанию/командной строки." -f $ConfigFile, $_.Exception.Message) "Error" }
-} else { Write-Log ("Файл конфигурации '{0}' не найден. Используются параметры по умолчанию/командной строки." -f $ConfigFile) "Warn" }
+    catch { Write-Log ("РћС€РёР±РєР° С‡С‚РµРЅРёСЏ/РїР°СЂСЃРёРЅРіР° JSON РёР· '{0}': {1}. РСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ РїР°СЂР°РјРµС‚СЂС‹ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ/РєРѕРјР°РЅРґРЅРѕР№ СЃС‚СЂРѕРєРё." -f $ConfigFile, $_.Exception.Message) "Error" }
+} else { Write-Log ("Р¤Р°Р№Р» РєРѕРЅС„РёРіСѓСЂР°С†РёРё '{0}' РЅРµ РЅР°Р№РґРµРЅ. РСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ РїР°СЂР°РјРµС‚СЂС‹ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ/РєРѕРјР°РЅРґРЅРѕР№ СЃС‚СЂРѕРєРё." -f $ConfigFile) "Warn" }
 $EffectiveApiBaseUrl = $apiBaseUrl | Get-OrElse_Internal $script:Config.api_base_url
 $script:EffectiveApiKey = $apiKey | Get-OrElse_Internal $script:Config.api_key
 $EffectiveCheckFolder = $checkFolder | Get-OrElse_Internal $script:Config.check_folder
@@ -173,110 +173,110 @@ $EffectiveMaxApiRetries = $MaxApiRetries | Get-OrElse_Internal ($script:Config.m
 $EffectiveRetryDelaySeconds = $RetryDelaySeconds | Get-OrElse_Internal ($script:Config.retry_delay_sec | Get-OrElse_Internal $DefaultRetryDelay)
 $script:logFilePath = $EffectiveLogFile
 $script:EffectiveLogLevel = $EffectiveLogLevel
-if (-not $ValidLogLevels.Contains($script:EffectiveLogLevel)) { Write-Log ("Некорректный LogLevel '{0}'. Используется '{1}'." -f $script:EffectiveLogLevel, $DefaultLogLevel) "Warn"; $script:EffectiveLogLevel = $DefaultLogLevel }
-if (-not $EffectiveApiBaseUrl) { Write-Log "Критическая ошибка: Не задан 'api_base_url'." "Error"; exit 1 }; if (-not $script:EffectiveApiKey) { Write-Log "Критическая ошибка: Не задан 'api_key'." "Error"; exit 1 }; if (-not $EffectiveCheckFolder) { Write-Log "Критическая ошибка: Не задан 'check_folder'." "Error"; exit 1 }
-if ($EffectiveScanIntervalSeconds -lt 5) { Write-Log "ScanIntervalSeconds < 5. Установлено 5 сек." "Warn"; $EffectiveScanIntervalSeconds = 5 }
+if (-not $ValidLogLevels.Contains($script:EffectiveLogLevel)) { Write-Log ("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ LogLevel '{0}'. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ '{1}'." -f $script:EffectiveLogLevel, $DefaultLogLevel) "Warn"; $script:EffectiveLogLevel = $DefaultLogLevel }
+if (-not $EffectiveApiBaseUrl) { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ Р·Р°РґР°РЅ 'api_base_url'." "Error"; exit 1 }; if (-not $script:EffectiveApiKey) { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ Р·Р°РґР°РЅ 'api_key'." "Error"; exit 1 }; if (-not $EffectiveCheckFolder) { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ Р·Р°РґР°РЅ 'check_folder'." "Error"; exit 1 }
+if ($EffectiveScanIntervalSeconds -lt 5) { Write-Log "ScanIntervalSeconds < 5. РЈСЃС‚Р°РЅРѕРІР»РµРЅРѕ 5 СЃРµРє." "Warn"; $EffectiveScanIntervalSeconds = 5 }
 if ($EffectiveApiTimeoutSeconds -le 0) { $EffectiveApiTimeoutSeconds = $DefaultApiTimeout }; if ($EffectiveMaxApiRetries -lt 0) { $EffectiveMaxApiRetries = $DefaultMaxRetries }; if ($EffectiveRetryDelaySeconds -lt 0) { $EffectiveRetryDelaySeconds = $DefaultRetryDelay }
 $script:EffectiveScanIntervalSeconds = $EffectiveScanIntervalSeconds; $script:EffectiveApiTimeoutSeconds = $EffectiveApiTimeoutSeconds; $script:EffectiveMaxApiRetries = $EffectiveMaxApiRetries; $script:EffectiveRetryDelaySeconds = $EffectiveRetryDelaySeconds
 
 
-# 2. Подготовка окружения
-Write-Log "Инициализация загрузчика." "Info"
-Write-Log ("Параметры: API='{0}', Папка='{1}', Интервал={2} сек, Лог='{3}', Уровень='{4}'" -f $EffectiveApiBaseUrl, $EffectiveCheckFolder, $script:EffectiveScanIntervalSeconds, $script:logFilePath, $script:EffectiveLogLevel) "Info"
-$apiKeyPart = "[не задан]"; if($script:EffectiveApiKey){ $l=$script:EffectiveApiKey.Length; $p=$script:EffectiveApiKey.Substring(0,[math]::Min(4,$l)); $s=if($l -gt 8){$script:EffectiveApiKey.Substring($l-4,4)}else{""}; $apiKeyPart="$p....$s" }; Write-Log "API ключ (частично): $apiKeyPart" "Debug"
-if (-not (Test-Path $EffectiveCheckFolder -PathType Container)) { Write-Log "Критическая ошибка: Папка для сканирования '$($EffectiveCheckFolder)' не существует." "Error"; exit 1 };
-$processedFolder = Join-Path $EffectiveCheckFolder "Processed"; $errorFolder = Join-Path $EffectiveCheckFolder "Error"; foreach ($folder in @($processedFolder, $errorFolder)) { if (-not (Test-Path $folder -PathType Container)) { Write-Log "Создание папки: $folder" "Info"; try { New-Item -Path $folder -ItemType Directory -Force -EA Stop | Out-Null } catch { Write-Log ("Критическая ошибка: Не удалось создать папку '{0}'. Ошибка: {1}" -f $folder, $_.Exception.Message) "Error"; exit 1 } } }
+# 2. РџРѕРґРіРѕС‚РѕРІРєР° РѕРєСЂСѓР¶РµРЅРёСЏ
+Write-Log "РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Р·Р°РіСЂСѓР·С‡РёРєР°." "Info"
+Write-Log ("РџР°СЂР°РјРµС‚СЂС‹: API='{0}', РџР°РїРєР°='{1}', РРЅС‚РµСЂРІР°Р»={2} СЃРµРє, Р›РѕРі='{3}', РЈСЂРѕРІРµРЅСЊ='{4}'" -f $EffectiveApiBaseUrl, $EffectiveCheckFolder, $script:EffectiveScanIntervalSeconds, $script:logFilePath, $script:EffectiveLogLevel) "Info"
+$apiKeyPart = "[РЅРµ Р·Р°РґР°РЅ]"; if($script:EffectiveApiKey){ $l=$script:EffectiveApiKey.Length; $p=$script:EffectiveApiKey.Substring(0,[math]::Min(4,$l)); $s=if($l -gt 8){$script:EffectiveApiKey.Substring($l-4,4)}else{""}; $apiKeyPart="$p....$s" }; Write-Log "API РєР»СЋС‡ (С‡Р°СЃС‚РёС‡РЅРѕ): $apiKeyPart" "Debug"
+if (-not (Test-Path $EffectiveCheckFolder -PathType Container)) { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РџР°РїРєР° РґР»СЏ СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ '$($EffectiveCheckFolder)' РЅРµ СЃСѓС‰РµСЃС‚РІСѓРµС‚." "Error"; exit 1 };
+$processedFolder = Join-Path $EffectiveCheckFolder "Processed"; $errorFolder = Join-Path $EffectiveCheckFolder "Error"; foreach ($folder in @($processedFolder, $errorFolder)) { if (-not (Test-Path $folder -PathType Container)) { Write-Log "РЎРѕР·РґР°РЅРёРµ РїР°РїРєРё: $folder" "Info"; try { New-Item -Path $folder -ItemType Directory -Force -EA Stop | Out-Null } catch { Write-Log ("РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ РїР°РїРєСѓ '{0}'. РћС€РёР±РєР°: {1}" -f $folder, $_.Exception.Message) "Error"; exit 1 } } }
 
 
-# --- 3. Основной цикл сканирования и обработки ---
-Write-Log "Начало цикла сканирования папки '$($EffectiveCheckFolder)'..." "Info"
+# --- 3. РћСЃРЅРѕРІРЅРѕР№ С†РёРєР» СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ Рё РѕР±СЂР°Р±РѕС‚РєРё ---
+Write-Log "РќР°С‡Р°Р»Рѕ С†РёРєР»Р° СЃРєР°РЅРёСЂРѕРІР°РЅРёСЏ РїР°РїРєРё '$($EffectiveCheckFolder)'..." "Info"
 while ($true) {
-    Write-Log "Сканирование папки..." "Verbose"
+    Write-Log "РЎРєР°РЅРёСЂРѕРІР°РЅРёРµ РїР°РїРєРё..." "Verbose"
     $filesToProcess = @()
     try {
         $resultsFileFilter = "*_OfflineChecks.json.status*.zrpu"
         $filesToProcess = Get-ChildItem -Path $EffectiveCheckFolder -Filter $resultsFileFilter -File -ErrorAction Stop
     } catch {
-        # <<<< ИСПРАВЛЕНО: Используем интерполяцию >>>>
-        Write-Log "Критическая ошибка доступа к папке '$EffectiveCheckFolder': $($_.Exception.Message). Пропуск итерации." "Error";
+        # <<<< РРЎРџР РђР’Р›Р•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РёРЅС‚РµСЂРїРѕР»СЏС†РёСЋ >>>>
+        Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° РґРѕСЃС‚СѓРїР° Рє РїР°РїРєРµ '$EffectiveCheckFolder': $($_.Exception.Message). РџСЂРѕРїСѓСЃРє РёС‚РµСЂР°С†РёРё." "Error";
         Start-Sleep -Seconds $script:EffectiveScanIntervalSeconds; continue
     }
 
-    if ($filesToProcess.Count -eq 0) { Write-Log "Нет файлов *.zrpu для обработки." "Verbose" }
+    if ($filesToProcess.Count -eq 0) { Write-Log "РќРµС‚ С„Р°Р№Р»РѕРІ *.zrpu РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё." "Verbose" }
     else {
-        Write-Log "Найдено файлов для обработки: $($filesToProcess.Count)." "Info"
-        # --- Обработка каждого файла ---
+        Write-Log "РќР°Р№РґРµРЅРѕ С„Р°Р№Р»РѕРІ РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё: $($filesToProcess.Count)." "Info"
+        # --- РћР±СЂР°Р±РѕС‚РєР° РєР°Р¶РґРѕРіРѕ С„Р°Р№Р»Р° ---
         foreach ($file in $filesToProcess) {
-            $fileStartTime = Get-Date; Write-Log "--- Начало обработки файла: '$($file.FullName)' ---" "Info"
+            $fileStartTime = Get-Date; Write-Log "--- РќР°С‡Р°Р»Рѕ РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р№Р»Р°: '$($file.FullName)' ---" "Info"
             $fileProcessingStatus = "unknown"; $fileProcessingMessage = ""; $fileEventDetails = @{}; $apiResponse = $null;
 
             try {
-                # --- Чтение и парсинг файла ---
-                Write-Log "Чтение файла '$($file.Name)'..." "Debug"
+                # --- Р§С‚РµРЅРёРµ Рё РїР°СЂСЃРёРЅРі С„Р°Р№Р»Р° ---
+                Write-Log "Р§С‚РµРЅРёРµ С„Р°Р№Р»Р° '$($file.Name)'..." "Debug"
                 $fileContent = Get-Content -Path $file.FullName -Raw -Encoding UTF8 -ErrorAction Stop
                 $fileContentClean = $fileContent.TrimStart([char]0xFEFF)
                 $payloadFromFile = $fileContentClean | ConvertFrom-Json -ErrorAction Stop
-                Write-Log "Файл '$($file.Name)' успешно прочитан и распарсен." "Debug"
+                Write-Log "Р¤Р°Р№Р» '$($file.Name)' СѓСЃРїРµС€РЅРѕ РїСЂРѕС‡РёС‚Р°РЅ Рё СЂР°СЃРїР°СЂСЃРµРЅ." "Debug"
 
-                # --- Валидация структуры файла ---
+                # --- Р’Р°Р»РёРґР°С†РёСЏ СЃС‚СЂСѓРєС‚СѓСЂС‹ С„Р°Р№Р»Р° ---
                 if ($null -eq $payloadFromFile -or -not $payloadFromFile.PSObject.Properties.Name.Contains('results') -or $payloadFromFile.results -isnot [array] -or -not $payloadFromFile.PSObject.Properties.Name.Contains('agent_script_version') -or -not $payloadFromFile.PSObject.Properties.Name.Contains('assignment_config_version')) {
-                     # <<<< ИСПРАВЛЕНО: Используем интерполяцию в throw >>>>
-                    throw "Некорректная структура JSON файла '$($file.Name)'. Отсутствуют обязательные поля."
+                     # <<<< РРЎРџР РђР’Р›Р•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РёРЅС‚РµСЂРїРѕР»СЏС†РёСЋ РІ throw >>>>
+                    throw "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° JSON С„Р°Р№Р»Р° '$($file.Name)'. РћС‚СЃСѓС‚СЃС‚РІСѓСЋС‚ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїРѕР»СЏ."
                 }
                 $resultsArray = $payloadFromFile.results
-                $fileAgentVersion = $payloadFromFile.agent_script_version | Get-OrElse_Internal "[не указана]"
-                $fileAssignmentVersion = $payloadFromFile.assignment_config_version | Get-OrElse_Internal "[не указана]"
+                $fileAgentVersion = $payloadFromFile.agent_script_version | Get-OrElse_Internal "[РЅРµ СѓРєР°Р·Р°РЅР°]"
+                $fileAssignmentVersion = $payloadFromFile.assignment_config_version | Get-OrElse_Internal "[РЅРµ СѓРєР°Р·Р°РЅР°]"
                 $totalRecordsInFile = $resultsArray.Count
-                # <<<< ИСПРАВЛЕНО: Форматируем строку ДО вызова Write-Log >>>>
-                $logMsgFileRead = "Файл '{0}' содержит записей: {1}. AgentVer: '{2}', ConfigVer: '{3}'" -f $file.Name, $totalRecordsInFile, $fileAgentVersion, $fileAssignmentVersion
+                # <<<< РРЎРџР РђР’Р›Р•РќРћ: Р¤РѕСЂРјР°С‚РёСЂСѓРµРј СЃС‚СЂРѕРєСѓ Р”Рћ РІС‹Р·РѕРІР° Write-Log >>>>
+                $logMsgFileRead = "Р¤Р°Р№Р» '{0}' СЃРѕРґРµСЂР¶РёС‚ Р·Р°РїРёСЃРµР№: {1}. AgentVer: '{2}', ConfigVer: '{3}'" -f $file.Name, $totalRecordsInFile, $fileAgentVersion, $fileAssignmentVersion
                 Write-Log $logMsgFileRead "Info"
 
                 if ($totalRecordsInFile -eq 0) {
-                    # <<<< ИСПРАВЛЕНО: Форматируем строку ДО вызова Write-Log >>>>
-                    Write-Log ("Файл '{0}' не содержит записей в массиве 'results'. Файл будет перемещен в Processed." -f $file.Name) "Warn"
+                    # <<<< РРЎРџР РђР’Р›Р•РќРћ: Р¤РѕСЂРјР°С‚РёСЂСѓРµРј СЃС‚СЂРѕРєСѓ Р”Рћ РІС‹Р·РѕРІР° Write-Log >>>>
+                    Write-Log ("Р¤Р°Р№Р» '{0}' РЅРµ СЃРѕРґРµСЂР¶РёС‚ Р·Р°РїРёСЃРµР№ РІ РјР°СЃСЃРёРІРµ 'results'. Р¤Р°Р№Р» Р±СѓРґРµС‚ РїРµСЂРµРјРµС‰РµРЅ РІ Processed." -f $file.Name) "Warn"
                     $fileProcessingStatus = "success_empty"
-                    $fileProcessingMessage = "Обработка файла завершена (пустой массив results)."
+                    $fileProcessingMessage = "РћР±СЂР°Р±РѕС‚РєР° С„Р°Р№Р»Р° Р·Р°РІРµСЂС€РµРЅР° (РїСѓСЃС‚РѕР№ РјР°СЃСЃРёРІ results)."
                     $fileEventDetails = @{ total_records_in_file = 0; agent_version_in_file = $fileAgentVersion; assignment_version_in_file = $fileAssignmentVersion }
                 } else {
-                    # --- Отправка Bulk запроса ---
+                    # --- РћС‚РїСЂР°РІРєР° Bulk Р·Р°РїСЂРѕСЃР° ---
                     $apiUrlBulk = "$EffectiveApiBaseUrl/v1/checks/bulk"
                     $jsonBodyToSend = $null
                     try {
                          $jsonBodyToSend = $payloadFromFile | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue
                     } catch {
-                        # <<<< ИСПРАВЛЕНО: Используем интерполяцию в throw >>>>
-                        throw "Ошибка сериализации данных файла '$($file.Name)' в JSON: $($_.Exception.Message)"
+                        # <<<< РРЎРџР РђР’Р›Р•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РёРЅС‚РµСЂРїРѕР»СЏС†РёСЋ РІ throw >>>>
+                        throw "РћС€РёР±РєР° СЃРµСЂРёР°Р»РёР·Р°С†РёРё РґР°РЅРЅС‹С… С„Р°Р№Р»Р° '$($file.Name)' РІ JSON: $($_.Exception.Message)"
                     }
                     $headersForBulk = @{ 'Content-Type' = 'application/json; charset=utf-8'; 'X-API-Key' = $script:EffectiveApiKey }
-                    $bulkApiParams = @{ Uri = $apiUrlBulk; Method = 'Post'; Body = [System.Text.Encoding]::UTF8.GetBytes($jsonBodyToSend); Headers = $headersForBulk; Description = "Отправка Bulk из файла '$($file.Name)' ($totalRecordsInFile записей)" }
-                    Write-Log ("Отправка Bulk запроса для файла '$($file.Name)' ({0} записей)..." -f $totalRecordsInFile) -Level Info
+                    $bulkApiParams = @{ Uri = $apiUrlBulk; Method = 'Post'; Body = [System.Text.Encoding]::UTF8.GetBytes($jsonBodyToSend); Headers = $headersForBulk; Description = "РћС‚РїСЂР°РІРєР° Bulk РёР· С„Р°Р№Р»Р° '$($file.Name)' ($totalRecordsInFile Р·Р°РїРёСЃРµР№)" }
+                    Write-Log ("РћС‚РїСЂР°РІРєР° Bulk Р·Р°РїСЂРѕСЃР° РґР»СЏ С„Р°Р№Р»Р° '$($file.Name)' ({0} Р·Р°РїРёСЃРµР№)..." -f $totalRecordsInFile) -Level Info
                     $apiResponse = Invoke-ApiRequestWithRetry @bulkApiParams
 
-                    # Обработка ответа Bulk API
+                    # РћР±СЂР°Р±РѕС‚РєР° РѕС‚РІРµС‚Р° Bulk API
                     if ($apiResponse -eq $null) {
                         $fileProcessingStatus = "error_api"
-                        $fileProcessingMessage = "Ошибка отправки Bulk запроса в API после всех попыток."
+                        $fileProcessingMessage = "РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё Bulk Р·Р°РїСЂРѕСЃР° РІ API РїРѕСЃР»Рµ РІСЃРµС… РїРѕРїС‹С‚РѕРє."
                         $fileEventDetails.error = "API request failed after retries."; $fileEventDetails.api_response_status = $null
                     } else {
                         $processed = $apiResponse.processed | Get-OrElse_Internal 0; $failed = $apiResponse.failed | Get-OrElse_Internal 0; $apiStatus = $apiResponse.status | Get-OrElse_Internal "unknown"
-                        if ($apiStatus -eq "success") { $fileProcessingStatus = "success"; $fileProcessingMessage = "Пакетная обработка файла успешно завершена API. Обработано: $processed." }
-                        elseif ($apiStatus -eq "partial_error") { $fileProcessingStatus = "partial_error"; $fileProcessingMessage = "Пакетная обработка файла завершена API с ошибками. Успешно: $processed, Ошибки: $failed."; $fileEventDetails.api_errors = $apiResponse.errors }
-                        else { $fileProcessingStatus = "error_api_response"; $fileProcessingMessage = "API вернул статус '$apiStatus' при пакетной обработке. Успешно: $processed, Ошибки: $failed."; $fileEventDetails.error = "API processing error status: $apiStatus"; $fileEventDetails.api_errors = $apiResponse.errors }
+                        if ($apiStatus -eq "success") { $fileProcessingStatus = "success"; $fileProcessingMessage = "РџР°РєРµС‚РЅР°СЏ РѕР±СЂР°Р±РѕС‚РєР° С„Р°Р№Р»Р° СѓСЃРїРµС€РЅРѕ Р·Р°РІРµСЂС€РµРЅР° API. РћР±СЂР°Р±РѕС‚Р°РЅРѕ: $processed." }
+                        elseif ($apiStatus -eq "partial_error") { $fileProcessingStatus = "partial_error"; $fileProcessingMessage = "РџР°РєРµС‚РЅР°СЏ РѕР±СЂР°Р±РѕС‚РєР° С„Р°Р№Р»Р° Р·Р°РІРµСЂС€РµРЅР° API СЃ РѕС€РёР±РєР°РјРё. РЈСЃРїРµС€РЅРѕ: $processed, РћС€РёР±РєРё: $failed."; $fileEventDetails.api_errors = $apiResponse.errors }
+                        else { $fileProcessingStatus = "error_api_response"; $fileProcessingMessage = "API РІРµСЂРЅСѓР» СЃС‚Р°С‚СѓСЃ '$apiStatus' РїСЂРё РїР°РєРµС‚РЅРѕР№ РѕР±СЂР°Р±РѕС‚РєРµ. РЈСЃРїРµС€РЅРѕ: $processed, РћС€РёР±РєРё: $failed."; $fileEventDetails.error = "API processing error status: $apiStatus"; $fileEventDetails.api_errors = $apiResponse.errors }
                         $fileEventDetails.api_response_status = $apiStatus; $fileEventDetails.api_processed_count = $processed; $fileEventDetails.api_failed_count = $failed
                         $fileEventDetails.total_records_in_file = $totalRecordsInFile; $fileEventDetails.agent_version_in_file = $fileAgentVersion; $fileEventDetails.assignment_version_in_file = $fileAssignmentVersion
                     }
-                    # --- Конец Bulk запроса ---
-                } # Конец else ($totalRecordsInFile -eq 0)
+                    # --- РљРѕРЅРµС† Bulk Р·Р°РїСЂРѕСЃР° ---
+                } # РљРѕРЅРµС† else ($totalRecordsInFile -eq 0)
 
-            } catch { # Обработка ошибок чтения/парсинга файла
-                $errorMessage = "Критическая ошибка обработки файла '$($file.FullName)': $($_.Exception.Message)"
+            } catch { # РћР±СЂР°Р±РѕС‚РєР° РѕС€РёР±РѕРє С‡С‚РµРЅРёСЏ/РїР°СЂСЃРёРЅРіР° С„Р°Р№Р»Р°
+                $errorMessage = "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р№Р»Р° '$($file.FullName)': $($_.Exception.Message)"
                 Write-Log $errorMessage "Error"
                 $fileProcessingStatus = "error_local"
-                $fileProcessingMessage = "Ошибка чтения или парсинга JSON файла."
+                $fileProcessingMessage = "РћС€РёР±РєР° С‡С‚РµРЅРёСЏ РёР»Рё РїР°СЂСЃРёРЅРіР° JSON С„Р°Р№Р»Р°."
                 $fileEventDetails = @{ error = $errorMessage; ErrorRecord = $_.ToString() }
             }
 
-            # --- Отправка события FILE_PROCESSED ---
+            # --- РћС‚РїСЂР°РІРєР° СЃРѕР±С‹С‚РёСЏ FILE_PROCESSED ---
             $fileEndTime = Get-Date; $processingTimeMs = ($fileEndTime - $fileStartTime).TotalMilliseconds;
             $fileLogSeverity = "INFO"; if ($fileProcessingStatus -like "error*") { $fileLogSeverity = "ERROR" } elseif ($fileProcessingStatus -eq "partial_error") { $fileLogSeverity = "WARN" }
             $fileEventDetails.processing_time_ms = [math]::Round($processingTimeMs)
@@ -286,43 +286,43 @@ while ($true) {
             $fileEventJsonBody = $fileEventBody | ConvertTo-Json -Compress -Depth 5 -WarningAction SilentlyContinue;
             $apiUrlEvents = "$EffectiveApiBaseUrl/v1/events";
             $headersForEvent = @{ 'Content-Type' = 'application/json; charset=utf-8'; 'X-API-Key' = $script:EffectiveApiKey }
-            $eventApiParams = @{ Uri = $apiUrlEvents; Method = 'Post'; Body = [System.Text.Encoding]::UTF8.GetBytes($fileEventJsonBody); Headers = $headersForEvent; Description = "Отправка события FILE_PROCESSED для '$($file.Name)'" }
+            $eventApiParams = @{ Uri = $apiUrlEvents; Method = 'Post'; Body = [System.Text.Encoding]::UTF8.GetBytes($fileEventJsonBody); Headers = $headersForEvent; Description = "РћС‚РїСЂР°РІРєР° СЃРѕР±С‹С‚РёСЏ FILE_PROCESSED РґР»СЏ '$($file.Name)'" }
 
-            Write-Log ("Отправка события FILE_PROCESSED для '$($file.Name)' (Статус: $fileProcessingStatus)...") "Info"
+            Write-Log ("РћС‚РїСЂР°РІРєР° СЃРѕР±С‹С‚РёСЏ FILE_PROCESSED РґР»СЏ '$($file.Name)' (РЎС‚Р°С‚СѓСЃ: $fileProcessingStatus)...") "Info"
             $eventResponse = Invoke-ApiRequestWithRetry @eventApiParams
 
             if ($eventResponse -eq $null) {
-                 Write-Log ("Не удалось отправить событие FILE_PROCESSED для '$($file.Name)'. Помечаем статус как 'error_event'.") "Error";
+                 Write-Log ("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СЃРѕР±С‹С‚РёРµ FILE_PROCESSED РґР»СЏ '$($file.Name)'. РџРѕРјРµС‡Р°РµРј СЃС‚Р°С‚СѓСЃ РєР°Рє 'error_event'.") "Error";
                  $fileProcessingStatus = "error_event"
             } else {
                 $eventId = if ($eventResponse -is [PSCustomObject] -and $eventResponse.PSObject.Properties.Name.Contains('event_id')) { $eventResponse.event_id } else { '(id ?)' };
-                Write-Log ("Событие FILE_PROCESSED для '$($file.Name)' отправлено. Event ID: $eventId") "Info"
+                Write-Log ("РЎРѕР±С‹С‚РёРµ FILE_PROCESSED РґР»СЏ '$($file.Name)' РѕС‚РїСЂР°РІР»РµРЅРѕ. Event ID: $eventId") "Info"
             }
 
-            # --- Перемещение файла ---
+            # --- РџРµСЂРµРјРµС‰РµРЅРёРµ С„Р°Р№Р»Р° ---
             $destinationFolder = if ($fileProcessingStatus -like "success*") { $processedFolder } else { $errorFolder };
             $destinationPath = Join-Path $destinationFolder $file.Name;
-            # <<<< ИСПРАВЛЕНО: Форматируем строку ДО вызова Write-Log >>>>
-            $moveLogMsg = "Перемещение '{0}' в '{1}' (Итоговый статус: {2})." -f $file.Name, $destinationFolder, $fileProcessingStatus
+            # <<<< РРЎРџР РђР’Р›Р•РќРћ: Р¤РѕСЂРјР°С‚РёСЂСѓРµРј СЃС‚СЂРѕРєСѓ Р”Рћ РІС‹Р·РѕРІР° Write-Log >>>>
+            $moveLogMsg = "РџРµСЂРµРјРµС‰РµРЅРёРµ '{0}' РІ '{1}' (РС‚РѕРіРѕРІС‹Р№ СЃС‚Р°С‚СѓСЃ: {2})." -f $file.Name, $destinationFolder, $fileProcessingStatus
             Write-Log $moveLogMsg "Info";
             try {
                 Move-Item -Path $file.FullName -Destination $destinationPath -Force -ErrorAction Stop;
-                Write-Log ("Файл '$($file.Name)' успешно перемещен.") "Info"
+                Write-Log ("Р¤Р°Р№Р» '$($file.Name)' СѓСЃРїРµС€РЅРѕ РїРµСЂРµРјРµС‰РµРЅ.") "Info"
             } catch {
-                 # <<<< ИСПРАВЛЕНО: Форматируем строку ДО вызова Write-Log >>>>
-                 Write-Log ("КРИТИЧЕСКАЯ ОШИБКА перемещения файла '{0}' в '{1}'. Файл может быть обработан повторно! Ошибка: {2}" -f $file.Name, $destinationPath, $_.Exception.Message) "Error";
+                 # <<<< РРЎРџР РђР’Р›Р•РќРћ: Р¤РѕСЂРјР°С‚РёСЂСѓРµРј СЃС‚СЂРѕРєСѓ Р”Рћ РІС‹Р·РѕРІР° Write-Log >>>>
+                 Write-Log ("РљР РРўРР§Р•РЎРљРђРЇ РћРЁРР‘РљРђ РїРµСЂРµРјРµС‰РµРЅРёСЏ С„Р°Р№Р»Р° '{0}' РІ '{1}'. Р¤Р°Р№Р» РјРѕР¶РµС‚ Р±С‹С‚СЊ РѕР±СЂР°Р±РѕС‚Р°РЅ РїРѕРІС‚РѕСЂРЅРѕ! РћС€РёР±РєР°: {2}" -f $file.Name, $destinationPath, $_.Exception.Message) "Error";
             }
 
-            Write-Log "--- Завершение обработки файла: '$($file.FullName)' ---" "Info"
+            Write-Log "--- Р—Р°РІРµСЂС€РµРЅРёРµ РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р№Р»Р°: '$($file.FullName)' ---" "Info"
 
-        } # Конец foreach ($file in $filesToProcess)
-    } # Конец else ($filesToProcess.Count -eq 0)
+        } # РљРѕРЅРµС† foreach ($file in $filesToProcess)
+    } # РљРѕРЅРµС† else ($filesToProcess.Count -eq 0)
 
-    # --- Пауза перед следующим сканированием ---
-    Write-Log "Пауза $script:EffectiveScanIntervalSeconds сек перед следующим сканированием..." "Verbose"
+    # --- РџР°СѓР·Р° РїРµСЂРµРґ СЃР»РµРґСѓСЋС‰РёРј СЃРєР°РЅРёСЂРѕРІР°РЅРёРµРј ---
+    Write-Log "РџР°СѓР·Р° $script:EffectiveScanIntervalSeconds СЃРµРє РїРµСЂРµРґ СЃР»РµРґСѓСЋС‰РёРј СЃРєР°РЅРёСЂРѕРІР°РЅРёРµРј..." "Verbose"
     Start-Sleep -Seconds $script:EffectiveScanIntervalSeconds
 
-} # --- Конец while ($true) ---
+} # --- РљРѕРЅРµС† while ($true) ---
 
-Write-Log "Загрузчик результатов завершил работу непредвиденно (выход из цикла while)." "Error"
+Write-Log "Р—Р°РіСЂСѓР·С‡РёРє СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ Р·Р°РІРµСЂС€РёР» СЂР°Р±РѕС‚Сѓ РЅРµРїСЂРµРґРІРёРґРµРЅРЅРѕ (РІС‹С…РѕРґ РёР· С†РёРєР»Р° while)." "Error"
 exit 1

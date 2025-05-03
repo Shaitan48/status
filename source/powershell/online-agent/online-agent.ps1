@@ -1,120 +1,120 @@
-# powershell\online-agent\online-agent.ps1
-# Версия с поддержкой нового диспетчера, формата результата,
-# улучшенным форматированием, комментариями и исправленными ошибками.
+п»ї# powershell\online-agent\online-agent.ps1
+# Р’РµСЂСЃРёСЏ СЃ РїРѕРґРґРµСЂР¶РєРѕР№ РЅРѕРІРѕРіРѕ РґРёСЃРїРµС‚С‡РµСЂР°, С„РѕСЂРјР°С‚Р° СЂРµР·СѓР»СЊС‚Р°С‚Р°,
+# СѓР»СѓС‡С€РµРЅРЅС‹Рј С„РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёРµРј, РєРѕРјРјРµРЅС‚Р°СЂРёСЏРјРё Рё РёСЃРїСЂР°РІР»РµРЅРЅС‹РјРё РѕС€РёР±РєР°РјРё.
 <#
 .SYNOPSIS
-    Онлайн-агент для системы мониторинга Status Monitor v5.5.
+    РћРЅР»Р°Р№РЅ-Р°РіРµРЅС‚ РґР»СЏ СЃРёСЃС‚РµРјС‹ РјРѕРЅРёС‚РѕСЂРёРЅРіР° Status Monitor v5.5.
 .DESCRIPTION
-    Этот агент предназначен для работы на машинах, имеющих прямой сетевой
-    доступ к API сервера мониторинга. Он выполняет следующие действия:
-    1. Читает локальную конфигурацию из файла 'config.json'.
-    2. Импортирует необходимый модуль StatusMonitorAgentUtils.
-    3. Периодически (раз в api_poll_interval_seconds) обращается к API
-       сервера (/api/v1/assignments) для получения списка активных заданий
-       мониторинга, предназначенных для его object_id.
-    4. Хранит список заданий в памяти и самостоятельно планирует их выполнение
-       согласно интервалам, указанным в заданиях или в конфиге по умолчанию.
-    5. Для выполнения каждой проверки вызывает функцию Invoke-StatusMonitorCheck
-       из импортированного модуля.
-    6. Получает стандартизированный результат от Invoke-StatusMonitorCheck.
-    7. Преобразует результат в формат, ожидаемый API /checks (v1).
-    8. Немедленно отправляет результат каждой проверки на сервер через
-       POST-запрос к API /api/v1/checks, используя API-ключ для аутентификации.
-    9. Ведет лог своей работы в указанный файл.
+    Р­С‚РѕС‚ Р°РіРµРЅС‚ РїСЂРµРґРЅР°Р·РЅР°С‡РµРЅ РґР»СЏ СЂР°Р±РѕС‚С‹ РЅР° РјР°С€РёРЅР°С…, РёРјРµСЋС‰РёС… РїСЂСЏРјРѕР№ СЃРµС‚РµРІРѕР№
+    РґРѕСЃС‚СѓРї Рє API СЃРµСЂРІРµСЂР° РјРѕРЅРёС‚РѕСЂРёРЅРіР°. РћРЅ РІС‹РїРѕР»РЅСЏРµС‚ СЃР»РµРґСѓСЋС‰РёРµ РґРµР№СЃС‚РІРёСЏ:
+    1. Р§РёС‚Р°РµС‚ Р»РѕРєР°Р»СЊРЅСѓСЋ РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ РёР· С„Р°Р№Р»Р° 'config.json'.
+    2. РРјРїРѕСЂС‚РёСЂСѓРµС‚ РЅРµРѕР±С…РѕРґРёРјС‹Р№ РјРѕРґСѓР»СЊ StatusMonitorAgentUtils.
+    3. РџРµСЂРёРѕРґРёС‡РµСЃРєРё (СЂР°Р· РІ api_poll_interval_seconds) РѕР±СЂР°С‰Р°РµС‚СЃСЏ Рє API
+       СЃРµСЂРІРµСЂР° (/api/v1/assignments) РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ СЃРїРёСЃРєР° Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№
+       РјРѕРЅРёС‚РѕСЂРёРЅРіР°, РїСЂРµРґРЅР°Р·РЅР°С‡РµРЅРЅС‹С… РґР»СЏ РµРіРѕ object_id.
+    4. РҐСЂР°РЅРёС‚ СЃРїРёСЃРѕРє Р·Р°РґР°РЅРёР№ РІ РїР°РјСЏС‚Рё Рё СЃР°РјРѕСЃС‚РѕСЏС‚РµР»СЊРЅРѕ РїР»Р°РЅРёСЂСѓРµС‚ РёС… РІС‹РїРѕР»РЅРµРЅРёРµ
+       СЃРѕРіР»Р°СЃРЅРѕ РёРЅС‚РµСЂРІР°Р»Р°Рј, СѓРєР°Р·Р°РЅРЅС‹Рј РІ Р·Р°РґР°РЅРёСЏС… РёР»Рё РІ РєРѕРЅС„РёРіРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ.
+    5. Р”Р»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РєР°Р¶РґРѕР№ РїСЂРѕРІРµСЂРєРё РІС‹Р·С‹РІР°РµС‚ С„СѓРЅРєС†РёСЋ Invoke-StatusMonitorCheck
+       РёР· РёРјРїРѕСЂС‚РёСЂРѕРІР°РЅРЅРѕРіРѕ РјРѕРґСѓР»СЏ.
+    6. РџРѕР»СѓС‡Р°РµС‚ СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚ РѕС‚ Invoke-StatusMonitorCheck.
+    7. РџСЂРµРѕР±СЂР°Р·СѓРµС‚ СЂРµР·СѓР»СЊС‚Р°С‚ РІ С„РѕСЂРјР°С‚, РѕР¶РёРґР°РµРјС‹Р№ API /checks (v1).
+    8. РќРµРјРµРґР»РµРЅРЅРѕ РѕС‚РїСЂР°РІР»СЏРµС‚ СЂРµР·СѓР»СЊС‚Р°С‚ РєР°Р¶РґРѕР№ РїСЂРѕРІРµСЂРєРё РЅР° СЃРµСЂРІРµСЂ С‡РµСЂРµР·
+       POST-Р·Р°РїСЂРѕСЃ Рє API /api/v1/checks, РёСЃРїРѕР»СЊР·СѓСЏ API-РєР»СЋС‡ РґР»СЏ Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё.
+    9. Р’РµРґРµС‚ Р»РѕРі СЃРІРѕРµР№ СЂР°Р±РѕС‚С‹ РІ СѓРєР°Р·Р°РЅРЅС‹Р№ С„Р°Р№Р».
 .NOTES
-    Версия: 5.5
-    Дата: 2024-05-20
-    Изменения v5.5:
-        - Исправлена ошибка CommandNotFoundException из-за заглушек "..." в ConvertTo-Json при сравнении заданий.
-    Изменения v5.4:
-        - Исправлена ошибка ParameterBindingException при вызове Write-Verbose с уровнем Debug. Заменено на Write-Debug.
-    Изменения v5.3:
-        - Исправлена ошибка парсинга строки в блоке catch функции Send-CheckResultToApi.
-    Изменения v5.2:
-        - Исправлена ошибка CommandNotFoundException из-за заглушек "...".
-        - Реализовано корректное частичное отображение API ключа в логах.
-        - Разбиты длинные строки кода на несколько для читаемости.
-        - Добавлены подробные комментарии.
-        - Улучшено форматирование.
-        - Функция Get-ActiveAssignments вынесена и исправлена.
-    Изменения v5.1:
-        - Адаптация под новый формат результата Invoke-StatusMonitorCheck.
-        - Использование полей IsAvailable и CheckSuccess из результата проверки.
-        - Формирование detail_type и detail_data для API на основе результата.
-        - Использование IsAvailable для определения доступности узла при отправке.
-    Зависимости: PowerShell 5.1+, модуль StatusMonitorAgentUtils, доступ к API.
+    Р’РµСЂСЃРёСЏ: 5.5
+    Р”Р°С‚Р°: 2024-05-20
+    РР·РјРµРЅРµРЅРёСЏ v5.5:
+        - РСЃРїСЂР°РІР»РµРЅР° РѕС€РёР±РєР° CommandNotFoundException РёР·-Р·Р° Р·Р°РіР»СѓС€РµРє "..." РІ ConvertTo-Json РїСЂРё СЃСЂР°РІРЅРµРЅРёРё Р·Р°РґР°РЅРёР№.
+    РР·РјРµРЅРµРЅРёСЏ v5.4:
+        - РСЃРїСЂР°РІР»РµРЅР° РѕС€РёР±РєР° ParameterBindingException РїСЂРё РІС‹Р·РѕРІРµ Write-Verbose СЃ СѓСЂРѕРІРЅРµРј Debug. Р—Р°РјРµРЅРµРЅРѕ РЅР° Write-Debug.
+    РР·РјРµРЅРµРЅРёСЏ v5.3:
+        - РСЃРїСЂР°РІР»РµРЅР° РѕС€РёР±РєР° РїР°СЂСЃРёРЅРіР° СЃС‚СЂРѕРєРё РІ Р±Р»РѕРєРµ catch С„СѓРЅРєС†РёРё Send-CheckResultToApi.
+    РР·РјРµРЅРµРЅРёСЏ v5.2:
+        - РСЃРїСЂР°РІР»РµРЅР° РѕС€РёР±РєР° CommandNotFoundException РёР·-Р·Р° Р·Р°РіР»СѓС€РµРє "...".
+        - Р РµР°Р»РёР·РѕРІР°РЅРѕ РєРѕСЂСЂРµРєС‚РЅРѕРµ С‡Р°СЃС‚РёС‡РЅРѕРµ РѕС‚РѕР±СЂР°Р¶РµРЅРёРµ API РєР»СЋС‡Р° РІ Р»РѕРіР°С….
+        - Р Р°Р·Р±РёС‚С‹ РґР»РёРЅРЅС‹Рµ СЃС‚СЂРѕРєРё РєРѕРґР° РЅР° РЅРµСЃРєРѕР»СЊРєРѕ РґР»СЏ С‡РёС‚Р°РµРјРѕСЃС‚Рё.
+        - Р”РѕР±Р°РІР»РµРЅС‹ РїРѕРґСЂРѕР±РЅС‹Рµ РєРѕРјРјРµРЅС‚Р°СЂРёРё.
+        - РЈР»СѓС‡С€РµРЅРѕ С„РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёРµ.
+        - Р¤СѓРЅРєС†РёСЏ Get-ActiveAssignments РІС‹РЅРµСЃРµРЅР° Рё РёСЃРїСЂР°РІР»РµРЅР°.
+    РР·РјРµРЅРµРЅРёСЏ v5.1:
+        - РђРґР°РїС‚Р°С†РёСЏ РїРѕРґ РЅРѕРІС‹Р№ С„РѕСЂРјР°С‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° Invoke-StatusMonitorCheck.
+        - РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ РїРѕР»РµР№ IsAvailable Рё CheckSuccess РёР· СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё.
+        - Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ detail_type Рё detail_data РґР»СЏ API РЅР° РѕСЃРЅРѕРІРµ СЂРµР·СѓР»СЊС‚Р°С‚Р°.
+        - РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ IsAvailable РґР»СЏ РѕРїСЂРµРґРµР»РµРЅРёСЏ РґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё СѓР·Р»Р° РїСЂРё РѕС‚РїСЂР°РІРєРµ.
+    Р—Р°РІРёСЃРёРјРѕСЃС‚Рё: PowerShell 5.1+, РјРѕРґСѓР»СЊ StatusMonitorAgentUtils, РґРѕСЃС‚СѓРї Рє API.
 #>
 param(
-    # Путь к файлу конфигурации агента.
+    # РџСѓС‚СЊ Рє С„Р°Р№Р»Сѓ РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р°РіРµРЅС‚Р°.
     [string]$ConfigFile = "$PSScriptRoot\config.json"
 )
 
-# --- Загрузка необходимого модуля утилит ---
-# Устанавливаем строгий режим обработки ошибок на время импорта
+# --- Р—Р°РіСЂСѓР·РєР° РЅРµРѕР±С…РѕРґРёРјРѕРіРѕ РјРѕРґСѓР»СЏ СѓС‚РёР»РёС‚ ---
+# РЈСЃС‚Р°РЅР°РІР»РёРІР°РµРј СЃС‚СЂРѕРіРёР№ СЂРµР¶РёРј РѕР±СЂР°Р±РѕС‚РєРё РѕС€РёР±РѕРє РЅР° РІСЂРµРјСЏ РёРјРїРѕСЂС‚Р°
 $ErrorActionPreference = "Stop"
 try {
-    # Определяем путь к манифесту модуля относительно текущего скрипта
+    # РћРїСЂРµРґРµР»СЏРµРј РїСѓС‚СЊ Рє РјР°РЅРёС„РµСЃС‚Сѓ РјРѕРґСѓР»СЏ РѕС‚РЅРѕСЃРёС‚РµР»СЊРЅРѕ С‚РµРєСѓС‰РµРіРѕ СЃРєСЂРёРїС‚Р°
     $ModuleManifestPath = Join-Path -Path $PSScriptRoot `
                                     -ChildPath "..\StatusMonitorAgentUtils\StatusMonitorAgentUtils.psd1"
-    Write-Host "[INFO] Загрузка модуля '$ModuleManifestPath'..."
-    # Принудительно импортируем модуль
+    Write-Host "[INFO] Р—Р°РіСЂСѓР·РєР° РјРѕРґСѓР»СЏ '$ModuleManifestPath'..."
+    # РџСЂРёРЅСѓРґРёС‚РµР»СЊРЅРѕ РёРјРїРѕСЂС‚РёСЂСѓРµРј РјРѕРґСѓР»СЊ
     Import-Module $ModuleManifestPath -Force -ErrorAction Stop
-    Write-Host "[INFO] Модуль Utils загружен."
+    Write-Host "[INFO] РњРѕРґСѓР»СЊ Utils Р·Р°РіСЂСѓР¶РµРЅ."
 } catch {
-    # Критическая ошибка - агент не может работать без модуля
-    Write-Host "[CRITICAL] Критическая ошибка загрузки модуля '$ModuleManifestPath': $($_.Exception.Message)" -ForegroundColor Red
-    # Завершаем работу скрипта с кодом ошибки
+    # РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° - Р°РіРµРЅС‚ РЅРµ РјРѕР¶РµС‚ СЂР°Р±РѕС‚Р°С‚СЊ Р±РµР· РјРѕРґСѓР»СЏ
+    Write-Host "[CRITICAL] РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РјРѕРґСѓР»СЏ '$ModuleManifestPath': $($_.Exception.Message)" -ForegroundColor Red
+    # Р—Р°РІРµСЂС€Р°РµРј СЂР°Р±РѕС‚Сѓ СЃРєСЂРёРїС‚Р° СЃ РєРѕРґРѕРј РѕС€РёР±РєРё
     exit 1
 } finally {
-    # Возвращаем стандартное поведение обработки ошибок
+    # Р’РѕР·РІСЂР°С‰Р°РµРј СЃС‚Р°РЅРґР°СЂС‚РЅРѕРµ РїРѕРІРµРґРµРЅРёРµ РѕР±СЂР°Р±РѕС‚РєРё РѕС€РёР±РѕРє
     $ErrorActionPreference = "Continue"
 }
-# --- Конец загрузки модуля ---
+# --- РљРѕРЅРµС† Р·Р°РіСЂСѓР·РєРё РјРѕРґСѓР»СЏ ---
 
-# --- Глобальные переменные и константы ---
+# --- Р“Р»РѕР±Р°Р»СЊРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ Рё РєРѕРЅСЃС‚Р°РЅС‚С‹ ---
 
-# Версия текущего скрипта агента
-$ScriptVersion = "5.5" # Обновили версию
+# Р’РµСЂСЃРёСЏ С‚РµРєСѓС‰РµРіРѕ СЃРєСЂРёРїС‚Р° Р°РіРµРЅС‚Р°
+$ScriptVersion = "5.5" # РћР±РЅРѕРІРёР»Рё РІРµСЂСЃРёСЋ
 
-# Хэш-таблица для хранения активных заданий (ключ - assignment_id, значение - объект задания)
+# РҐСЌС€-С‚Р°Р±Р»РёС†Р° РґР»СЏ С…СЂР°РЅРµРЅРёСЏ Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№ (РєР»СЋС‡ - assignment_id, Р·РЅР°С‡РµРЅРёРµ - РѕР±СЉРµРєС‚ Р·Р°РґР°РЅРёСЏ)
 $script:ActiveAssignments = @{}
-# Хэш-таблица для хранения времени последнего выполнения каждого задания (ключ - assignment_id, значение - строка ISO 8601 UTC)
+# РҐСЌС€-С‚Р°Р±Р»РёС†Р° РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РІСЂРµРјРµРЅРё РїРѕСЃР»РµРґРЅРµРіРѕ РІС‹РїРѕР»РЅРµРЅРёСЏ РєР°Р¶РґРѕРіРѕ Р·Р°РґР°РЅРёСЏ (РєР»СЋС‡ - assignment_id, Р·РЅР°С‡РµРЅРёРµ - СЃС‚СЂРѕРєР° ISO 8601 UTC)
 $script:LastExecutedTimes = @{}
-# Объект для хранения конфигурации из файла config.json
+# РћР±СЉРµРєС‚ РґР»СЏ С…СЂР°РЅРµРЅРёСЏ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РёР· С„Р°Р№Р»Р° config.json
 $script:Config = $null
-# API ключ для аутентификации на сервере
+# API РєР»СЋС‡ РґР»СЏ Р°СѓС‚РµРЅС‚РёС„РёРєР°С†РёРё РЅР° СЃРµСЂРІРµСЂРµ
 $script:ApiKey = $null
-# Имя текущего компьютера для идентификации в логах и результатах
+# РРјСЏ С‚РµРєСѓС‰РµРіРѕ РєРѕРјРїСЊСЋС‚РµСЂР° РґР»СЏ РёРґРµРЅС‚РёС„РёРєР°С†РёРё РІ Р»РѕРіР°С… Рё СЂРµР·СѓР»СЊС‚Р°С‚Р°С…
 $script:ComputerName = $env:COMPUTERNAME
 
-# --- Значения по умолчанию для параметров конфигурации ---
-# Как часто опрашивать API на предмет новых/измененных заданий (секунды)
+# --- Р—РЅР°С‡РµРЅРёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РґР»СЏ РїР°СЂР°РјРµС‚СЂРѕРІ РєРѕРЅС„РёРіСѓСЂР°С†РёРё ---
+# РљР°Рє С‡Р°СЃС‚Рѕ РѕРїСЂР°С€РёРІР°С‚СЊ API РЅР° РїСЂРµРґРјРµС‚ РЅРѕРІС‹С…/РёР·РјРµРЅРµРЅРЅС‹С… Р·Р°РґР°РЅРёР№ (СЃРµРєСѓРЅРґС‹)
 $DefaultApiPollIntervalSeconds = 60
-# Интервал выполнения проверки по умолчанию (если не указан в задании, секунды)
+# РРЅС‚РµСЂРІР°Р» РІС‹РїРѕР»РЅРµРЅРёСЏ РїСЂРѕРІРµСЂРєРё РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ (РµСЃР»Рё РЅРµ СѓРєР°Р·Р°РЅ РІ Р·Р°РґР°РЅРёРё, СЃРµРєСѓРЅРґС‹)
 $DefaultCheckIntervalSeconds = 120
-# Уровень логирования по умолчанию
+# РЈСЂРѕРІРµРЅСЊ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ
 $DefaultLogLevel = "Info"
-# Путь к лог-файлу по умолчанию (в папке со скриптом)
+# РџСѓС‚СЊ Рє Р»РѕРі-С„Р°Р№Р»Сѓ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ (РІ РїР°РїРєРµ СЃРѕ СЃРєСЂРёРїС‚РѕРј)
 $DefaultLogFile = "$PSScriptRoot\online_agent.log"
-# Таймаут ожидания ответа от API (секунды)
+# РўР°Р№РјР°СѓС‚ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РѕС‚ API (СЃРµРєСѓРЅРґС‹)
 $ApiTimeoutSeconds = 30
-# Максимальное количество попыток запроса к API при ошибке
+# РњР°РєСЃРёРјР°Р»СЊРЅРѕРµ РєРѕР»РёС‡РµСЃС‚РІРѕ РїРѕРїС‹С‚РѕРє Р·Р°РїСЂРѕСЃР° Рє API РїСЂРё РѕС€РёР±РєРµ
 $MaxApiRetries = 3
-# Задержка между повторными попытками запроса к API (секунды)
+# Р—Р°РґРµСЂР¶РєР° РјРµР¶РґСѓ РїРѕРІС‚РѕСЂРЅС‹РјРё РїРѕРїС‹С‚РєР°РјРё Р·Р°РїСЂРѕСЃР° Рє API (СЃРµРєСѓРЅРґС‹)
 $RetryDelaySeconds = 5
-# Допустимые уровни логирования
+# Р”РѕРїСѓСЃС‚РёРјС‹Рµ СѓСЂРѕРІРЅРё Р»РѕРіРёСЂРѕРІР°РЅРёСЏ
 $ValidLogLevels = @("Debug", "Verbose", "Info", "Warn", "Error")
-# Эффективный уровень логирования (будет установлен после чтения конфига)
+# Р­С„С„РµРєС‚РёРІРЅС‹Р№ СѓСЂРѕРІРµРЅСЊ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ (Р±СѓРґРµС‚ СѓСЃС‚Р°РЅРѕРІР»РµРЅ РїРѕСЃР»Рµ С‡С‚РµРЅРёСЏ РєРѕРЅС„РёРіР°)
 $script:EffectiveLogLevel = $DefaultLogLevel
 
-# --- Функции ---
+# --- Р¤СѓРЅРєС†РёРё ---
 
-#region Функции
+#region Р¤СѓРЅРєС†РёРё
 
 <#
 .SYNOPSIS
-    Записывает сообщение в лог-файл и/или выводит в консоль.
-# ... (документация Write-Log без изменений) ...
+    Р—Р°РїРёСЃС‹РІР°РµС‚ СЃРѕРѕР±С‰РµРЅРёРµ РІ Р»РѕРі-С„Р°Р№Р» Рё/РёР»Рё РІС‹РІРѕРґРёС‚ РІ РєРѕРЅСЃРѕР»СЊ.
+# ... (РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ Write-Log Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 #>
 function Write-Log {
     param (
@@ -123,14 +123,14 @@ function Write-Log {
         [ValidateSet("Debug", "Verbose", "Info", "Warn", "Error", IgnoreCase = $true)]
         [string]$Level = "Info"
     )
-    # ... (код функции Write-Log без изменений) ...
-    $logFilePath = $script:Config.logFile | Get-OrElse $DefaultLogFile; $logLevels = @{ "Debug" = 4; "Verbose" = 3; "Info" = 2; "Warn" = 1; "Error" = 0 }; $currentLevelValue = $logLevels[$script:EffectiveLogLevel]; if ($null -eq $currentLevelValue) { $currentLevelValue = $logLevels["Info"] }; $messageLevelValue = $logLevels[$Level]; if ($null -eq $messageLevelValue) { $messageLevelValue = $logLevels["Info"] }; if ($messageLevelValue -le $currentLevelValue) { $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logMessage = "[$timestamp] [$Level] [$script:ComputerName] - $Message"; $consoleColor = switch($Level){"Error"{"Red"};"Warn"{"Yellow"};"Info"{"White"};"Verbose"{"Gray"};"Debug"{"DarkGray"};Default{"Gray"}}; Write-Host $logMessage -ForegroundColor $consoleColor; try { $logDir = Split-Path $logFilePath -Parent; if ($logDir -and (-not (Test-Path $logDir -PathType Container))) { Write-Host "[INFO] Создание папки логов: '$logDir'"; New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop | Out-Null }; $logMessage | Out-File -FilePath $logFilePath -Append -Encoding UTF8 -ErrorAction Stop } catch { Write-Host "[Error] Не удалось записать в лог '$($logFilePath)': $($_.Exception.Message)" -ForegroundColor Red } }
+    # ... (РєРѕРґ С„СѓРЅРєС†РёРё Write-Log Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
+    $logFilePath = $script:Config.logFile | Get-OrElse $DefaultLogFile; $logLevels = @{ "Debug" = 4; "Verbose" = 3; "Info" = 2; "Warn" = 1; "Error" = 0 }; $currentLevelValue = $logLevels[$script:EffectiveLogLevel]; if ($null -eq $currentLevelValue) { $currentLevelValue = $logLevels["Info"] }; $messageLevelValue = $logLevels[$Level]; if ($null -eq $messageLevelValue) { $messageLevelValue = $logLevels["Info"] }; if ($messageLevelValue -le $currentLevelValue) { $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logMessage = "[$timestamp] [$Level] [$script:ComputerName] - $Message"; $consoleColor = switch($Level){"Error"{"Red"};"Warn"{"Yellow"};"Info"{"White"};"Verbose"{"Gray"};"Debug"{"DarkGray"};Default{"Gray"}}; Write-Host $logMessage -ForegroundColor $consoleColor; try { $logDir = Split-Path $logFilePath -Parent; if ($logDir -and (-not (Test-Path $logDir -PathType Container))) { Write-Host "[INFO] РЎРѕР·РґР°РЅРёРµ РїР°РїРєРё Р»РѕРіРѕРІ: '$logDir'"; New-Item -Path $logDir -ItemType Directory -Force -ErrorAction Stop | Out-Null }; $logMessage | Out-File -FilePath $logFilePath -Append -Encoding UTF8 -ErrorAction Stop } catch { Write-Host "[Error] РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїРёСЃР°С‚СЊ РІ Р»РѕРі '$($logFilePath)': $($_.Exception.Message)" -ForegroundColor Red } }
 }
 
 <#
 .SYNOPSIS
-    Возвращает значение по умолчанию, если входное значение ложно.
-# ... (документация Get-OrElse без изменений) ...
+    Р’РѕР·РІСЂР°С‰Р°РµС‚ Р·РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ, РµСЃР»Рё РІС…РѕРґРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ Р»РѕР¶РЅРѕ.
+# ... (РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ Get-OrElse Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 #>
 filter Get-OrElse {
     param([object]$DefaultValue)
@@ -139,8 +139,8 @@ filter Get-OrElse {
 
 <#
 .SYNOPSIS
-    Отправляет результат ОДНОЙ проверки в API /checks.
-# ... (документация Send-CheckResultToApi без изменений) ...
+    РћС‚РїСЂР°РІР»СЏРµС‚ СЂРµР·СѓР»СЊС‚Р°С‚ РћР”РќРћР™ РїСЂРѕРІРµСЂРєРё РІ API /checks.
+# ... (РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ Send-CheckResultToApi Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 #>
 function Send-CheckResultToApi {
     param (
@@ -151,9 +151,9 @@ function Send-CheckResultToApi {
     )
 
     $assignmentId = $Assignment.assignment_id
-    Write-Log "Отправка результата для задания ID $assignmentId..." "Verbose"
+    Write-Log "РћС‚РїСЂР°РІРєР° СЂРµР·СѓР»СЊС‚Р°С‚Р° РґР»СЏ Р·Р°РґР°РЅРёСЏ ID $assignmentId..." "Verbose"
 
-    # --- Формируем тело запроса для API /checks ---
+    # --- Р¤РѕСЂРјРёСЂСѓРµРј С‚РµР»Рѕ Р·Р°РїСЂРѕСЃР° РґР»СЏ API /checks ---
     $isAvailableApi = [bool]$CheckResult.IsAvailable
     $checkTimestampApi = $CheckResult.Timestamp
     $detailTypeApi = $null
@@ -185,28 +185,28 @@ function Send-CheckResultToApi {
         detail_data          = $detailDataApi
         agent_script_version = $ScriptVersion
     }
-    # --- Конец формирования тела запроса ---
+    # --- РљРѕРЅРµС† С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ С‚РµР»Р° Р·Р°РїСЂРѕСЃР° ---
 
-    # Преобразуем тело в JSON строку
+    # РџСЂРµРѕР±СЂР°Р·СѓРµРј С‚РµР»Рѕ РІ JSON СЃС‚СЂРѕРєСѓ
     try {
         $jsonBody = $body | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue
     } catch {
-         # Используем -f для форматирования строки
-         Write-Log ("Критическая ошибка ConvertTo-Json для ID {0}: {1}" -f $assignmentId, $_.Exception.Message) "Error"
-         Write-Log "Проблемный объект: $($body | Out-String)" "Error"
+         # РСЃРїРѕР»СЊР·СѓРµРј -f РґР»СЏ С„РѕСЂРјР°С‚РёСЂРѕРІР°РЅРёСЏ СЃС‚СЂРѕРєРё
+         Write-Log ("РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° ConvertTo-Json РґР»СЏ ID {0}: {1}" -f $assignmentId, $_.Exception.Message) "Error"
+         Write-Log "РџСЂРѕР±Р»РµРјРЅС‹Р№ РѕР±СЉРµРєС‚: $($body | Out-String)" "Error"
          return $false
     }
 
-    # Заголовки и URL
+    # Р—Р°РіРѕР»РѕРІРєРё Рё URL
     $headers = @{
         'Content-Type' = 'application/json; charset=utf-8'
         'X-API-Key'    = $script:ApiKey
     }
     $apiUrl = "$($script:Config.apiBaseUrl.TrimEnd('/'))/v1/checks"
-    Write-Log "URL отправки: $apiUrl" "Debug"
-    Write-Log "Тело JSON: $jsonBody" "Debug"
+    Write-Log "URL РѕС‚РїСЂР°РІРєРё: $apiUrl" "Debug"
+    Write-Log "РўРµР»Рѕ JSON: $jsonBody" "Debug"
 
-    # --- Отправка запроса с логикой повторных попыток (retry) ---
+    # --- РћС‚РїСЂР°РІРєР° Р·Р°РїСЂРѕСЃР° СЃ Р»РѕРіРёРєРѕР№ РїРѕРІС‚РѕСЂРЅС‹С… РїРѕРїС‹С‚РѕРє (retry) ---
     $retryCount = 0; $success = $false
     while ($retryCount -lt $MaxApiRetries -and (-not $success)) {
         try {
@@ -217,38 +217,38 @@ function Send-CheckResultToApi {
                                           -TimeoutSec $ApiTimeoutSeconds `
                                           -ErrorAction Stop
 
-            Write-Log ("Результат ID {0} отправлен. Ответ API: {1}" -f `
+            Write-Log ("Р РµР·СѓР»СЊС‚Р°С‚ ID {0} РѕС‚РїСЂР°РІР»РµРЅ. РћС‚РІРµС‚ API: {1}" -f `
                         $assignmentId, ($response | ConvertTo-Json -Depth 2 -Compress -WarningAction SilentlyContinue)) "Info"
             $success = $true
 
         } catch {
             $retryCount++; $statusCode = $null; if ($_.Exception.Response) { try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {} }; $errorMessage = $_.Exception.Message;
-            $errorResponseBody = "[не удалось прочитать тело ответа]"; if ($_.Exception.Response) { try { $errorStream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($errorStream); $errorResponseBody = $reader.ReadToEnd(); $reader.Close(); $errorStream.Dispose() } catch {} };
-            Write-Log ("Ошибка отправки ID {0} (попытка {1}/{2}). Код: {3}. Error: {4}. Ответ: {5}" -f $assignmentId, $retryCount, $MaxApiRetries, ($statusCode | Get-OrElse 'N/A'), $errorMessage, $errorResponseBody) "Error"
-            if ($statusCode -eq 401 -or $statusCode -eq 403) { Write-Log "Критическая ошибка: Неверный API ключ или права (Код: $statusCode). Завершение работы." "Error"; exit 1 }
-            if ($retryCount -ge $MaxApiRetries) { Write-Log "Превышено кол-во попыток ($MaxApiRetries) для ID $assignmentId." "Error"; break }
-            Write-Log "Пауза $RetryDelaySeconds сек..." "Warn"; Start-Sleep -Seconds $RetryDelaySeconds
+            $errorResponseBody = "[РЅРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕС‡РёС‚Р°С‚СЊ С‚РµР»Рѕ РѕС‚РІРµС‚Р°]"; if ($_.Exception.Response) { try { $errorStream = $_.Exception.Response.GetResponseStream(); $reader = New-Object System.IO.StreamReader($errorStream); $errorResponseBody = $reader.ReadToEnd(); $reader.Close(); $errorStream.Dispose() } catch {} };
+            Write-Log ("РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё ID {0} (РїРѕРїС‹С‚РєР° {1}/{2}). РљРѕРґ: {3}. Error: {4}. РћС‚РІРµС‚: {5}" -f $assignmentId, $retryCount, $MaxApiRetries, ($statusCode | Get-OrElse 'N/A'), $errorMessage, $errorResponseBody) "Error"
+            if ($statusCode -eq 401 -or $statusCode -eq 403) { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµРІРµСЂРЅС‹Р№ API РєР»СЋС‡ РёР»Рё РїСЂР°РІР° (РљРѕРґ: $statusCode). Р—Р°РІРµСЂС€РµРЅРёРµ СЂР°Р±РѕС‚С‹." "Error"; exit 1 }
+            if ($retryCount -ge $MaxApiRetries) { Write-Log "РџСЂРµРІС‹С€РµРЅРѕ РєРѕР»-РІРѕ РїРѕРїС‹С‚РѕРє ($MaxApiRetries) РґР»СЏ ID $assignmentId." "Error"; break }
+            Write-Log "РџР°СѓР·Р° $RetryDelaySeconds СЃРµРє..." "Warn"; Start-Sleep -Seconds $RetryDelaySeconds
         }
-    } # Конец while retry
+    } # РљРѕРЅРµС† while retry
     return $success
 }
 
 <#
 .SYNOPSIS
-    Запрашивает активные задания у API сервера.
-# ... (документация Get-ActiveAssignments без изменений) ...
+    Р—Р°РїСЂР°С€РёРІР°РµС‚ Р°РєС‚РёРІРЅС‹Рµ Р·Р°РґР°РЅРёСЏ Сѓ API СЃРµСЂРІРµСЂР°.
+# ... (РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ Get-ActiveAssignments Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 #>
 function Get-ActiveAssignments {
-    Write-Log "Запрос активных заданий у API..." "Info"
+    Write-Log "Р—Р°РїСЂРѕСЃ Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№ Сѓ API..." "Info"
     $apiUrl = "$($script:Config.apiBaseUrl.TrimEnd('/'))/v1/assignments?object_id=$($script:Config.object_id)"
     Write-Log "URL: $apiUrl" "Verbose"
 
-    # Отображение части API ключа
-    $apiKeyPartial = "[Не задан]"
+    # РћС‚РѕР±СЂР°Р¶РµРЅРёРµ С‡Р°СЃС‚Рё API РєР»СЋС‡Р°
+    $apiKeyPartial = "[РќРµ Р·Р°РґР°РЅ]"
     if ($script:ApiKey) {
         $len = $script:ApiKey.Length; $prefix = $script:ApiKey.Substring(0, [math]::Min(4, $len)); $suffix = if ($len -gt 8) { $script:ApiKey.Substring($len - 4, 4) } else { "" }; $apiKeyPartial = "$prefix....$suffix"
     }
-    Write-Log "Исп. API ключ (частично): $apiKeyPartial" "Debug"
+    Write-Log "РСЃРї. API РєР»СЋС‡ (С‡Р°СЃС‚РёС‡РЅРѕ): $apiKeyPartial" "Debug"
 
     $headers = @{ 'X-API-Key' = $script:ApiKey }
     $newAssignments = $null; $retryCount = 0
@@ -259,26 +259,26 @@ function Get-ActiveAssignments {
                                                 -Headers $headers `
                                                 -TimeoutSec $ApiTimeoutSeconds `
                                                 -ErrorAction Stop
-            if ($newAssignments -isnot [array]) { throw ("API ответ не является массивом: $($newAssignments | Out-String)") }
-            Write-Log "Получено $($newAssignments.Count) активных заданий." "Info"
+            if ($newAssignments -isnot [array]) { throw ("API РѕС‚РІРµС‚ РЅРµ СЏРІР»СЏРµС‚СЃСЏ РјР°СЃСЃРёРІРѕРј: $($newAssignments | Out-String)") }
+            Write-Log "РџРѕР»СѓС‡РµРЅРѕ $($newAssignments.Count) Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№." "Info"
             return $newAssignments
         } catch {
             $retryCount++; $statusCode = $null; if ($_.Exception.Response) { try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {} }; $errorMessage = $_.Exception.Message;
-            Write-Log ("Ошибка API при получении заданий (попытка {0}/{1}). Код: {2}. Error: {3}" -f $retryCount, $MaxApiRetries, ($statusCode | Get-OrElse 'N/A'), $errorMessage) "Error"
-            if ($statusCode -eq 401 -or $statusCode -eq 403) { Write-Log "Критическая ошибка: Неверный API ключ или права (Код: $statusCode). Завершение работы." "Error"; exit 1 }
-            if ($retryCount -ge $MaxApiRetries) { Write-Log "Превышено кол-во попыток ($MaxApiRetries) получения заданий." "Error"; return $null }
-            Write-Log "Пауза $RetryDelaySeconds сек..." "Warn"; Start-Sleep -Seconds $RetryDelaySeconds
+            Write-Log ("РћС€РёР±РєР° API РїСЂРё РїРѕР»СѓС‡РµРЅРёРё Р·Р°РґР°РЅРёР№ (РїРѕРїС‹С‚РєР° {0}/{1}). РљРѕРґ: {2}. Error: {3}" -f $retryCount, $MaxApiRetries, ($statusCode | Get-OrElse 'N/A'), $errorMessage) "Error"
+            if ($statusCode -eq 401 -or $statusCode -eq 403) { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµРІРµСЂРЅС‹Р№ API РєР»СЋС‡ РёР»Рё РїСЂР°РІР° (РљРѕРґ: $statusCode). Р—Р°РІРµСЂС€РµРЅРёРµ СЂР°Р±РѕС‚С‹." "Error"; exit 1 }
+            if ($retryCount -ge $MaxApiRetries) { Write-Log "РџСЂРµРІС‹С€РµРЅРѕ РєРѕР»-РІРѕ РїРѕРїС‹С‚РѕРє ($MaxApiRetries) РїРѕР»СѓС‡РµРЅРёСЏ Р·Р°РґР°РЅРёР№." "Error"; return $null }
+            Write-Log "РџР°СѓР·Р° $RetryDelaySeconds СЃРµРє..." "Warn"; Start-Sleep -Seconds $RetryDelaySeconds
         }
-    } # Конец while retry
+    } # РљРѕРЅРµС† while retry
     return $null
 }
 
-#endregion Функции
+#endregion Р¤СѓРЅРєС†РёРё
 
-# --- Основной код агента ---
+# --- РћСЃРЅРѕРІРЅРѕР№ РєРѕРґ Р°РіРµРЅС‚Р° ---
 
-# 1. Чтение конфигурации из файла
-Write-Host "Чтение конфигурации из: $ConfigFile"
+# 1. Р§С‚РµРЅРёРµ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РёР· С„Р°Р№Р»Р°
+Write-Host "Р§С‚РµРЅРёРµ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РёР·: $ConfigFile"
 if (-not (Test-Path $ConfigFile -PathType Leaf)) { Write-Error ...; exit 1 }
 try { $script:Config = Get-Content -Path $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop }
 catch { Write-Error ...; exit 1 }
@@ -287,80 +287,80 @@ $script:EffectiveLogLevel = $script:Config.LogLevel | Get-OrElse $DefaultLogLeve
 if ($script:EffectiveLogLevel -notin $ValidLogLevels) { Write-Host ...; $script:EffectiveLogLevel = $DefaultLogLevel }
 $script:ApiKey = $script:Config.api_key
 
-# 2. Инициализация и логирование старта агента
-Write-Log "Онлайн-агент v$ScriptVersion запущен." "Info"
-Write-Log "Конфигурация: ObjectID=$($script:Config.object_id), API URL=$($script:Config.apiBaseUrl)" "Info"
-Write-Log ("Интервал опроса API: {0} сек, Стандартный интервал проверки: {1} сек." -f `
+# 2. РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Рё Р»РѕРіРёСЂРѕРІР°РЅРёРµ СЃС‚Р°СЂС‚Р° Р°РіРµРЅС‚Р°
+Write-Log "РћРЅР»Р°Р№РЅ-Р°РіРµРЅС‚ v$ScriptVersion Р·Р°РїСѓС‰РµРЅ." "Info"
+Write-Log "РљРѕРЅС„РёРіСѓСЂР°С†РёСЏ: ObjectID=$($script:Config.object_id), API URL=$($script:Config.apiBaseUrl)" "Info"
+Write-Log ("РРЅС‚РµСЂРІР°Р» РѕРїСЂРѕСЃР° API: {0} СЃРµРє, РЎС‚Р°РЅРґР°СЂС‚РЅС‹Р№ РёРЅС‚РµСЂРІР°Р» РїСЂРѕРІРµСЂРєРё: {1} СЃРµРє." -f `
     $script:Config.api_poll_interval_seconds, $script:Config.default_check_interval_seconds) "Verbose"
-Write-Log "Логирование в '$($script:Config.logFile)' с уровнем '$($script:EffectiveLogLevel)'" "Info"
+Write-Log "Р›РѕРіРёСЂРѕРІР°РЅРёРµ РІ '$($script:Config.logFile)' СЃ СѓСЂРѕРІРЅРµРј '$($script:EffectiveLogLevel)'" "Info"
 
-# 3. Основной цикл работы агента
+# 3. РћСЃРЅРѕРІРЅРѕР№ С†РёРєР» СЂР°Р±РѕС‚С‹ Р°РіРµРЅС‚Р°
 $lastApiPollTime = [DateTime]::MinValue
 $apiPollInterval = [TimeSpan]::FromSeconds($script:Config.api_poll_interval_seconds)
 $DefaultCheckInterval = [TimeSpan]::FromSeconds($script:Config.default_check_interval_seconds)
 
-Write-Log "Запуск основного цикла обработки заданий..." "Info"
+Write-Log "Р—Р°РїСѓСЃРє РѕСЃРЅРѕРІРЅРѕРіРѕ С†РёРєР»Р° РѕР±СЂР°Р±РѕС‚РєРё Р·Р°РґР°РЅРёР№..." "Info"
 while ($true) {
     $loopStartTime = Get-Date
-    Write-Log "Начало итерации цикла." "Verbose"
+    Write-Log "РќР°С‡Р°Р»Рѕ РёС‚РµСЂР°С†РёРё С†РёРєР»Р°." "Verbose"
 
-    # 3.1 Запрос/обновление списка активных заданий у API
+    # 3.1 Р—Р°РїСЂРѕСЃ/РѕР±РЅРѕРІР»РµРЅРёРµ СЃРїРёСЃРєР° Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№ Сѓ API
     if (($loopStartTime - $lastApiPollTime) -ge $apiPollInterval) {
-        Write-Log "Время обновить список заданий с API." "Info"; $fetchedAssignments = Get-ActiveAssignments
+        Write-Log "Р’СЂРµРјСЏ РѕР±РЅРѕРІРёС‚СЊ СЃРїРёСЃРѕРє Р·Р°РґР°РЅРёР№ СЃ API." "Info"; $fetchedAssignments = Get-ActiveAssignments
         if ($fetchedAssignments -ne $null) {
-            Write-Log "Обработка полученных заданий..." "Info"; $newAssignmentMap = @{}; $fetchedIds = [System.Collections.Generic.List[int]]::new()
+            Write-Log "РћР±СЂР°Р±РѕС‚РєР° РїРѕР»СѓС‡РµРЅРЅС‹С… Р·Р°РґР°РЅРёР№..." "Info"; $newAssignmentMap = @{}; $fetchedIds = [System.Collections.Generic.List[int]]::new()
             foreach ($assignment in $fetchedAssignments) { if ($assignment.assignment_id -ne $null) { $id = $assignment.assignment_id; $newAssignmentMap[$id] = $assignment; $fetchedIds.Add($id) } else { Write-Log "..." "Warn" } }
             $currentIds = $script:ActiveAssignments.Keys | ForEach-Object { [int]$_ }; $removedIds = $currentIds | Where-Object { $fetchedIds -notcontains $_ }
             if ($removedIds) { foreach ($removedId in $removedIds) { Write-Log "... $removedId" "Info"; $script:ActiveAssignments.Remove($removedId); $script:LastExecutedTimes.Remove($removedId) } }
             $addedCount = 0; $updatedCount = 0
             foreach ($assignmentId in $fetchedIds) {
                 if (-not $script:ActiveAssignments.ContainsKey($assignmentId)) {
-                    # Добавление нового задания
-                    Write-Log "Добавлено новое задание ID $assignmentId" "Info"
+                    # Р”РѕР±Р°РІР»РµРЅРёРµ РЅРѕРІРѕРіРѕ Р·Р°РґР°РЅРёСЏ
+                    Write-Log "Р”РѕР±Р°РІР»РµРЅРѕ РЅРѕРІРѕРµ Р·Р°РґР°РЅРёРµ ID $assignmentId" "Info"
                     $script:ActiveAssignments[$assignmentId] = $newAssignmentMap[$assignmentId]
                     $script:LastExecutedTimes[$assignmentId] = (Get-Date).AddDays(-1).ToUniversalTime().ToString("o")
                     $addedCount++
                 } else {
-                    # Проверка, изменилось ли существующее задание
-                    # --- ИСПРАВЛЕНО: Убраны заглушки "..." ---
+                    # РџСЂРѕРІРµСЂРєР°, РёР·РјРµРЅРёР»РѕСЃСЊ Р»Рё СЃСѓС‰РµСЃС‚РІСѓСЋС‰РµРµ Р·Р°РґР°РЅРёРµ
+                    # --- РРЎРџР РђР’Р›Р•РќРћ: РЈР±СЂР°РЅС‹ Р·Р°РіР»СѓС€РєРё "..." ---
                     $oldJson = $script:ActiveAssignments[$assignmentId] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue
                     $newJson = $newAssignmentMap[$assignmentId] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue
-                    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+                    # --- РљРћРќР•Р¦ РРЎРџР РђР’Р›Р•РќРРЇ ---
                     if ($oldJson -ne $newJson) {
-                         Write-Log "Обновлено задание ID $assignmentId" "Verbose"
+                         Write-Log "РћР±РЅРѕРІР»РµРЅРѕ Р·Р°РґР°РЅРёРµ ID $assignmentId" "Verbose"
                          $script:ActiveAssignments[$assignmentId] = $newAssignmentMap[$assignmentId]
-                         # Сбрасывать ли LastExecutedTimes при обновлении?
-                         # Пока не будем, чтобы не вызвать выполнение сразу после обновления.
+                         # РЎР±СЂР°СЃС‹РІР°С‚СЊ Р»Рё LastExecutedTimes РїСЂРё РѕР±РЅРѕРІР»РµРЅРёРё?
+                         # РџРѕРєР° РЅРµ Р±СѓРґРµРј, С‡С‚РѕР±С‹ РЅРµ РІС‹Р·РІР°С‚СЊ РІС‹РїРѕР»РЅРµРЅРёРµ СЃСЂР°Р·Сѓ РїРѕСЃР»Рµ РѕР±РЅРѕРІР»РµРЅРёСЏ.
                          $updatedCount++
                     }
                 }
-            } # Конец foreach ($assignmentId in $fetchedIds)
-            Write-Log ("Синхронизация заданий завершена. Добавлено:{0}. Обновлено:{1}. Удалено:{2}." -f $addedCount, $updatedCount, $removedIds.Count) "Info"
+            } # РљРѕРЅРµС† foreach ($assignmentId in $fetchedIds)
+            Write-Log ("РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ Р·Р°РґР°РЅРёР№ Р·Р°РІРµСЂС€РµРЅР°. Р”РѕР±Р°РІР»РµРЅРѕ:{0}. РћР±РЅРѕРІР»РµРЅРѕ:{1}. РЈРґР°Р»РµРЅРѕ:{2}." -f $addedCount, $updatedCount, $removedIds.Count) "Info"
             $lastApiPollTime = $loopStartTime
-        } else { Write-Log "Не удалось получить задания от API..." "Error" }
-    } else { Write-Log "Опрос API еще не требуется..." "Verbose" }
+        } else { Write-Log "РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ Р·Р°РґР°РЅРёСЏ РѕС‚ API..." "Error" }
+    } else { Write-Log "РћРїСЂРѕСЃ API РµС‰Рµ РЅРµ С‚СЂРµР±СѓРµС‚СЃСЏ..." "Verbose" }
 
-    # 3.2 Выполнение запланированных проверок
-    # ... (код выполнения проверок, вызова Invoke-StatusMonitorCheck и Send-CheckResultToApi без изменений) ...
+    # 3.2 Р’С‹РїРѕР»РЅРµРЅРёРµ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРЅС‹С… РїСЂРѕРІРµСЂРѕРє
+    # ... (РєРѕРґ РІС‹РїРѕР»РЅРµРЅРёСЏ РїСЂРѕРІРµСЂРѕРє, РІС‹Р·РѕРІР° Invoke-StatusMonitorCheck Рё Send-CheckResultToApi Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
     $currentTime = Get-Date
     if ($script:ActiveAssignments.Count -gt 0) {
-        Write-Log "Проверка запланированных заданий ($($script:ActiveAssignments.Count) активно)..." "Verbose"
+        Write-Log "РџСЂРѕРІРµСЂРєР° Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРЅС‹С… Р·Р°РґР°РЅРёР№ ($($script:ActiveAssignments.Count) Р°РєС‚РёРІРЅРѕ)..." "Verbose"
         $assignmentIdsToCheck = $script:ActiveAssignments.Keys | ForEach-Object { $_ }
         foreach ($id in $assignmentIdsToCheck) {
             if (-not $script:ActiveAssignments.ContainsKey($id)) { continue }
             $assignment = $script:ActiveAssignments[$id]; $checkIntervalSeconds = $assignment.check_interval_seconds | Get-OrElse $script:Config.default_check_interval_seconds; if ($checkIntervalSeconds -le 0) { $checkIntervalSeconds = $script:Config.default_check_interval_seconds }; $checkInterval = [TimeSpan]::FromSeconds($checkIntervalSeconds); $lastRunString = $script:LastExecutedTimes[$id]; $lastRunTime = [DateTime]::MinValue; if ($lastRunString) { try { $lastRunTime = [DateTime]::ParseExact($lastRunString,"o",$null).ToLocalTime() } catch { Write-Log "... ID ${id}: '$lastRunString'" "Error"; $lastRunTime = [DateTime]::MinValue } }; $nextRunTime = $lastRunTime + $checkInterval
-            Write-Debug ("Задание ID {0}: Интервал={1} сек, Посл.={2}, След.={3}" -f $id, $checkInterval.TotalSeconds, $lastRunTime.ToString('s'), $nextRunTime.ToString('s'))
+            Write-Debug ("Р—Р°РґР°РЅРёРµ ID {0}: РРЅС‚РµСЂРІР°Р»={1} СЃРµРє, РџРѕСЃР».={2}, РЎР»РµРґ.={3}" -f $id, $checkInterval.TotalSeconds, $lastRunTime.ToString('s'), $nextRunTime.ToString('s'))
             if ($currentTime -ge $nextRunTime) {
-                Write-Log ("ВЫПОЛНЕНИЕ ЗАДАНИЯ ID {0} ({1} для {2})." -f $id, $assignment.method_name, $assignment.node_name) "Info"; $checkResult = $null
-                try { $checkResult = Invoke-StatusMonitorCheck -Assignment $assignment -Verbose:$VerbosePreference -Debug:$DebugPreference; Write-Log ("Результат проверки ID {0}: IsAvailable={1}, CheckSuccess={2}, Error='{3}'" -f $id, $checkResult.IsAvailable, $checkResult.CheckSuccess, $checkResult.ErrorMessage) "Verbose"; Write-Log ("Детали результата ID {0}: {1}" -f $id, ($checkResult.Details | ConvertTo-Json -Depth 3 -Compress -WarningAction SilentlyContinue)) "Debug"; $sendSuccess = Send-CheckResultToApi -CheckResult $checkResult -Assignment $assignment; if ($sendSuccess) { $script:LastExecutedTimes[$id] = $currentTime.ToUniversalTime().ToString("o"); Write-Log "Время последнего выполнения ID $id обновлено." "Verbose" } else { Write-Log "Результат для ID $id НЕ был успешно отправлен в API." "Error" } } catch { Write-Log "Критическая ошибка при ВЫПОЛНЕНИИ задания ID ${id}: $($_.Exception.Message)" "Error" }
+                Write-Log ("Р’Р«РџРћР›РќР•РќРР• Р—РђР”РђРќРРЇ ID {0} ({1} РґР»СЏ {2})." -f $id, $assignment.method_name, $assignment.node_name) "Info"; $checkResult = $null
+                try { $checkResult = Invoke-StatusMonitorCheck -Assignment $assignment -Verbose:$VerbosePreference -Debug:$DebugPreference; Write-Log ("Р РµР·СѓР»СЊС‚Р°С‚ РїСЂРѕРІРµСЂРєРё ID {0}: IsAvailable={1}, CheckSuccess={2}, Error='{3}'" -f $id, $checkResult.IsAvailable, $checkResult.CheckSuccess, $checkResult.ErrorMessage) "Verbose"; Write-Log ("Р”РµС‚Р°Р»Рё СЂРµР·СѓР»СЊС‚Р°С‚Р° ID {0}: {1}" -f $id, ($checkResult.Details | ConvertTo-Json -Depth 3 -Compress -WarningAction SilentlyContinue)) "Debug"; $sendSuccess = Send-CheckResultToApi -CheckResult $checkResult -Assignment $assignment; if ($sendSuccess) { $script:LastExecutedTimes[$id] = $currentTime.ToUniversalTime().ToString("o"); Write-Log "Р’СЂРµРјСЏ РїРѕСЃР»РµРґРЅРµРіРѕ РІС‹РїРѕР»РЅРµРЅРёСЏ ID $id РѕР±РЅРѕРІР»РµРЅРѕ." "Verbose" } else { Write-Log "Р РµР·СѓР»СЊС‚Р°С‚ РґР»СЏ ID $id РќР• Р±С‹Р» СѓСЃРїРµС€РЅРѕ РѕС‚РїСЂР°РІР»РµРЅ РІ API." "Error" } } catch { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° РїСЂРё Р’Р«РџРћР›РќР•РќРР Р·Р°РґР°РЅРёСЏ ID ${id}: $($_.Exception.Message)" "Error" }
             }
         }
-    } else { Write-Log "Нет активных заданий для выполнения." "Verbose" }
+    } else { Write-Log "РќРµС‚ Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ." "Verbose" }
 
-    # 3.3 Пауза перед следующей итерацией
+    # 3.3 РџР°СѓР·Р° РїРµСЂРµРґ СЃР»РµРґСѓСЋС‰РµР№ РёС‚РµСЂР°С†РёРµР№
     Start-Sleep -Seconds 1
 
-} # --- Конец while ($true) ---
+} # --- РљРѕРЅРµС† while ($true) ---
 
-Write-Log "Онлайн-агент завершает работу (неожиданный выход из основного цикла)." "Error"
+Write-Log "РћРЅР»Р°Р№РЅ-Р°РіРµРЅС‚ Р·Р°РІРµСЂС€Р°РµС‚ СЂР°Р±РѕС‚Сѓ (РЅРµРѕР¶РёРґР°РЅРЅС‹Р№ РІС‹С…РѕРґ РёР· РѕСЃРЅРѕРІРЅРѕРіРѕ С†РёРєР»Р°)." "Error"
 exit 1

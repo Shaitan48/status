@@ -1,228 +1,228 @@
-# powershell\offline-agent\offline-agent.ps1
-# Оффлайн-агент мониторинга v3.1.
-# Исправлено добавление assignment_id к результатам.
+п»ї# powershell\offline-agent\offline-agent.ps1
+# РћС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚ РјРѕРЅРёС‚РѕСЂРёРЅРіР° v3.1.
+# РСЃРїСЂР°РІР»РµРЅРѕ РґРѕР±Р°РІР»РµРЅРёРµ assignment_id Рє СЂРµР·СѓР»СЊС‚Р°С‚Р°Рј.
 <#
 .SYNOPSIS
-    Оффлайн-агент системы мониторинга Status Monitor v3.1.
+    РћС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚ СЃРёСЃС‚РµРјС‹ РјРѕРЅРёС‚РѕСЂРёРЅРіР° Status Monitor v3.1.
 .DESCRIPTION
-    Предназначен для работы в изолированных сетях без доступа к API.
-    1. Читает локальную конфигурацию агента ('config.json').
-    2. Периодически проверяет наличие файла с заданиями
-       в папке 'assignments_file_path'.
-    3. При обнаружении нового файла заданий:
-       - Читает JSON-содержимое.
-       - Извлекает список 'assignments' и 'assignment_config_version'.
-       - Сохраняет их для выполнения.
-    4. В цикле выполняет ВСЕ активные задания с помощью
-       Invoke-StatusMonitorCheck из модуля StatusMonitorAgentUtils.
-    5. Собирает стандартизированные результаты всех проверок.
-    6. **Создает новый объект для каждого результата, объединяя
-       стандартный результат и 'assignment_id'.**
-    7. Формирует итоговый JSON-файл (*.zrpu) в папке 'output_path',
-       включая метаданные (версии агента и конфига) и массив 'results'.
-    8. Этот *.zrpu файл затем передается и загружается на сервер.
+    РџСЂРµРґРЅР°Р·РЅР°С‡РµРЅ РґР»СЏ СЂР°Р±РѕС‚С‹ РІ РёР·РѕР»РёСЂРѕРІР°РЅРЅС‹С… СЃРµС‚СЏС… Р±РµР· РґРѕСЃС‚СѓРїР° Рє API.
+    1. Р§РёС‚Р°РµС‚ Р»РѕРєР°Р»СЊРЅСѓСЋ РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ Р°РіРµРЅС‚Р° ('config.json').
+    2. РџРµСЂРёРѕРґРёС‡РµСЃРєРё РїСЂРѕРІРµСЂСЏРµС‚ РЅР°Р»РёС‡РёРµ С„Р°Р№Р»Р° СЃ Р·Р°РґР°РЅРёСЏРјРё
+       РІ РїР°РїРєРµ 'assignments_file_path'.
+    3. РџСЂРё РѕР±РЅР°СЂСѓР¶РµРЅРёРё РЅРѕРІРѕРіРѕ С„Р°Р№Р»Р° Р·Р°РґР°РЅРёР№:
+       - Р§РёС‚Р°РµС‚ JSON-СЃРѕРґРµСЂР¶РёРјРѕРµ.
+       - РР·РІР»РµРєР°РµС‚ СЃРїРёСЃРѕРє 'assignments' Рё 'assignment_config_version'.
+       - РЎРѕС…СЂР°РЅСЏРµС‚ РёС… РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ.
+    4. Р’ С†РёРєР»Рµ РІС‹РїРѕР»РЅСЏРµС‚ Р’РЎР• Р°РєС‚РёРІРЅС‹Рµ Р·Р°РґР°РЅРёСЏ СЃ РїРѕРјРѕС‰СЊСЋ
+       Invoke-StatusMonitorCheck РёР· РјРѕРґСѓР»СЏ StatusMonitorAgentUtils.
+    5. РЎРѕР±РёСЂР°РµС‚ СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Рµ СЂРµР·СѓР»СЊС‚Р°С‚С‹ РІСЃРµС… РїСЂРѕРІРµСЂРѕРє.
+    6. **РЎРѕР·РґР°РµС‚ РЅРѕРІС‹Р№ РѕР±СЉРµРєС‚ РґР»СЏ РєР°Р¶РґРѕРіРѕ СЂРµР·СѓР»СЊС‚Р°С‚Р°, РѕР±СЉРµРґРёРЅСЏСЏ
+       СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚ Рё 'assignment_id'.**
+    7. Р¤РѕСЂРјРёСЂСѓРµС‚ РёС‚РѕРіРѕРІС‹Р№ JSON-С„Р°Р№Р» (*.zrpu) РІ РїР°РїРєРµ 'output_path',
+       РІРєР»СЋС‡Р°СЏ РјРµС‚Р°РґР°РЅРЅС‹Рµ (РІРµСЂСЃРёРё Р°РіРµРЅС‚Р° Рё РєРѕРЅС„РёРіР°) Рё РјР°СЃСЃРёРІ 'results'.
+    8. Р­С‚РѕС‚ *.zrpu С„Р°Р№Р» Р·Р°С‚РµРј РїРµСЂРµРґР°РµС‚СЃСЏ Рё Р·Р°РіСЂСѓР¶Р°РµС‚СЃСЏ РЅР° СЃРµСЂРІРµСЂ.
 .NOTES
-    Версия: 3.1
-    Дата: 2024-05-20
-    Изменения v3.1:
-        - Исправлен способ добавления 'assignment_id' к результатам. Вместо
-          Add-Member теперь создается новый объект путем слияния хэш-таблиц.
-    Изменения v3.0:
-        - Попытка добавить поле 'assignment_id' к каждому элементу в массиве 'results'.
-    Зависимости: PowerShell 5.1+, модуль StatusMonitorAgentUtils, наличие файла конфигурации заданий.
+    Р’РµСЂСЃРёСЏ: 3.1
+    Р”Р°С‚Р°: 2024-05-20
+    РР·РјРµРЅРµРЅРёСЏ v3.1:
+        - РСЃРїСЂР°РІР»РµРЅ СЃРїРѕСЃРѕР± РґРѕР±Р°РІР»РµРЅРёСЏ 'assignment_id' Рє СЂРµР·СѓР»СЊС‚Р°С‚Р°Рј. Р’РјРµСЃС‚Рѕ
+          Add-Member С‚РµРїРµСЂСЊ СЃРѕР·РґР°РµС‚СЃСЏ РЅРѕРІС‹Р№ РѕР±СЉРµРєС‚ РїСѓС‚РµРј СЃР»РёСЏРЅРёСЏ С…СЌС€-С‚Р°Р±Р»РёС†.
+    РР·РјРµРЅРµРЅРёСЏ v3.0:
+        - РџРѕРїС‹С‚РєР° РґРѕР±Р°РІРёС‚СЊ РїРѕР»Рµ 'assignment_id' Рє РєР°Р¶РґРѕРјСѓ СЌР»РµРјРµРЅС‚Сѓ РІ РјР°СЃСЃРёРІРµ 'results'.
+    Р—Р°РІРёСЃРёРјРѕСЃС‚Рё: PowerShell 5.1+, РјРѕРґСѓР»СЊ StatusMonitorAgentUtils, РЅР°Р»РёС‡РёРµ С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р·Р°РґР°РЅРёР№.
 #>
 
 param (
-    # Путь к файлу конфигурации агента.
+    # РџСѓС‚СЊ Рє С„Р°Р№Р»Сѓ РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р°РіРµРЅС‚Р°.
     [string]$configFile = "$PSScriptRoot\config.json",
 
-    # Параметры для переопределения лог-файла и уровня логирования из командной строки.
+    # РџР°СЂР°РјРµС‚СЂС‹ РґР»СЏ РїРµСЂРµРѕРїСЂРµРґРµР»РµРЅРёСЏ Р»РѕРі-С„Р°Р№Р»Р° Рё СѓСЂРѕРІРЅСЏ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ РёР· РєРѕРјР°РЅРґРЅРѕР№ СЃС‚СЂРѕРєРё.
     [string]$paramLogFile = $null,
     [ValidateSet("Debug", "Verbose", "Info", "Warn", "Error", IgnoreCase = $true)]
     [string]$paramLogLevel = $null
 )
 
-# --- Загрузка модуля Utils ---
+# --- Р—Р°РіСЂСѓР·РєР° РјРѕРґСѓР»СЏ Utils ---
 $ErrorActionPreference = "Stop"
 try {
     $ModuleManifestPath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils\StatusMonitorAgentUtils.psd1"
-    Write-Host "[INFO] Загрузка модуля '$ModuleManifestPath'..."
+    Write-Host "[INFO] Р—Р°РіСЂСѓР·РєР° РјРѕРґСѓР»СЏ '$ModuleManifestPath'..."
     Import-Module $ModuleManifestPath -Force -ErrorAction Stop
-    Write-Host "[INFO] Модуль Utils загружен."
+    Write-Host "[INFO] РњРѕРґСѓР»СЊ Utils Р·Р°РіСЂСѓР¶РµРЅ."
 } catch {
-    Write-Host "[CRITICAL] Критическая ошибка загрузки модуля '$ModuleManifestPath': $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[CRITICAL] РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РјРѕРґСѓР»СЏ '$ModuleManifestPath': $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 } finally {
     $ErrorActionPreference = "Continue"
 }
-# --- Конец загрузки модуля ---
+# --- РљРѕРЅРµС† Р·Р°РіСЂСѓР·РєРё РјРѕРґСѓР»СЏ ---
 
-# --- Глобальные переменные ---
-# Версия текущего скрипта оффлайн-агента
-$AgentScriptVersion = "agent_script_v3.1" # Обновили версию
+# --- Р“Р»РѕР±Р°Р»СЊРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ ---
+# Р’РµСЂСЃРёСЏ С‚РµРєСѓС‰РµРіРѕ СЃРєСЂРёРїС‚Р° РѕС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚Р°
+$AgentScriptVersion = "agent_script_v3.1" # РћР±РЅРѕРІРёР»Рё РІРµСЂСЃРёСЋ
 
-# Имя компьютера
+# РРјСЏ РєРѕРјРїСЊСЋС‚РµСЂР°
 $script:ComputerName = $env:COMPUTERNAME
-# Текущий список заданий (массив объектов PSCustomObject из файла конфигурации)
+# РўРµРєСѓС‰РёР№ СЃРїРёСЃРѕРє Р·Р°РґР°РЅРёР№ (РјР°СЃСЃРёРІ РѕР±СЉРµРєС‚РѕРІ PSCustomObject РёР· С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё)
 $script:currentAssignments = $null
-# Текущая версия файла конфигурации заданий (строка из файла)
+# РўРµРєСѓС‰Р°СЏ РІРµСЂСЃРёСЏ С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р·Р°РґР°РЅРёР№ (СЃС‚СЂРѕРєР° РёР· С„Р°Р№Р»Р°)
 $script:currentAssignmentVersion = $null
-# Путь к последнему обработанному файлу конфигурации заданий
+# РџСѓС‚СЊ Рє РїРѕСЃР»РµРґРЅРµРјСѓ РѕР±СЂР°Р±РѕС‚Р°РЅРЅРѕРјСѓ С„Р°Р№Р»Сѓ РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р·Р°РґР°РЅРёР№
 $script:lastProcessedConfigFile = $null
-# Объект с конфигурацией самого агента (из config.json)
+# РћР±СЉРµРєС‚ СЃ РєРѕРЅС„РёРіСѓСЂР°С†РёРµР№ СЃР°РјРѕРіРѕ Р°РіРµРЅС‚Р° (РёР· config.json)
 $script:localConfig = $null
-# Путь к лог-файлу агента
+# РџСѓС‚СЊ Рє Р»РѕРі-С„Р°Р№Р»Сѓ Р°РіРµРЅС‚Р°
 $script:logFile = $null
-# Установленный уровень логирования
+# РЈСЃС‚Р°РЅРѕРІР»РµРЅРЅС‹Р№ СѓСЂРѕРІРµРЅСЊ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ
 $script:LogLevel = "Info"
-# Допустимые уровни логирования
+# Р”РѕРїСѓСЃС‚РёРјС‹Рµ СѓСЂРѕРІРЅРё Р»РѕРіРёСЂРѕРІР°РЅРёСЏ
 $ValidLogLevels = @("Debug", "Verbose", "Info", "Warn", "Error")
 
 
-# --- Функции ---
+# --- Р¤СѓРЅРєС†РёРё ---
 
-#region Функции
+#region Р¤СѓРЅРєС†РёРё
 
 <#
-.SYNOPSIS Записывает сообщение в лог.
+.SYNOPSIS Р—Р°РїРёСЃС‹РІР°РµС‚ СЃРѕРѕР±С‰РµРЅРёРµ РІ Р»РѕРі.
 #>
 function Write-Log{
-    param( [Parameter(Mandatory=$true)][string]$Message, [ValidateSet("Debug","Verbose","Info","Warn","Error",IgnoreCase=$true)] [string]$Level="Info" ); if (-not $script:localConfig -or -not $script:logFile) { Write-Host "[$Level] $Message"; return }; $logLevels=@{"Debug"=4;"Verbose"=3;"Info"=2;"Warn"=1;"Error"=0}; $effectiveLogLevel = $script:LogLevel; if(-not $logLevels.ContainsKey($effectiveLogLevel)){ $effectiveLogLevel="Info" }; $currentLevelValue = $logLevels[$effectiveLogLevel]; $messageLevelValue = $logLevels[$Level]; if($null -eq $messageLevelValue){ $messageLevelValue=$logLevels["Info"] }; if($messageLevelValue -le $currentLevelValue){ $timestamp=Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logMessage="[$timestamp] [$Level] [$script:ComputerName] - $Message"; $consoleColor = switch($Level){"Error"{"Red"};"Warn"{"Yellow"};"Info"{"White"};"Verbose"{"Gray"};"Debug"{"DarkGray"};Default{"Gray"}}; Write-Host $logMessage -ForegroundColor $consoleColor; if($script:logFile){ try { $logDir = Split-Path $script:logFile -Parent; if($logDir -and (-not(Test-Path $logDir -PathType Container))){ Write-Host "[INFO] Создание папки логов: '$logDir'."; New-Item -Path $logDir -ItemType Directory -Force -EA Stop | Out-Null }; Add-Content -Path $script:logFile -Value $logMessage -Encoding UTF8 -Force -EA Stop } catch { Write-Host "[CRITICAL] Ошибка записи в лог '$script:logFile': $($_.Exception.Message)" -ForegroundColor Red; try { $fallbackLog = "$PSScriptRoot\offline_agent_fallback.log"; Add-Content -Path $fallbackLog -Value $logMessage -Encoding UTF8 -Force -EA SilentlyContinue; Add-Content -Path $fallbackLog -Value "[CRITICAL] Ошибка записи в '$script:logFile': $($_.Exception.Message)" -Encoding UTF8 -Force -EA SilentlyContinue } catch {} } } }
+    param( [Parameter(Mandatory=$true)][string]$Message, [ValidateSet("Debug","Verbose","Info","Warn","Error",IgnoreCase=$true)] [string]$Level="Info" ); if (-not $script:localConfig -or -not $script:logFile) { Write-Host "[$Level] $Message"; return }; $logLevels=@{"Debug"=4;"Verbose"=3;"Info"=2;"Warn"=1;"Error"=0}; $effectiveLogLevel = $script:LogLevel; if(-not $logLevels.ContainsKey($effectiveLogLevel)){ $effectiveLogLevel="Info" }; $currentLevelValue = $logLevels[$effectiveLogLevel]; $messageLevelValue = $logLevels[$Level]; if($null -eq $messageLevelValue){ $messageLevelValue=$logLevels["Info"] }; if($messageLevelValue -le $currentLevelValue){ $timestamp=Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; $logMessage="[$timestamp] [$Level] [$script:ComputerName] - $Message"; $consoleColor = switch($Level){"Error"{"Red"};"Warn"{"Yellow"};"Info"{"White"};"Verbose"{"Gray"};"Debug"{"DarkGray"};Default{"Gray"}}; Write-Host $logMessage -ForegroundColor $consoleColor; if($script:logFile){ try { $logDir = Split-Path $script:logFile -Parent; if($logDir -and (-not(Test-Path $logDir -PathType Container))){ Write-Host "[INFO] РЎРѕР·РґР°РЅРёРµ РїР°РїРєРё Р»РѕРіРѕРІ: '$logDir'."; New-Item -Path $logDir -ItemType Directory -Force -EA Stop | Out-Null }; Add-Content -Path $script:logFile -Value $logMessage -Encoding UTF8 -Force -EA Stop } catch { Write-Host "[CRITICAL] РћС€РёР±РєР° Р·Р°РїРёСЃРё РІ Р»РѕРі '$script:logFile': $($_.Exception.Message)" -ForegroundColor Red; try { $fallbackLog = "$PSScriptRoot\offline_agent_fallback.log"; Add-Content -Path $fallbackLog -Value $logMessage -Encoding UTF8 -Force -EA SilentlyContinue; Add-Content -Path $fallbackLog -Value "[CRITICAL] РћС€РёР±РєР° Р·Р°РїРёСЃРё РІ '$script:logFile': $($_.Exception.Message)" -Encoding UTF8 -Force -EA SilentlyContinue } catch {} } } }
 }
 
 <#
-.SYNOPSIS Возвращает значение по умолчанию, если входное значение ложно.
+.SYNOPSIS Р’РѕР·РІСЂР°С‰Р°РµС‚ Р·РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ, РµСЃР»Рё РІС…РѕРґРЅРѕРµ Р·РЅР°С‡РµРЅРёРµ Р»РѕР¶РЅРѕ.
 #>
 filter Get-OrElse_Internal{ param([object]$DefaultValue); if ($_) { $_ } else { $DefaultValue } }
 
-#endregion Функции
+#endregion Р¤СѓРЅРєС†РёРё
 
-# --- Основной код агента ---
+# --- РћСЃРЅРѕРІРЅРѕР№ РєРѕРґ Р°РіРµРЅС‚Р° ---
 
-# 1. Чтение и валидация конфигурации агента
-# ... (код чтения и валидации конфига без изменений) ...
-Write-Host "Оффлайн-агент мониторинга v$AgentScriptVersion"; Write-Host "Чтение конфигурации агента: $configFile"
-if(-not(Test-Path $configFile -PathType Leaf)){ Write-Error "Критическая ошибка: Файл конфигурации '$configFile' не найден."; exit 1 }
+# 1. Р§С‚РµРЅРёРµ Рё РІР°Р»РёРґР°С†РёСЏ РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р°РіРµРЅС‚Р°
+# ... (РєРѕРґ С‡С‚РµРЅРёСЏ Рё РІР°Р»РёРґР°С†РёРё РєРѕРЅС„РёРіР° Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
+Write-Host "РћС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚ РјРѕРЅРёС‚РѕСЂРёРЅРіР° v$AgentScriptVersion"; Write-Host "Р§С‚РµРЅРёРµ РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р°РіРµРЅС‚Р°: $configFile"
+if(-not(Test-Path $configFile -PathType Leaf)){ Write-Error "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: Р¤Р°Р№Р» РєРѕРЅС„РёРіСѓСЂР°С†РёРё '$configFile' РЅРµ РЅР°Р№РґРµРЅ."; exit 1 }
 try { $script:localConfig = Get-Content -Path $configFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop }
-catch { Write-Error "Критическая ошибка: Ошибка чтения/парсинга JSON из '$configFile': $($_.Exception.Message)"; exit 1 }
-$requiredLocalConfigFields = @("object_id","output_path","output_name_template","assignments_file_path","logFile","LogLevel","check_interval_seconds"); $missingFields = $requiredLocalConfigFields | Where-Object { -not ($script:localConfig.PSObject.Properties.Name.Contains($_)) -or $null -eq $script:localConfig.$_ -or ($script:localConfig.$_ -is [string] -and [string]::IsNullOrWhiteSpace($script:localConfig.$_))}; if($missingFields){ Write-Error "Критическая ошибка: Отсутствуют/пусты обязательные поля в '$configFile': $($missingFields -join ', ')"; exit 1 }
-$script:logFile = if($PSBoundParameters.ContainsKey('paramLogFile') -and $paramLogFile){ $paramLogFile } else { $script:localConfig.logFile }; $script:LogLevel = if($PSBoundParameters.ContainsKey('paramLogLevel') -and $paramLogLevel){ $paramLogLevel } else { $script:localConfig.LogLevel }; if(-not $ValidLogLevels.Contains($script:LogLevel)){ Write-Host "[WARN] Некорректный LogLevel '$($script:LogLevel)'. Используется 'Info'." -ForegroundColor Yellow; $script:LogLevel = "Info" }; $checkInterval = 60; if($script:localConfig.check_interval_seconds -and [int]::TryParse($script:localConfig.check_interval_seconds,[ref]$null) -and $script:localConfig.check_interval_seconds -ge 5){ $checkInterval = $script:localConfig.check_interval_seconds } else { Write-Log "Некорректное значение check_interval_seconds ('$($script:localConfig.check_interval_seconds)'). Используется $checkInterval сек." "Warn" }
+catch { Write-Error "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РћС€РёР±РєР° С‡С‚РµРЅРёСЏ/РїР°СЂСЃРёРЅРіР° JSON РёР· '$configFile': $($_.Exception.Message)"; exit 1 }
+$requiredLocalConfigFields = @("object_id","output_path","output_name_template","assignments_file_path","logFile","LogLevel","check_interval_seconds"); $missingFields = $requiredLocalConfigFields | Where-Object { -not ($script:localConfig.PSObject.Properties.Name.Contains($_)) -or $null -eq $script:localConfig.$_ -or ($script:localConfig.$_ -is [string] -and [string]::IsNullOrWhiteSpace($script:localConfig.$_))}; if($missingFields){ Write-Error "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РћС‚СЃСѓС‚СЃС‚РІСѓСЋС‚/РїСѓСЃС‚С‹ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїРѕР»СЏ РІ '$configFile': $($missingFields -join ', ')"; exit 1 }
+$script:logFile = if($PSBoundParameters.ContainsKey('paramLogFile') -and $paramLogFile){ $paramLogFile } else { $script:localConfig.logFile }; $script:LogLevel = if($PSBoundParameters.ContainsKey('paramLogLevel') -and $paramLogLevel){ $paramLogLevel } else { $script:localConfig.LogLevel }; if(-not $ValidLogLevels.Contains($script:LogLevel)){ Write-Host "[WARN] РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ LogLevel '$($script:LogLevel)'. РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ 'Info'." -ForegroundColor Yellow; $script:LogLevel = "Info" }; $checkInterval = 60; if($script:localConfig.check_interval_seconds -and [int]::TryParse($script:localConfig.check_interval_seconds,[ref]$null) -and $script:localConfig.check_interval_seconds -ge 5){ $checkInterval = $script:localConfig.check_interval_seconds } else { Write-Log "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ check_interval_seconds ('$($script:localConfig.check_interval_seconds)'). РСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ $checkInterval СЃРµРє." "Warn" }
 $objectId = $script:localConfig.object_id; $outputPath = $script:localConfig.output_path; $outputNameTemplate = $script:localConfig.output_name_template; $assignmentsFolderPath = $script:localConfig.assignments_file_path
 
 
-# 2. Инициализация и проверка путей
-# ... (код инициализации и проверки путей без изменений) ...
-Write-Log "Оффлайн-агент запущен. Версия: $AgentScriptVersion. Имя хоста: $script:ComputerName" "Info"; Write-Log ("Параметры: ObjectID={0}, Интервал={1} сек, Папка заданий='{2}', Папка результатов='{3}'" -f $objectId, $checkInterval, $assignmentsFolderPath, $outputPath) "Info"; Write-Log "Логирование в '$script:logFile' с уровнем '$script:LogLevel'" "Info"; if(-not(Test-Path $outputPath -PathType Container)){ Write-Log "Папка для результатов '$outputPath' не найдена. Попытка создать..." "Warn"; try { New-Item -Path $outputPath -ItemType Directory -Force -ErrorAction Stop | Out-Null; Write-Log "Папка '$outputPath' успешно создана." "Info" } catch { Write-Log "Критическая ошибка: Не удалось создать папку для результатов '$outputPath': $($_.Exception.Message)" "Error"; exit 1 } }; if(-not(Test-Path $assignmentsFolderPath -PathType Container)){ Write-Log "Критическая ошибка: Папка для файлов заданий '$assignmentsFolderPath' не найдена." "Error"; exit 1 }
+# 2. РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Рё РїСЂРѕРІРµСЂРєР° РїСѓС‚РµР№
+# ... (РєРѕРґ РёРЅРёС†РёР°Р»РёР·Р°С†РёРё Рё РїСЂРѕРІРµСЂРєРё РїСѓС‚РµР№ Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
+Write-Log "РћС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚ Р·Р°РїСѓС‰РµРЅ. Р’РµСЂСЃРёСЏ: $AgentScriptVersion. РРјСЏ С…РѕСЃС‚Р°: $script:ComputerName" "Info"; Write-Log ("РџР°СЂР°РјРµС‚СЂС‹: ObjectID={0}, РРЅС‚РµСЂРІР°Р»={1} СЃРµРє, РџР°РїРєР° Р·Р°РґР°РЅРёР№='{2}', РџР°РїРєР° СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ='{3}'" -f $objectId, $checkInterval, $assignmentsFolderPath, $outputPath) "Info"; Write-Log "Р›РѕРіРёСЂРѕРІР°РЅРёРµ РІ '$script:logFile' СЃ СѓСЂРѕРІРЅРµРј '$script:LogLevel'" "Info"; if(-not(Test-Path $outputPath -PathType Container)){ Write-Log "РџР°РїРєР° РґР»СЏ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ '$outputPath' РЅРµ РЅР°Р№РґРµРЅР°. РџРѕРїС‹С‚РєР° СЃРѕР·РґР°С‚СЊ..." "Warn"; try { New-Item -Path $outputPath -ItemType Directory -Force -ErrorAction Stop | Out-Null; Write-Log "РџР°РїРєР° '$outputPath' СѓСЃРїРµС€РЅРѕ СЃРѕР·РґР°РЅР°." "Info" } catch { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ РїР°РїРєСѓ РґР»СЏ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ '$outputPath': $($_.Exception.Message)" "Error"; exit 1 } }; if(-not(Test-Path $assignmentsFolderPath -PathType Container)){ Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР°: РџР°РїРєР° РґР»СЏ С„Р°Р№Р»РѕРІ Р·Р°РґР°РЅРёР№ '$assignmentsFolderPath' РЅРµ РЅР°Р№РґРµРЅР°." "Error"; exit 1 }
 
 
-# --- 3. Основной цикл работы агента ---
-Write-Log "Запуск основного цикла агента..." "Info"
+# --- 3. РћСЃРЅРѕРІРЅРѕР№ С†РёРєР» СЂР°Р±РѕС‚С‹ Р°РіРµРЅС‚Р° ---
+Write-Log "Р—Р°РїСѓСЃРє РѕСЃРЅРѕРІРЅРѕРіРѕ С†РёРєР»Р° Р°РіРµРЅС‚Р°..." "Info"
 while ($true) {
     $cycleStartTime = Get-Date
-    Write-Log "Начало итерации цикла ($($cycleStartTime.ToString('s')))." "Verbose"
+    Write-Log "РќР°С‡Р°Р»Рѕ РёС‚РµСЂР°С†РёРё С†РёРєР»Р° ($($cycleStartTime.ToString('s')))." "Verbose"
 
-    # --- 3.1 Поиск и чтение файла конфигурации заданий ---
-    # ... (код поиска и чтения файла конфига без изменений) ...
+    # --- 3.1 РџРѕРёСЃРє Рё С‡С‚РµРЅРёРµ С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё Р·Р°РґР°РЅРёР№ ---
+    # ... (РєРѕРґ РїРѕРёСЃРєР° Рё С‡С‚РµРЅРёСЏ С„Р°Р№Р»Р° РєРѕРЅС„РёРіР° Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
     $latestConfigFile = $null; $configError = $null; $configData = $null
-    try { $configFileNamePattern = "*_${objectId}_*_assignments.json.status.*"; Write-Log "Поиск файла конфигурации в '$assignmentsFolderPath' по шаблону '$configFileNamePattern'..." "Debug"; $foundFiles = Get-ChildItem -Path $assignmentsFolderPath -Filter $configFileNamePattern -File -ErrorAction SilentlyContinue; if ($Error.Count -gt 0 -and $Error[0].CategoryInfo.Category -eq 'ReadError') { throw ("Ошибка доступа при поиске файла конфигурации в '$assignmentsFolderPath': " + $Error[0].Exception.Message); $Error.Clear() }; if ($foundFiles) { $latestConfigFile = $foundFiles | Sort-Object Name -Descending | Select-Object -First 1; Write-Log "Найден последний файл конфигурации: $($latestConfigFile.FullName)" "Verbose" } else { Write-Log "Файлы конфигурации для ObjectID $objectId в '$assignmentsFolderPath' не найдены." "Warn" } } catch { $configError = "Ошибка поиска файла конфигурации: $($_.Exception.Message)"; Write-Log $configError "Error" }
-    if ($latestConfigFile -ne $null -and $configError -eq $null) { if ($latestConfigFile.FullName -ne $script:lastProcessedConfigFile) { Write-Log "Обнаружен новый/обновленный файл конфигурации: $($latestConfigFile.Name). Чтение..." "Info"; $tempAssignments = $null; $tempVersionTag = $null; try { $fileContent = Get-Content -Path $latestConfigFile.FullName -Raw -Encoding UTF8 -ErrorAction Stop; $fileContentClean = $fileContent.TrimStart([char]0xFEFF); $configData = $fileContentClean | ConvertFrom-Json -ErrorAction Stop; if ($null -eq $configData -or (-not $configData.PSObject.Properties.Name.Contains('assignments')) -or ($configData.assignments -isnot [array]) -or (-not $configData.PSObject.Properties.Name.Contains('assignment_config_version')) -or (-not $configData.assignment_config_version) ) { throw ("Файл '$($latestConfigFile.Name)' имеет некорректную структуру JSON...") }; $tempVersionTag = $configData.assignment_config_version; $tempAssignments = $configData.assignments; Write-Log ("Файл '{0}' успешно прочитан..." -f $latestConfigFile.Name, $tempAssignments.Count, $tempVersionTag) "Info"; $script:currentAssignments = $tempAssignments; $script:currentAssignmentVersion = $tempVersionTag; $script:lastProcessedConfigFile = $latestConfigFile.FullName; Write-Log "Список заданий обновлен (версия: $tempVersionTag)..." "Info" } catch { $errorMsg = "Критическая ошибка обработки файла '$($latestConfigFile.Name)': $($_.Exception.Message)"; Write-Log $errorMsg "Error"; Write-Log ("Продолжаем использовать предыдущий список заданий (версия: {0})." -f ($script:currentAssignmentVersion | Get-OrElse_Internal '[неизвестно]')) "Warn" } } else { Write-Log "Файл конфигурации '$($latestConfigFile.Name)' не изменился." "Verbose" } } elseif ($configError -ne $null) { Write-Log "Продолжаем использовать предыдущий список заданий..." "Warn" } elseif ($script:lastProcessedConfigFile -ne $null) { Write-Log "Файлы конфигурации не найдены. Продолжаем использовать предыдущий список..." "Warn" } else { Write-Log "Файлы конфигурации не найдены..." "Info" }
+    try { $configFileNamePattern = "*_${objectId}_*_assignments.json.status.*"; Write-Log "РџРѕРёСЃРє С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё РІ '$assignmentsFolderPath' РїРѕ С€Р°Р±Р»РѕРЅСѓ '$configFileNamePattern'..." "Debug"; $foundFiles = Get-ChildItem -Path $assignmentsFolderPath -Filter $configFileNamePattern -File -ErrorAction SilentlyContinue; if ($Error.Count -gt 0 -and $Error[0].CategoryInfo.Category -eq 'ReadError') { throw ("РћС€РёР±РєР° РґРѕСЃС‚СѓРїР° РїСЂРё РїРѕРёСЃРєРµ С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё РІ '$assignmentsFolderPath': " + $Error[0].Exception.Message); $Error.Clear() }; if ($foundFiles) { $latestConfigFile = $foundFiles | Sort-Object Name -Descending | Select-Object -First 1; Write-Log "РќР°Р№РґРµРЅ РїРѕСЃР»РµРґРЅРёР№ С„Р°Р№Р» РєРѕРЅС„РёРіСѓСЂР°С†РёРё: $($latestConfigFile.FullName)" "Verbose" } else { Write-Log "Р¤Р°Р№Р»С‹ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РґР»СЏ ObjectID $objectId РІ '$assignmentsFolderPath' РЅРµ РЅР°Р№РґРµРЅС‹." "Warn" } } catch { $configError = "РћС€РёР±РєР° РїРѕРёСЃРєР° С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё: $($_.Exception.Message)"; Write-Log $configError "Error" }
+    if ($latestConfigFile -ne $null -and $configError -eq $null) { if ($latestConfigFile.FullName -ne $script:lastProcessedConfigFile) { Write-Log "РћР±РЅР°СЂСѓР¶РµРЅ РЅРѕРІС‹Р№/РѕР±РЅРѕРІР»РµРЅРЅС‹Р№ С„Р°Р№Р» РєРѕРЅС„РёРіСѓСЂР°С†РёРё: $($latestConfigFile.Name). Р§С‚РµРЅРёРµ..." "Info"; $tempAssignments = $null; $tempVersionTag = $null; try { $fileContent = Get-Content -Path $latestConfigFile.FullName -Raw -Encoding UTF8 -ErrorAction Stop; $fileContentClean = $fileContent.TrimStart([char]0xFEFF); $configData = $fileContentClean | ConvertFrom-Json -ErrorAction Stop; if ($null -eq $configData -or (-not $configData.PSObject.Properties.Name.Contains('assignments')) -or ($configData.assignments -isnot [array]) -or (-not $configData.PSObject.Properties.Name.Contains('assignment_config_version')) -or (-not $configData.assignment_config_version) ) { throw ("Р¤Р°Р№Р» '$($latestConfigFile.Name)' РёРјРµРµС‚ РЅРµРєРѕСЂСЂРµРєС‚РЅСѓСЋ СЃС‚СЂСѓРєС‚СѓСЂСѓ JSON...") }; $tempVersionTag = $configData.assignment_config_version; $tempAssignments = $configData.assignments; Write-Log ("Р¤Р°Р№Р» '{0}' СѓСЃРїРµС€РЅРѕ РїСЂРѕС‡РёС‚Р°РЅ..." -f $latestConfigFile.Name, $tempAssignments.Count, $tempVersionTag) "Info"; $script:currentAssignments = $tempAssignments; $script:currentAssignmentVersion = $tempVersionTag; $script:lastProcessedConfigFile = $latestConfigFile.FullName; Write-Log "РЎРїРёСЃРѕРє Р·Р°РґР°РЅРёР№ РѕР±РЅРѕРІР»РµРЅ (РІРµСЂСЃРёСЏ: $tempVersionTag)..." "Info" } catch { $errorMsg = "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° РѕР±СЂР°Р±РѕС‚РєРё С„Р°Р№Р»Р° '$($latestConfigFile.Name)': $($_.Exception.Message)"; Write-Log $errorMsg "Error"; Write-Log ("РџСЂРѕРґРѕР»Р¶Р°РµРј РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РїСЂРµРґС‹РґСѓС‰РёР№ СЃРїРёСЃРѕРє Р·Р°РґР°РЅРёР№ (РІРµСЂСЃРёСЏ: {0})." -f ($script:currentAssignmentVersion | Get-OrElse_Internal '[РЅРµРёР·РІРµСЃС‚РЅРѕ]')) "Warn" } } else { Write-Log "Р¤Р°Р№Р» РєРѕРЅС„РёРіСѓСЂР°С†РёРё '$($latestConfigFile.Name)' РЅРµ РёР·РјРµРЅРёР»СЃСЏ." "Verbose" } } elseif ($configError -ne $null) { Write-Log "РџСЂРѕРґРѕР»Р¶Р°РµРј РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РїСЂРµРґС‹РґСѓС‰РёР№ СЃРїРёСЃРѕРє Р·Р°РґР°РЅРёР№..." "Warn" } elseif ($script:lastProcessedConfigFile -ne $null) { Write-Log "Р¤Р°Р№Р»С‹ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РЅРµ РЅР°Р№РґРµРЅС‹. РџСЂРѕРґРѕР»Р¶Р°РµРј РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РїСЂРµРґС‹РґСѓС‰РёР№ СЃРїРёСЃРѕРє..." "Warn" } else { Write-Log "Р¤Р°Р№Р»С‹ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РЅРµ РЅР°Р№РґРµРЅС‹..." "Info" }
 
-    # --- 3.2 Выполнение текущего списка заданий ---
+    # --- 3.2 Р’С‹РїРѕР»РЅРµРЅРёРµ С‚РµРєСѓС‰РµРіРѕ СЃРїРёСЃРєР° Р·Р°РґР°РЅРёР№ ---
     $cycleCheckResultsList = [System.Collections.Generic.List[object]]::new()
 
     if ($script:currentAssignments -ne $null -and $script:currentAssignments.Count -gt 0) {
         $assignmentsCount = $script:currentAssignments.Count
-        Write-Log "Начало выполнения $assignmentsCount заданий (Версия конфига: $($script:currentAssignmentVersion | Get-OrElse_Internal 'N/A'))..." "Info"
+        Write-Log "РќР°С‡Р°Р»Рѕ РІС‹РїРѕР»РЅРµРЅРёСЏ $assignmentsCount Р·Р°РґР°РЅРёР№ (Р’РµСЂСЃРёСЏ РєРѕРЅС„РёРіР°: $($script:currentAssignmentVersion | Get-OrElse_Internal 'N/A'))..." "Info"
         $completedCount = 0
 
         foreach ($assignmentRaw in $script:currentAssignments) {
             $completedCount++
             $assignment = [PSCustomObject]$assignmentRaw
-            Write-Log "Выполнение $completedCount/$assignmentsCount (ID: $($assignment.assignment_id))..." "Verbose"
+            Write-Log "Р’С‹РїРѕР»РЅРµРЅРёРµ $completedCount/$assignmentsCount (ID: $($assignment.assignment_id))..." "Verbose"
 
             if ($null -eq $assignment -or $null -eq $assignment.assignment_id -or -not $assignment.method_name) {
-                Write-Log "Пропущено некорректное задание в списке: $($assignment | Out-String)" "Warn"
-                # --- ИЗМЕНЕНО: Создаем объект ошибки через слияние ---
+                Write-Log "РџСЂРѕРїСѓС‰РµРЅРѕ РЅРµРєРѕСЂСЂРµРєС‚РЅРѕРµ Р·Р°РґР°РЅРёРµ РІ СЃРїРёСЃРєРµ: $($assignment | Out-String)" "Warn"
+                # --- РР—РњР•РќР•РќРћ: РЎРѕР·РґР°РµРј РѕР±СЉРµРєС‚ РѕС€РёР±РєРё С‡РµСЂРµР· СЃР»РёСЏРЅРёРµ ---
                 $errorDetails = @{ assignment_object = ($assignment | Out-String) }
                 $errorResultBase = New-CheckResultObject -IsAvailable $false `
-                                      -ErrorMessage "Некорректная структура задания в файле конфигурации." `
+                                      -ErrorMessage "РќРµРєРѕСЂСЂРµРєС‚РЅР°СЏ СЃС‚СЂСѓРєС‚СѓСЂР° Р·Р°РґР°РЅРёСЏ РІ С„Р°Р№Р»Рµ РєРѕРЅС„РёРіСѓСЂР°С†РёРё." `
                                       -Details $errorDetails
                 $idPart = @{ assignment_id = ($assignment.assignment_id | Get-OrElse_Internal $null) }
                 $errorResultToSave = $idPart + $errorResultBase
                 $cycleCheckResultsList.Add($errorResultToSave)
-                # --- КОНЕЦ ИЗМЕНЕНИЯ ---
+                # --- РљРћРќР•Р¦ РР—РњР•РќР•РќРРЇ ---
                 continue
             }
 
             $checkResult = $null
             try {
-                # Вызываем диспетчер проверок
+                # Р’С‹Р·С‹РІР°РµРј РґРёСЃРїРµС‚С‡РµСЂ РїСЂРѕРІРµСЂРѕРє
                 $checkResult = Invoke-StatusMonitorCheck -Assignment $assignment `
                                                         -Verbose:$VerbosePreference `
                                                         -Debug:$DebugPreference
 
-                Write-Log ("Результат ID {0}: IsAvailable={1}, CheckSuccess={2}, Error='{3}'" -f `
+                Write-Log ("Р РµР·СѓР»СЊС‚Р°С‚ ID {0}: IsAvailable={1}, CheckSuccess={2}, Error='{3}'" -f `
                            $assignment.assignment_id, $checkResult.IsAvailable, $checkResult.CheckSuccess, $checkResult.ErrorMessage) "Verbose"
 
-                # --- ИЗМЕНЕНО: Создаем НОВЫЙ объект результата с ID через слияние ---
+                # --- РР—РњР•РќР•РќРћ: РЎРѕР·РґР°РµРј РќРћР’Р«Р™ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° СЃ ID С‡РµСЂРµР· СЃР»РёСЏРЅРёРµ ---
                 $idPart = @{ assignment_id = $assignment.assignment_id }
                 $resultToSave = $idPart + $checkResult
-                # --- КОНЕЦ ИЗМЕНЕНИЯ ---
+                # --- РљРћРќР•Р¦ РР—РњР•РќР•РќРРЇ ---
 
-                # Отладочный вывод (если включен Debug)
-                Write-Debug ("Объект ДО добавления в список (ID: {0}): {1}" -f `
+                # РћС‚Р»Р°РґРѕС‡РЅС‹Р№ РІС‹РІРѕРґ (РµСЃР»Рё РІРєР»СЋС‡РµРЅ Debug)
+                Write-Debug ("РћР±СЉРµРєС‚ Р”Рћ РґРѕР±Р°РІР»РµРЅРёСЏ РІ СЃРїРёСЃРѕРє (ID: {0}): {1}" -f `
                              $assignment.assignment_id, ($resultToSave | ConvertTo-Json -Depth 4 -Compress))
 
-                # Добавляем результат в список для файла
+                # Р”РѕР±Р°РІР»СЏРµРј СЂРµР·СѓР»СЊС‚Р°С‚ РІ СЃРїРёСЃРѕРє РґР»СЏ С„Р°Р№Р»Р°
                 $cycleCheckResultsList.Add($resultToSave)
 
             } catch {
-                 # Обработка критической ошибки выполнения Invoke-StatusMonitorCheck
-                 $errorMessage = "Критическая ошибка при выполнении задания ID $($assignment.assignment_id): $($_.Exception.Message)"
+                 # РћР±СЂР°Р±РѕС‚РєР° РєСЂРёС‚РёС‡РµСЃРєРѕР№ РѕС€РёР±РєРё РІС‹РїРѕР»РЅРµРЅРёСЏ Invoke-StatusMonitorCheck
+                 $errorMessage = "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° РїСЂРё РІС‹РїРѕР»РЅРµРЅРёРё Р·Р°РґР°РЅРёСЏ ID $($assignment.assignment_id): $($_.Exception.Message)"
                  Write-Log $errorMessage "Error"
-                 # Создаем запись об ошибке
+                 # РЎРѕР·РґР°РµРј Р·Р°РїРёСЃСЊ РѕР± РѕС€РёР±РєРµ
                  $errorDetails = @{ ErrorRecord = $_.ToString() }
                  $errorResultBase = New-CheckResultObject -IsAvailable $false `
                                       -ErrorMessage $errorMessage `
                                       -Details $errorDetails
-                 # --- ИЗМЕНЕНО: Создаем НОВЫЙ объект ошибки с ID через слияние ---
+                 # --- РР—РњР•РќР•РќРћ: РЎРѕР·РґР°РµРј РќРћР’Р«Р™ РѕР±СЉРµРєС‚ РѕС€РёР±РєРё СЃ ID С‡РµСЂРµР· СЃР»РёСЏРЅРёРµ ---
                  $idPart = @{ assignment_id = $assignment.assignment_id }
                  $errorResultToSave = $idPart + $errorResultBase
-                 # --- КОНЕЦ ИЗМЕНЕНИЯ ---
+                 # --- РљРћРќР•Р¦ РР—РњР•РќР•РќРРЇ ---
 
-                 # Отладочный вывод для ошибки
-                 Write-Debug ("ОБЪЕКТ ОШИБКИ ДО добавления в список (ID: {0}): {1}" -f `
+                 # РћС‚Р»Р°РґРѕС‡РЅС‹Р№ РІС‹РІРѕРґ РґР»СЏ РѕС€РёР±РєРё
+                 Write-Debug ("РћР‘РЄР•РљРў РћРЁРР‘РљР Р”Рћ РґРѕР±Р°РІР»РµРЅРёСЏ РІ СЃРїРёСЃРѕРє (ID: {0}): {1}" -f `
                               $assignment.assignment_id, ($errorResultToSave | ConvertTo-Json -Depth 4 -Compress))
 
-                 # Добавляем результат с ошибкой в общий список
+                 # Р”РѕР±Р°РІР»СЏРµРј СЂРµР·СѓР»СЊС‚Р°С‚ СЃ РѕС€РёР±РєРѕР№ РІ РѕР±С‰РёР№ СЃРїРёСЃРѕРє
                  $cycleCheckResultsList.Add($errorResultToSave)
             }
-        } # Конец foreach assignment
+        } # РљРѕРЅРµС† foreach assignment
 
-        Write-Log "Выполнение $assignmentsCount заданий завершено. Собрано результатов: $($cycleCheckResultsList.Count)." "Info"
+        Write-Log "Р’С‹РїРѕР»РЅРµРЅРёРµ $assignmentsCount Р·Р°РґР°РЅРёР№ Р·Р°РІРµСЂС€РµРЅРѕ. РЎРѕР±СЂР°РЅРѕ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ: $($cycleCheckResultsList.Count)." "Info"
 
     } else {
-        Write-Log "Нет активных заданий для выполнения в этой итерации." "Verbose"
+        Write-Log "РќРµС‚ Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РІ СЌС‚РѕР№ РёС‚РµСЂР°С†РёРё." "Verbose"
     }
 
-    # --- 3.3 Формирование и сохранение файла результатов (*.zrpu) ---
+    # --- 3.3 Р¤РѕСЂРјРёСЂРѕРІР°РЅРёРµ Рё СЃРѕС…СЂР°РЅРµРЅРёРµ С„Р°Р№Р»Р° СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ (*.zrpu) ---
     if ($cycleCheckResultsList.Count -gt 0) {
-        # ... (код формирования $finalPayload и сохранения файла без изменений) ...
+        # ... (РєРѕРґ С„РѕСЂРјРёСЂРѕРІР°РЅРёСЏ $finalPayload Рё СЃРѕС…СЂР°РЅРµРЅРёСЏ С„Р°Р№Р»Р° Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
         $finalPayload = @{ agent_script_version = $AgentScriptVersion; assignment_config_version = $script:currentAssignmentVersion; results = $cycleCheckResultsList }
         $timestampForFile = Get-Date -Format "ddMMyy_HHmmss"; $outputFileName = $outputNameTemplate -replace "{object_id}", $objectId -replace "{ddMMyy_HHmmss}", $timestampForFile; $outputFileName = $outputFileName -replace '[\\/:*?"<>|]', '_'; $outputFileFullPath = Join-Path $outputPath $outputFileName
-        Write-Log "Сохранение $($cycleCheckResultsList.Count) результатов в файл: '$outputFileFullPath'" "Info"; Write-Log ("Версия агента: {0}, Версия конфига заданий: {1}" -f $AgentScriptVersion, ($script:currentAssignmentVersion | Get-OrElse_Internal 'N/A')) "Verbose"
-        try { $jsonToSave = $finalPayload | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue; $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($outputFileFullPath, $jsonToSave, $Utf8NoBomEncoding); Write-Log "Файл результатов '$outputFileName' успешно сохранен." "Info" }
-        catch { Write-Log "Критическая ошибка сохранения файла результатов '$outputFileFullPath': $($_.Exception.Message)" "Error" }
+        Write-Log "РЎРѕС…СЂР°РЅРµРЅРёРµ $($cycleCheckResultsList.Count) СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РІ С„Р°Р№Р»: '$outputFileFullPath'" "Info"; Write-Log ("Р’РµСЂСЃРёСЏ Р°РіРµРЅС‚Р°: {0}, Р’РµСЂСЃРёСЏ РєРѕРЅС„РёРіР° Р·Р°РґР°РЅРёР№: {1}" -f $AgentScriptVersion, ($script:currentAssignmentVersion | Get-OrElse_Internal 'N/A')) "Verbose"
+        try { $jsonToSave = $finalPayload | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue; $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($outputFileFullPath, $jsonToSave, $Utf8NoBomEncoding); Write-Log "Р¤Р°Р№Р» СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ '$outputFileName' СѓСЃРїРµС€РЅРѕ СЃРѕС…СЂР°РЅРµРЅ." "Info" }
+        catch { Write-Log "РљСЂРёС‚РёС‡РµСЃРєР°СЏ РѕС€РёР±РєР° СЃРѕС…СЂР°РЅРµРЅРёСЏ С„Р°Р№Р»Р° СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ '$outputFileFullPath': $($_.Exception.Message)" "Error" }
     } else {
-        Write-Log "Нет результатов для сохранения в файл в этой итерации." "Verbose"
+        Write-Log "РќРµС‚ СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РґР»СЏ СЃРѕС…СЂР°РЅРµРЅРёСЏ РІ С„Р°Р№Р» РІ СЌС‚РѕР№ РёС‚РµСЂР°С†РёРё." "Verbose"
     }
 
-    # --- 3.4 Пауза перед следующей итерацией ---
-    # ... (код расчета паузы и Start-Sleep без изменений) ...
+    # --- 3.4 РџР°СѓР·Р° РїРµСЂРµРґ СЃР»РµРґСѓСЋС‰РµР№ РёС‚РµСЂР°С†РёРµР№ ---
+    # ... (РєРѕРґ СЂР°СЃС‡РµС‚Р° РїР°СѓР·С‹ Рё Start-Sleep Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
     $cycleEndTime = Get-Date; $elapsedSeconds = ($cycleEndTime - $cycleStartTime).TotalSeconds; $sleepSeconds = $checkInterval - $elapsedSeconds; if ($sleepSeconds -lt 1) { $sleepSeconds = 1 }
-    Write-Log ("Итерация заняла {0:N2} сек. Пауза {1:N2} сек до следующего цикла..." -f $elapsedSeconds, $sleepSeconds) "Verbose"; Start-Sleep -Seconds $sleepSeconds
+    Write-Log ("РС‚РµСЂР°С†РёСЏ Р·Р°РЅСЏР»Р° {0:N2} СЃРµРє. РџР°СѓР·Р° {1:N2} СЃРµРє РґРѕ СЃР»РµРґСѓСЋС‰РµРіРѕ С†РёРєР»Р°..." -f $elapsedSeconds, $sleepSeconds) "Verbose"; Start-Sleep -Seconds $sleepSeconds
 
-} # --- Конец while ($true) ---
+} # --- РљРѕРЅРµС† while ($true) ---
 
-Write-Log "Оффлайн-агент завершает работу (неожиданный выход из основного цикла)." "Error"
+Write-Log "РћС„С„Р»Р°Р№РЅ-Р°РіРµРЅС‚ Р·Р°РІРµСЂС€Р°РµС‚ СЂР°Р±РѕС‚Сѓ (РЅРµРѕР¶РёРґР°РЅРЅС‹Р№ РІС‹С…РѕРґ РёР· РѕСЃРЅРѕРІРЅРѕРіРѕ С†РёРєР»Р°)." "Error"
 exit 1

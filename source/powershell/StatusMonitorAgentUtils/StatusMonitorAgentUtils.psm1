@@ -1,15 +1,15 @@
-# powershell/StatusMonitorAgentUtils/StatusMonitorAgentUtils.psm1
-# Модуль содержит диспетчер проверок и общие вспомогательные функции
-# для агентов мониторинга Status Monitor.
-# Версия с исправленными ошибками парсинга в Invoke-RemoteCheck (через -f).
+п»ї# powershell/StatusMonitorAgentUtils/StatusMonitorAgentUtils.psm1
+# РњРѕРґСѓР»СЊ СЃРѕРґРµСЂР¶РёС‚ РґРёСЃРїРµС‚С‡РµСЂ РїСЂРѕРІРµСЂРѕРє Рё РѕР±С‰РёРµ РІСЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё
+# РґР»СЏ Р°РіРµРЅС‚РѕРІ РјРѕРЅРёС‚РѕСЂРёРЅРіР° Status Monitor.
+# Р’РµСЂСЃРёСЏ СЃ РёСЃРїСЂР°РІР»РµРЅРЅС‹РјРё РѕС€РёР±РєР°РјРё РїР°СЂСЃРёРЅРіР° РІ Invoke-RemoteCheck (С‡РµСЂРµР· -f).
 
-#region Вспомогательные функции
+#region Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё
 
-#region Функция New-CheckResultObject
+#region Р¤СѓРЅРєС†РёСЏ New-CheckResultObject
 <#
 .SYNOPSIS
-    Создает стандартизированный объект результата проверки.
-# ... (остальная документация New-CheckResultObject без изменений) ...
+    РЎРѕР·РґР°РµС‚ СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё.
+# ... (РѕСЃС‚Р°Р»СЊРЅР°СЏ РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ New-CheckResultObject Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 #>
 function New-CheckResultObject {
     param(
@@ -22,12 +22,12 @@ function New-CheckResultObject {
         [Parameter(Mandatory=$false)]
         [string]$ErrorMessage = $null
     )
-    # ... (код функции New-CheckResultObject без изменений) ...
-    # Создаем базовую структуру
+    # ... (РєРѕРґ С„СѓРЅРєС†РёРё New-CheckResultObject Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
+    # РЎРѕР·РґР°РµРј Р±Р°Р·РѕРІСѓСЋ СЃС‚СЂСѓРєС‚СѓСЂСѓ
     $result = @{
         IsAvailable    = $IsAvailable
-        CheckSuccess   = $null # Инициализируем null
-        # --- ИЗМЕНЕНИЕ: Сразу сохраняем строку ISO 8601 (UTC) ---
+        CheckSuccess   = $null # РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј null
+        # --- РР—РњР•РќР•РќРР•: РЎСЂР°Р·Сѓ СЃРѕС…СЂР°РЅСЏРµРј СЃС‚СЂРѕРєСѓ ISO 8601 (UTC) ---
         Timestamp      = (Get-Date).ToUniversalTime().ToString("o")
         Details        = $Details
         ErrorMessage   = $ErrorMessage
@@ -40,11 +40,11 @@ function New-CheckResultObject {
 }
 #endregion
 
-#region Функция Invoke-RemoteCheck
+#region Р¤СѓРЅРєС†РёСЏ Invoke-RemoteCheck
 <#
 .SYNOPSIS
-    Выполняет скрипт проверки на удаленном узле.
-# ... (остальная документация Invoke-RemoteCheck без изменений) ...
+    Р’С‹РїРѕР»РЅСЏРµС‚ СЃРєСЂРёРїС‚ РїСЂРѕРІРµСЂРєРё РЅР° СѓРґР°Р»РµРЅРЅРѕРј СѓР·Р»Рµ.
+# ... (РѕСЃС‚Р°Р»СЊРЅР°СЏ РґРѕРєСѓРјРµРЅС‚Р°С†РёСЏ Invoke-RemoteCheck Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 #>
 function Invoke-RemoteCheck {
     [CmdletBinding()]
@@ -62,50 +62,50 @@ function Invoke-RemoteCheck {
         [System.Management.Automation.PSCredential]$Credential = $null
     )
 
-    Write-Verbose "Вызов Invoke-RemoteCheck для $TargetIP, скрипт: $CheckScriptPath"
+    Write-Verbose "Р’С‹Р·РѕРІ Invoke-RemoteCheck РґР»СЏ $TargetIP, СЃРєСЂРёРїС‚: $CheckScriptPath"
 
     try {
-        # --- Начало Реализации Удаленного Вызова ---
+        # --- РќР°С‡Р°Р»Рѕ Р РµР°Р»РёР·Р°С†РёРё РЈРґР°Р»РµРЅРЅРѕРіРѕ Р’С‹Р·РѕРІР° ---
         if (-not (Test-Path $CheckScriptPath -PathType Leaf)) {
-            throw "Локальный скрипт проверки '$CheckScriptPath' не найден для удаленного выполнения."
+            throw "Р›РѕРєР°Р»СЊРЅС‹Р№ СЃРєСЂРёРїС‚ РїСЂРѕРІРµСЂРєРё '$CheckScriptPath' РЅРµ РЅР°Р№РґРµРЅ РґР»СЏ СѓРґР°Р»РµРЅРЅРѕРіРѕ РІС‹РїРѕР»РЅРµРЅРёСЏ."
         }
         $ScriptContent = Get-Content -Path $CheckScriptPath -Raw -Encoding UTF8
         $RemoteScriptBlock = [ScriptBlock]::Create($ScriptContent)
         $invokeParams = @{ ComputerName = $TargetIP; ScriptBlock  = $RemoteScriptBlock; ErrorAction  = 'Stop'; ArgumentList = @($checkParams) }
         if ($Credential) { $invokeParams.Credential = $Credential }
 
-        Write-Verbose "Попытка Invoke-Command на $TargetIP..."
+        Write-Verbose "РџРѕРїС‹С‚РєР° Invoke-Command РЅР° $TargetIP..."
         $remoteResultRaw = Invoke-Command @invokeParams
         $remoteResult = $null
         if ($remoteResultRaw) { $remoteResult = $remoteResultRaw | Select-Object -Last 1 }
 
         if ($remoteResult -is [hashtable] -and $remoteResult.ContainsKey('IsAvailable')) {
-            Write-Verbose "Invoke-Command на $TargetIP успешно вернул стандартизированный результат."
+            Write-Verbose "Invoke-Command РЅР° $TargetIP СѓСЃРїРµС€РЅРѕ РІРµСЂРЅСѓР» СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚."
             if (-not $remoteResult.ContainsKey('Details') -or $remoteResult.Details -eq $null) { $remoteResult.Details = @{} }
             elseif ($remoteResult.Details -isnot [hashtable]) { $remoteResult.Details = @{ OriginalDetails = $remoteResult.Details } }
             $remoteResult.Details.execution_target = $TargetIP
             $remoteResult.Details.execution_mode = 'remote'
             return $remoteResult
         } else {
-             Write-Warning ("Удаленный скрипт на {0} не вернул ожидаемую хэш-таблицу. Результат: {1}" -f $TargetIP, ($remoteResultRaw | Out-String -Width 200))
-             return New-CheckResultObject -IsAvailable $false -ErrorMessage "Удаленный скрипт на $TargetIP вернул некорректный результат." -Details @{ RemoteOutput = ($remoteResultRaw | Out-String -Width 200) }
+             Write-Warning ("РЈРґР°Р»РµРЅРЅС‹Р№ СЃРєСЂРёРїС‚ РЅР° {0} РЅРµ РІРµСЂРЅСѓР» РѕР¶РёРґР°РµРјСѓСЋ С…СЌС€-С‚Р°Р±Р»РёС†Сѓ. Р РµР·СѓР»СЊС‚Р°С‚: {1}" -f $TargetIP, ($remoteResultRaw | Out-String -Width 200))
+             return New-CheckResultObject -IsAvailable $false -ErrorMessage "РЈРґР°Р»РµРЅРЅС‹Р№ СЃРєСЂРёРїС‚ РЅР° $TargetIP РІРµСЂРЅСѓР» РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚." -Details @{ RemoteOutput = ($remoteResultRaw | Out-String -Width 200) }
         }
-        # --- Конец Реализации Удаленного Вызова ---
+        # --- РљРѕРЅРµС† Р РµР°Р»РёР·Р°С†РёРё РЈРґР°Р»РµРЅРЅРѕРіРѕ Р’С‹Р·РѕРІР° ---
 
     } catch {
-        # Ловим ошибки Invoke-Command
-        # --- ИЗМЕНЕНО: Используем оператор -f ---
+        # Р›РѕРІРёРј РѕС€РёР±РєРё Invoke-Command
+        # --- РР—РњР•РќР•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РѕРїРµСЂР°С‚РѕСЂ -f ---
         $exceptionMessage = $_.Exception.Message
-        Write-Warning ("Ошибка Invoke-Command при выполнении '{0}' на {1}: {2}" -f $CheckScriptPath, $TargetIP, $exceptionMessage)
-        $errorMessage = "Ошибка удаленного выполнения на {0}: {1}" -f $TargetIP, $exceptionMessage
+        Write-Warning ("РћС€РёР±РєР° Invoke-Command РїСЂРё РІС‹РїРѕР»РЅРµРЅРёРё '{0}' РЅР° {1}: {2}" -f $CheckScriptPath, $TargetIP, $exceptionMessage)
+        $errorMessage = "РћС€РёР±РєР° СѓРґР°Р»РµРЅРЅРѕРіРѕ РІС‹РїРѕР»РЅРµРЅРёСЏ РЅР° {0}: {1}" -f $TargetIP, $exceptionMessage
 
         $errorDetails = @{ ErrorRecord = $_.ToString(); ErrorCategory = $_.CategoryInfo.Category.ToString(); ErrorReason = $_.CategoryInfo.Reason; ErrorTarget = $_.TargetObject }
 
         if ($_.CategoryInfo.Category -in ('ResourceUnavailable', 'AuthenticationError', 'SecurityError', 'OpenError', 'ConnectionError')) {
-             # --- ИЗМЕНЕНО: Используем оператор -f ---
-             $errorMessage = "Ошибка подключения/доступа к {0}: {1}" -f $TargetIP, $exceptionMessage
+             # --- РР—РњР•РќР•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РѕРїРµСЂР°С‚РѕСЂ -f ---
+             $errorMessage = "РћС€РёР±РєР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ/РґРѕСЃС‚СѓРїР° Рє {0}: {1}" -f $TargetIP, $exceptionMessage
         }
-        # --- КОНЕЦ ИЗМЕНЕНИЙ В CATCH ---
+        # --- РљРћРќР•Р¦ РР—РњР•РќР•РќРР™ Р’ CATCH ---
 
         return New-CheckResultObject -IsAvailable $false -ErrorMessage $errorMessage -Details $errorDetails
     }
@@ -114,20 +114,20 @@ function Invoke-RemoteCheck {
 
 #endregion
 
-# --- Основная функция-диспетчер ---
+# --- РћСЃРЅРѕРІРЅР°СЏ С„СѓРЅРєС†РёСЏ-РґРёСЃРїРµС‚С‡РµСЂ ---
 
 <#
 .SYNOPSIS
-    Выполняет проверку мониторинга согласно заданию.
+    Р’С‹РїРѕР»РЅСЏРµС‚ РїСЂРѕРІРµСЂРєСѓ РјРѕРЅРёС‚РѕСЂРёРЅРіР° СЃРѕРіР»Р°СЃРЅРѕ Р·Р°РґР°РЅРёСЋ.
 .DESCRIPTION
-    Функция-диспетчер. Определяет метод проверки из задания,
-    находит соответствующий скрипт в папке 'Checks', подготавливает
-    параметры и ЗАПУСКАЕТ СКРИПТ ЛОКАЛЬНО на машине агента.
-    Возвращает стандартизированный результат проверки.
+    Р¤СѓРЅРєС†РёСЏ-РґРёСЃРїРµС‚С‡РµСЂ. РћРїСЂРµРґРµР»СЏРµС‚ РјРµС‚РѕРґ РїСЂРѕРІРµСЂРєРё РёР· Р·Р°РґР°РЅРёСЏ,
+    РЅР°С…РѕРґРёС‚ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РёР№ СЃРєСЂРёРїС‚ РІ РїР°РїРєРµ 'Checks', РїРѕРґРіРѕС‚Р°РІР»РёРІР°РµС‚
+    РїР°СЂР°РјРµС‚СЂС‹ Рё Р—РђРџРЈРЎРљРђР•Рў РЎРљР РРџРў Р›РћРљРђР›Р¬РќРћ РЅР° РјР°С€РёРЅРµ Р°РіРµРЅС‚Р°.
+    Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚ РїСЂРѕРІРµСЂРєРё.
 .PARAMETER Assignment
-    [PSCustomObject] Обязательный. Объект задания.
+    [PSCustomObject] РћР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. РћР±СЉРµРєС‚ Р·Р°РґР°РЅРёСЏ.
 .OUTPUTS
-    Hashtable - Стандартизированный объект результата проверки.
+    Hashtable - РЎС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р° РїСЂРѕРІРµСЂРєРё.
 #>
 function Invoke-StatusMonitorCheck {
     [CmdletBinding(SupportsShouldProcess=$false)]
@@ -136,90 +136,90 @@ function Invoke-StatusMonitorCheck {
         [PSCustomObject]$Assignment
     )
 
-    # Проверка базовой валидности задания
+    # РџСЂРѕРІРµСЂРєР° Р±Р°Р·РѕРІРѕР№ РІР°Р»РёРґРЅРѕСЃС‚Рё Р·Р°РґР°РЅРёСЏ
     if (-not $Assignment -or -not $Assignment.PSObject.Properties.Name.Contains('assignment_id') -or -not $Assignment.PSObject.Properties.Name.Contains('method_name')) {
-        Write-Warning "Invoke-StatusMonitorCheck: Передан некорректный объект задания."
-        # Формируем результат ошибки вручную (т.к. New-CheckResultObject может быть еще не загружен или быть частью проблемы)
-        return @{ IsAvailable = $false; CheckSuccess = $null; Timestamp = (Get-Date).ToUniversalTime().ToString("o"); ErrorMessage = "Некорректный объект задания передан в Invoke-StatusMonitorCheck."; Details = $null }
+        Write-Warning "Invoke-StatusMonitorCheck: РџРµСЂРµРґР°РЅ РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕР±СЉРµРєС‚ Р·Р°РґР°РЅРёСЏ."
+        # Р¤РѕСЂРјРёСЂСѓРµРј СЂРµР·СѓР»СЊС‚Р°С‚ РѕС€РёР±РєРё РІСЂСѓС‡РЅСѓСЋ (С‚.Рє. New-CheckResultObject РјРѕР¶РµС‚ Р±С‹С‚СЊ РµС‰Рµ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ РёР»Рё Р±С‹С‚СЊ С‡Р°СЃС‚СЊСЋ РїСЂРѕР±Р»РµРјС‹)
+        return @{ IsAvailable = $false; CheckSuccess = $null; Timestamp = (Get-Date).ToUniversalTime().ToString("o"); ErrorMessage = "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РѕР±СЉРµРєС‚ Р·Р°РґР°РЅРёСЏ РїРµСЂРµРґР°РЅ РІ Invoke-StatusMonitorCheck."; Details = $null }
     }
 
-    # Извлекаем основные данные из задания
+    # РР·РІР»РµРєР°РµРј РѕСЃРЅРѕРІРЅС‹Рµ РґР°РЅРЅС‹Рµ РёР· Р·Р°РґР°РЅРёСЏ
     $assignmentId = $Assignment.assignment_id
     $methodName = $Assignment.method_name
     $targetIP = $null
     if ($Assignment.PSObject.Properties.Name.Contains('ip_address')) {
         $targetIP = $Assignment.ip_address
     }
-    $nodeName = $Assignment.node_name | Get-OrElse "Узел ID $($Assignment.node_id | Get-OrElse $assignmentId)"
+    $nodeName = $Assignment.node_name | Get-OrElse "РЈР·РµР» ID $($Assignment.node_id | Get-OrElse $assignmentId)"
     $parameters = $Assignment.parameters | Get-OrElse @{}
     $successCriteria = $Assignment.success_criteria | Get-OrElse $null
 
-    Write-Verbose "[$($assignmentId)] Запуск диспетчера Invoke-StatusMonitorCheck для метода '$methodName' на '$nodeName' (TargetIP: $($targetIP | Get-OrElse 'Local'))"
+    Write-Verbose "[$($assignmentId)] Р—Р°РїСѓСЃРє РґРёСЃРїРµС‚С‡РµСЂР° Invoke-StatusMonitorCheck РґР»СЏ РјРµС‚РѕРґР° '$methodName' РЅР° '$nodeName' (TargetIP: $($targetIP | Get-OrElse 'Local'))"
 
-    # Определяем путь к скрипту проверки
-    $result = $null # Инициализируем переменную для результата
+    # РћРїСЂРµРґРµР»СЏРµРј РїСѓС‚СЊ Рє СЃРєСЂРёРїС‚Сѓ РїСЂРѕРІРµСЂРєРё
+    $result = $null # РРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј РїРµСЂРµРјРµРЅРЅСѓСЋ РґР»СЏ СЂРµР·СѓР»СЊС‚Р°С‚Р°
     try {
-        # Получаем путь к текущему модулю, чтобы найти папку Checks
-        # $MyInvocation.MyCommand.ModuleName может быть надежнее $PSScriptRoot внутри модуля
+        # РџРѕР»СѓС‡Р°РµРј РїСѓС‚СЊ Рє С‚РµРєСѓС‰РµРјСѓ РјРѕРґСѓР»СЋ, С‡С‚РѕР±С‹ РЅР°Р№С‚Рё РїР°РїРєСѓ Checks
+        # $MyInvocation.MyCommand.ModuleName РјРѕР¶РµС‚ Р±С‹С‚СЊ РЅР°РґРµР¶РЅРµРµ $PSScriptRoot РІРЅСѓС‚СЂРё РјРѕРґСѓР»СЏ
         $ModulePath = (Get-Module -Name $MyInvocation.MyCommand.ModuleName).Path
         $ModuleDir = Split-Path -Path $ModulePath -Parent
         $ChecksFolder = Join-Path -Path $ModuleDir -ChildPath "Checks"
         $CheckScriptFile = "Check-$($methodName).ps1"
         $CheckScriptPath = Join-Path -Path $ChecksFolder -ChildPath $CheckScriptFile
 
-        # Проверяем существование скрипта
+        # РџСЂРѕРІРµСЂСЏРµРј СЃСѓС‰РµСЃС‚РІРѕРІР°РЅРёРµ СЃРєСЂРёРїС‚Р°
         if (-not (Test-Path $CheckScriptPath -PathType Leaf)) {
-            $errorMessage = "Скрипт проверки '$CheckScriptFile' не найден в '$ChecksFolder'."
+            $errorMessage = "РЎРєСЂРёРїС‚ РїСЂРѕРІРµСЂРєРё '$CheckScriptFile' РЅРµ РЅР°Р№РґРµРЅ РІ '$ChecksFolder'."
             Write-Warning "[$($assignmentId)] $errorMessage"
-            # Используем New-CheckResultObject, предполагая, что он уже загружен на этом этапе
+            # РСЃРїРѕР»СЊР·СѓРµРј New-CheckResultObject, РїСЂРµРґРїРѕР»Р°РіР°СЏ, С‡С‚Рѕ РѕРЅ СѓР¶Рµ Р·Р°РіСЂСѓР¶РµРЅ РЅР° СЌС‚РѕРј СЌС‚Р°РїРµ
             return New-CheckResultObject -IsAvailable $false -ErrorMessage $errorMessage -Details @{ CheckedScriptPath = $CheckScriptPath }
         }
 
-        # Подготавливаем параметры для передачи в скрипт проверки
+        # РџРѕРґРіРѕС‚Р°РІР»РёРІР°РµРј РїР°СЂР°РјРµС‚СЂС‹ РґР»СЏ РїРµСЂРµРґР°С‡Рё РІ СЃРєСЂРёРїС‚ РїСЂРѕРІРµСЂРєРё
         $checkParams = @{
-            TargetIP        = $targetIP # Передаем IP из задания
+            TargetIP        = $targetIP # РџРµСЂРµРґР°РµРј IP РёР· Р·Р°РґР°РЅРёСЏ
             Parameters      = $parameters
             SuccessCriteria = $successCriteria
             NodeName        = $nodeName
         }
 
-        # === ИЗМЕНЕНИЕ: ВСЕГДА ВЫПОЛНЯЕМ ЛОКАЛЬНО ===
-        Write-Verbose "[$($assignmentId)] Запуск ЛОКАЛЬНОГО скрипта: $CheckScriptPath"
-        # Используем блок try/catch для отлова ошибок ВНУТРИ скрипта Check-*.ps1
+        # === РР—РњР•РќР•РќРР•: Р’РЎР•Р“Р”Рђ Р’Р«РџРћР›РќРЇР•Рњ Р›РћРљРђР›Р¬РќРћ ===
+        Write-Verbose "[$($assignmentId)] Р—Р°РїСѓСЃРє Р›РћРљРђР›Р¬РќРћР“Рћ СЃРєСЂРёРїС‚Р°: $CheckScriptPath"
+        # РСЃРїРѕР»СЊР·СѓРµРј Р±Р»РѕРє try/catch РґР»СЏ РѕС‚Р»РѕРІР° РѕС€РёР±РѕРє Р’РќРЈРўР Р СЃРєСЂРёРїС‚Р° Check-*.ps1
         try {
-             # Запускаем скрипт через оператор вызова '&', передавая параметры через splatting (@)
+             # Р—Р°РїСѓСЃРєР°РµРј СЃРєСЂРёРїС‚ С‡РµСЂРµР· РѕРїРµСЂР°С‚РѕСЂ РІС‹Р·РѕРІР° '&', РїРµСЂРµРґР°РІР°СЏ РїР°СЂР°РјРµС‚СЂС‹ С‡РµСЂРµР· splatting (@)
              $result = & $CheckScriptPath @checkParams
         } catch {
-             # Ошибка произошла ВНУТРИ скрипта Check-*.ps1
-             throw # Перебрасываем ошибку, чтобы ее поймал внешний catch
+             # РћС€РёР±РєР° РїСЂРѕРёР·РѕС€Р»Р° Р’РќРЈРўР Р СЃРєСЂРёРїС‚Р° Check-*.ps1
+             throw # РџРµСЂРµР±СЂР°СЃС‹РІР°РµРј РѕС€РёР±РєСѓ, С‡С‚РѕР±С‹ РµРµ РїРѕР№РјР°Р» РІРЅРµС€РЅРёР№ catch
         }
-        # === КОНЕЦ ИЗМЕНЕНИЯ ===
+        # === РљРћРќР•Р¦ РР—РњР•РќР•РќРРЇ ===
 
-        # Проверяем, что скрипт вернул ожидаемый результат
+        # РџСЂРѕРІРµСЂСЏРµРј, С‡С‚Рѕ СЃРєСЂРёРїС‚ РІРµСЂРЅСѓР» РѕР¶РёРґР°РµРјС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚
         if ($result -isnot [hashtable] -or -not $result.ContainsKey('IsAvailable')) {
-            Write-Warning "[$($assignmentId)] Скрипт проверки '$CheckScriptFile' вернул неожиданный результат: $($result | Out-String -Width 200)"
+            Write-Warning "[$($assignmentId)] РЎРєСЂРёРїС‚ РїСЂРѕРІРµСЂРєРё '$CheckScriptFile' РІРµСЂРЅСѓР» РЅРµРѕР¶РёРґР°РЅРЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚: $($result | Out-String -Width 200)"
             $result = New-CheckResultObject -IsAvailable $false `
-                                            -ErrorMessage "Скрипт проверки '$CheckScriptFile' вернул некорректный результат." `
+                                            -ErrorMessage "РЎРєСЂРёРїС‚ РїСЂРѕРІРµСЂРєРё '$CheckScriptFile' РІРµСЂРЅСѓР» РЅРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚." `
                                             -Details @{ ScriptOutput = ($result | Out-String -Width 200) }
         }
-        # Добавляем информацию о выполнении (всегда локальное для агента)
+        # Р”РѕР±Р°РІР»СЏРµРј РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ РІС‹РїРѕР»РЅРµРЅРёРё (РІСЃРµРіРґР° Р»РѕРєР°Р»СЊРЅРѕРµ РґР»СЏ Р°РіРµРЅС‚Р°)
         if ($result -is [hashtable]) {
             if (-not $result.ContainsKey('Details') -or $result.Details -eq $null) { $result.Details = @{} }
             elseif ($result.Details -isnot [hashtable]) { $result.Details = @{ OriginalDetails = $result.Details } }
-            # Указываем, что выполнялось на машине агента ($env:COMPUTERNAME)
+            # РЈРєР°Р·С‹РІР°РµРј, С‡С‚Рѕ РІС‹РїРѕР»РЅСЏР»РѕСЃСЊ РЅР° РјР°С€РёРЅРµ Р°РіРµРЅС‚Р° ($env:COMPUTERNAME)
             $result.Details.execution_target = $env:COMPUTERNAME
-            $result.Details.execution_mode = 'local_agent' # Новый статус
-            $result.Details.check_target_ip = $targetIP # Указываем реальную цель проверки
+            $result.Details.execution_mode = 'local_agent' # РќРѕРІС‹Р№ СЃС‚Р°С‚СѓСЃ
+            $result.Details.check_target_ip = $targetIP # РЈРєР°Р·С‹РІР°РµРј СЂРµР°Р»СЊРЅСѓСЋ С†РµР»СЊ РїСЂРѕРІРµСЂРєРё
         }
 
     } catch {
-        # Ловим ошибки:
-        # - Не найден модуль $MyInvocation.MyCommand.ModuleName
-        # - Ошибки, переброшенные из внутреннего try/catch (ошибки скрипта Check-*.ps1)
-        # - Другие ошибки диспетчера
-        $errorMessage = "Ошибка выполнения проверки '$methodName' для '$nodeName': $($_.Exception.Message)"
+        # Р›РѕРІРёРј РѕС€РёР±РєРё:
+        # - РќРµ РЅР°Р№РґРµРЅ РјРѕРґСѓР»СЊ $MyInvocation.MyCommand.ModuleName
+        # - РћС€РёР±РєРё, РїРµСЂРµР±СЂРѕС€РµРЅРЅС‹Рµ РёР· РІРЅСѓС‚СЂРµРЅРЅРµРіРѕ try/catch (РѕС€РёР±РєРё СЃРєСЂРёРїС‚Р° Check-*.ps1)
+        # - Р”СЂСѓРіРёРµ РѕС€РёР±РєРё РґРёСЃРїРµС‚С‡РµСЂР°
+        $errorMessage = "РћС€РёР±РєР° РІС‹РїРѕР»РЅРµРЅРёСЏ РїСЂРѕРІРµСЂРєРё '$methodName' РґР»СЏ '$nodeName': $($_.Exception.Message)"
         Write-Warning "[$($assignmentId)] $errorMessage"
-        # Используем ручное формирование, так как ошибка могла быть до New-CheckResultObject
+        # РСЃРїРѕР»СЊР·СѓРµРј СЂСѓС‡РЅРѕРµ С„РѕСЂРјРёСЂРѕРІР°РЅРёРµ, С‚Р°Рє РєР°Рє РѕС€РёР±РєР° РјРѕРіР»Р° Р±С‹С‚СЊ РґРѕ New-CheckResultObject
         $result = @{
             IsAvailable    = $false
             CheckSuccess   = $null
@@ -229,18 +229,18 @@ function Invoke-StatusMonitorCheck {
         }
     }
 
-    # Возвращаем стандартизированный результат
-    Write-Verbose "[$($assignmentId)] Диспетчер завершил работу. IsAvailable: $($result.IsAvailable), CheckSuccess: $($result.CheckSuccess)"
+    # Р’РѕР·РІСЂР°С‰Р°РµРј СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚
+    Write-Verbose "[$($assignmentId)] Р”РёСЃРїРµС‚С‡РµСЂ Р·Р°РІРµСЂС€РёР» СЂР°Р±РѕС‚Сѓ. IsAvailable: $($result.IsAvailable), CheckSuccess: $($result.CheckSuccess)"
     return $result
 }
-# --- Конец основной функции ---
+# --- РљРѕРЅРµС† РѕСЃРЅРѕРІРЅРѕР№ С„СѓРЅРєС†РёРё ---
 
-# Вспомогательные функции New-CheckResultObject, Invoke-RemoteCheck (можно пока оставить, но она не используется агентом), Get-OrElse
-# ... (код этих функций без изменений) ...
+# Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё New-CheckResultObject, Invoke-RemoteCheck (РјРѕР¶РЅРѕ РїРѕРєР° РѕСЃС‚Р°РІРёС‚СЊ, РЅРѕ РѕРЅР° РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ Р°РіРµРЅС‚РѕРј), Get-OrElse
+# ... (РєРѕРґ СЌС‚РёС… С„СѓРЅРєС†РёР№ Р±РµР· РёР·РјРµРЅРµРЅРёР№) ...
 
 
-# --- Вспомогательная функция Get-OrElse ---
+# --- Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅР°СЏ С„СѓРЅРєС†РёСЏ Get-OrElse ---
 filter Get-OrElse { param([object]$DefaultValue); if ($_) { $_ } else { $DefaultValue } }
 
-# --- Экспорт функций ---
-Export-ModuleMember -Function Invoke-StatusMonitorCheck, New-CheckResultObject # Убрали Invoke-RemoteCheck из экспорта по умолчанию
+# --- Р­РєСЃРїРѕСЂС‚ С„СѓРЅРєС†РёР№ ---
+Export-ModuleMember -Function Invoke-StatusMonitorCheck, New-CheckResultObject # РЈР±СЂР°Р»Рё Invoke-RemoteCheck РёР· СЌРєСЃРїРѕСЂС‚Р° РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ

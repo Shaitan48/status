@@ -1,32 +1,32 @@
-<#
+ï»¿<#
 .SYNOPSIS
-    Ïîëó÷àåò ñïèñîê çàïóùåííûõ ïğîöåññîâ.
+    ĞŸĞ¾Ğ»ÑƒÑ‡Ğ°ĞµÑ‚ ÑĞ¿Ğ¸ÑĞ¾Ğº Ğ·Ğ°Ğ¿ÑƒÑ‰ĞµĞ½Ğ½Ñ‹Ñ… Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ².
 .DESCRIPTION
-    Èñïîëüçóåò Get-Process äëÿ ïîëó÷åíèÿ èíôîğìàöèè î ïğîöåññàõ ëîêàëüíî.
-    Ïîääåğæèâàåò ôèëüòğàöèş ïî èìåíè, ñîğòèğîâêó, âûáîğ N âåğõíèõ,
-    à òàêæå îïöèîíàëüíîå âêëş÷åíèå èìåíè ïîëüçîâàòåëÿ è ïóòè ê ôàéëó.
+    Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞµÑ‚ Get-Process Ğ´Ğ»Ñ Ğ¿Ğ¾Ğ»ÑƒÑ‡ĞµĞ½Ğ¸Ñ Ğ¸Ğ½Ñ„Ğ¾Ñ€Ğ¼Ğ°Ñ†Ğ¸Ğ¸ Ğ¾ Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ°Ñ… Ğ»Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ğ¾.
+    ĞŸĞ¾Ğ´Ğ´ĞµÑ€Ğ¶Ğ¸Ğ²Ğ°ĞµÑ‚ Ñ„Ğ¸Ğ»ÑŒÑ‚Ñ€Ğ°Ñ†Ğ¸Ñ Ğ¿Ğ¾ Ğ¸Ğ¼ĞµĞ½Ğ¸, ÑĞ¾Ñ€Ñ‚Ğ¸Ñ€Ğ¾Ğ²ĞºÑƒ, Ğ²Ñ‹Ğ±Ğ¾Ñ€ N Ğ²ĞµÑ€Ñ…Ğ½Ğ¸Ñ…,
+    Ğ° Ñ‚Ğ°ĞºĞ¶Ğµ Ğ¾Ğ¿Ñ†Ğ¸Ğ¾Ğ½Ğ°Ğ»ÑŒĞ½Ğ¾Ğµ Ğ²ĞºĞ»ÑÑ‡ĞµĞ½Ğ¸Ğµ Ğ¸Ğ¼ĞµĞ½Ğ¸ Ğ¿Ğ¾Ğ»ÑŒĞ·Ğ¾Ğ²Ğ°Ñ‚ĞµĞ»Ñ Ğ¸ Ğ¿ÑƒÑ‚Ğ¸ Ğº Ñ„Ğ°Ğ¹Ğ»Ñƒ.
 .PARAMETER TargetIP
-    [string] IP èëè èìÿ õîñòà (èãíîğèğóåòñÿ, èñïîëüçóåòñÿ äëÿ ëîãèğîâàíèÿ).
+    [string] IP Ğ¸Ğ»Ğ¸ Ğ¸Ğ¼Ñ Ñ…Ğ¾ÑÑ‚Ğ° (Ğ¸Ğ³Ğ½Ğ¾Ñ€Ğ¸Ñ€ÑƒĞµÑ‚ÑÑ, Ğ¸ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞµÑ‚ÑÑ Ğ´Ğ»Ñ Ğ»Ğ¾Ğ³Ğ¸Ñ€Ğ¾Ğ²Ğ°Ğ½Ğ¸Ñ).
 .PARAMETER Parameters
-    [hashtable] Íåîáÿçàòåëüíûé. Ïàğàìåòğû äëÿ Get-Process è ôîğìàòèğîâàíèÿ:
-    - process_names ([string[]]): Ìàññèâ èìåí ïğîöåññîâ äëÿ ôèëüòğàöèè (wildcards *?).
-    - include_username ([bool]): Âêëş÷àòü ëè èìÿ ïîëüçîâàòåëÿ ($false).
-    - include_path ([bool]):     Âêëş÷àòü ëè ïóòü ê ôàéëó ($false).
-    - sort_by ([string]):        Ïîëå äëÿ ñîğòèğîâêè ('Name', 'Id', 'CPU', 'Memory'/'WS', 'StartTime'). Ïî óìîë÷. 'Name'.
-    - sort_descending ([bool]):  Ñîğòèğîâàòü ïî óáûâàíèş? ($false).
-    - top_n ([int]):             Ïîêàçàòü òîëüêî òîï N ïğîöåññîâ.
+    [hashtable] ĞĞµĞ¾Ğ±ÑĞ·Ğ°Ñ‚ĞµĞ»ÑŒĞ½Ñ‹Ğ¹. ĞŸĞ°Ñ€Ğ°Ğ¼ĞµÑ‚Ñ€Ñ‹ Ğ´Ğ»Ñ Get-Process Ğ¸ Ñ„Ğ¾Ñ€Ğ¼Ğ°Ñ‚Ğ¸Ñ€Ğ¾Ğ²Ğ°Ğ½Ğ¸Ñ:
+    - process_names ([string[]]): ĞœĞ°ÑÑĞ¸Ğ² Ğ¸Ğ¼ĞµĞ½ Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ² Ğ´Ğ»Ñ Ñ„Ğ¸Ğ»ÑŒÑ‚Ñ€Ğ°Ñ†Ğ¸Ğ¸ (wildcards *?).
+    - include_username ([bool]): Ğ’ĞºĞ»ÑÑ‡Ğ°Ñ‚ÑŒ Ğ»Ğ¸ Ğ¸Ğ¼Ñ Ğ¿Ğ¾Ğ»ÑŒĞ·Ğ¾Ğ²Ğ°Ñ‚ĞµĞ»Ñ ($false).
+    - include_path ([bool]):     Ğ’ĞºĞ»ÑÑ‡Ğ°Ñ‚ÑŒ Ğ»Ğ¸ Ğ¿ÑƒÑ‚ÑŒ Ğº Ñ„Ğ°Ğ¹Ğ»Ñƒ ($false).
+    - sort_by ([string]):        ĞŸĞ¾Ğ»Ğµ Ğ´Ğ»Ñ ÑĞ¾Ñ€Ñ‚Ğ¸Ñ€Ğ¾Ğ²ĞºĞ¸ ('Name', 'Id', 'CPU', 'Memory'/'WS', 'StartTime'). ĞŸĞ¾ ÑƒĞ¼Ğ¾Ğ»Ñ‡. 'Name'.
+    - sort_descending ([bool]):  Ğ¡Ğ¾Ñ€Ñ‚Ğ¸Ñ€Ğ¾Ğ²Ğ°Ñ‚ÑŒ Ğ¿Ğ¾ ÑƒĞ±Ñ‹Ğ²Ğ°Ğ½Ğ¸Ñ? ($false).
+    - top_n ([int]):             ĞŸĞ¾ĞºĞ°Ğ·Ğ°Ñ‚ÑŒ Ñ‚Ğ¾Ğ»ÑŒĞºĞ¾ Ñ‚Ğ¾Ğ¿ N Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ².
 .PARAMETER SuccessCriteria
-    [hashtable] Íåîáÿçàòåëüíûé. Êğèòåğèè óñïåõà (ÏÎÊÀ ÍÅ ĞÅÀËÈÇÎÂÀÍÛ).
+    [hashtable] ĞĞµĞ¾Ğ±ÑĞ·Ğ°Ñ‚ĞµĞ»ÑŒĞ½Ñ‹Ğ¹. ĞšÑ€Ğ¸Ñ‚ĞµÑ€Ğ¸Ğ¸ ÑƒÑĞ¿ĞµÑ…Ğ° (ĞŸĞĞšĞ ĞĞ• Ğ Ğ•ĞĞ›Ğ˜Ğ—ĞĞ’ĞĞĞ«).
 .PARAMETER NodeName
-    [string] Íåîáÿçàòåëüíûé. Èìÿ óçëà äëÿ ëîãèğîâàíèÿ.
+    [string] ĞĞµĞ¾Ğ±ÑĞ·Ğ°Ñ‚ĞµĞ»ÑŒĞ½Ñ‹Ğ¹. Ğ˜Ğ¼Ñ ÑƒĞ·Ğ»Ğ° Ğ´Ğ»Ñ Ğ»Ğ¾Ğ³Ğ¸Ñ€Ğ¾Ğ²Ğ°Ğ½Ğ¸Ñ.
 .OUTPUTS
-    Hashtable - Ñòàíäàğòèçèğîâàííûé îáúåêò ğåçóëüòàòà ïğîâåğêè
+    Hashtable - Ğ¡Ñ‚Ğ°Ğ½Ğ´Ğ°Ñ€Ñ‚Ğ¸Ğ·Ğ¸Ñ€Ğ¾Ğ²Ğ°Ğ½Ğ½Ñ‹Ğ¹ Ğ¾Ğ±ÑŠĞµĞºÑ‚ Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚Ğ° Ğ¿Ñ€Ğ¾Ğ²ĞµÑ€ĞºĞ¸
                 (IsAvailable, CheckSuccess, Timestamp, Details, ErrorMessage).
-                Details ñîäåğæèò ìàññèâ 'processes'.
+                Details ÑĞ¾Ğ´ĞµÑ€Ğ¶Ğ¸Ñ‚ Ğ¼Ğ°ÑÑĞ¸Ğ² 'processes'.
 .NOTES
-    Âåğñèÿ: 1.2 (Äîáàâëåí ïàğàìåòğ SuccessCriteria, íî áåç ğåàëèçàöèè ëîãèêè).
-    Çàâèñèò îò ôóíêöèè New-CheckResultObject.
-    Ïîëó÷åíèå Username/Path ìîæåò òğåáîâàòü ïîâûøåííûõ ïğàâ.
+    Ğ’ĞµÑ€ÑĞ¸Ñ: 1.2 (Ğ”Ğ¾Ğ±Ğ°Ğ²Ğ»ĞµĞ½ Ğ¿Ğ°Ñ€Ğ°Ğ¼ĞµÑ‚Ñ€ SuccessCriteria, Ğ½Ğ¾ Ğ±ĞµĞ· Ñ€ĞµĞ°Ğ»Ğ¸Ğ·Ğ°Ñ†Ğ¸Ğ¸ Ğ»Ğ¾Ğ³Ğ¸ĞºĞ¸).
+    Ğ—Ğ°Ğ²Ğ¸ÑĞ¸Ñ‚ Ğ¾Ñ‚ Ñ„ÑƒĞ½ĞºÑ†Ğ¸Ğ¸ New-CheckResultObject.
+    ĞŸĞ¾Ğ»ÑƒÑ‡ĞµĞ½Ğ¸Ğµ Username/Path Ğ¼Ğ¾Ğ¶ĞµÑ‚ Ñ‚Ñ€ĞµĞ±Ğ¾Ğ²Ğ°Ñ‚ÑŒ Ğ¿Ğ¾Ğ²Ñ‹ÑˆĞµĞ½Ğ½Ñ‹Ñ… Ğ¿Ñ€Ğ°Ğ².
 #>
 param(
     [Parameter(Mandatory=$true)]
@@ -35,26 +35,26 @@ param(
     [Parameter(Mandatory=$false)]
     [hashtable]$Parameters = @{},
 
-    [Parameter(Mandatory=$false)] # <<<< ÄÎÁÀÂËÅÍ ÏÀĞÀÌÅÒĞ
+    [Parameter(Mandatory=$false)] # <<<< Ğ”ĞĞ‘ĞĞ’Ğ›Ğ•Ğ ĞŸĞĞ ĞĞœĞ•Ğ¢Ğ 
     [hashtable]$SuccessCriteria = $null,
 
     [Parameter(Mandatory=$false)]
     [string]$NodeName = "Unknown Node"
 )
 
-# --- Çàãğóçêà âñïîìîãàòåëüíîé ôóíêöèè ---
+# --- Ğ—Ğ°Ğ³Ñ€ÑƒĞ·ĞºĞ° Ğ²ÑĞ¿Ğ¾Ğ¼Ğ¾Ğ³Ğ°Ñ‚ĞµĞ»ÑŒĞ½Ğ¾Ğ¹ Ñ„ÑƒĞ½ĞºÑ†Ğ¸Ğ¸ ---
 if (-not (Get-Command New-CheckResultObject -ErrorAction SilentlyContinue)) {
     try {
         $commonFunctionsPath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils.psm1"
         if(Test-Path $commonFunctionsPath) { . $commonFunctionsPath }
-        else { throw "Íå íàéäåí ôàéë îáùåãî ìîäóëÿ: $commonFunctionsPath" }
+        else { throw "ĞĞµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½ Ñ„Ğ°Ğ¹Ğ» Ğ¾Ğ±Ñ‰ĞµĞ³Ğ¾ Ğ¼Ğ¾Ğ´ÑƒĞ»Ñ: $commonFunctionsPath" }
     } catch {
-        Write-Error "Check-PROCESS_LIST: Êğèòè÷åñêàÿ îøèáêà: Íå óäàëîñü çàãğóçèòü New-CheckResultObject! $($_.Exception.Message)"
+        Write-Error "Check-PROCESS_LIST: ĞšÑ€Ğ¸Ñ‚Ğ¸Ñ‡ĞµÑĞºĞ°Ñ Ğ¾ÑˆĞ¸Ğ±ĞºĞ°: ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ·Ğ°Ğ³Ñ€ÑƒĞ·Ğ¸Ñ‚ÑŒ New-CheckResultObject! $($_.Exception.Message)"
         function New-CheckResultObject { param($IsAvailable, $CheckSuccess=$null, $Details=$null, $ErrorMessage=$null) return @{IsAvailable=$IsAvailable; CheckSuccess=$CheckSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$Details; ErrorMessage=$ErrorMessage} }
     }
 }
 
-# --- Èíèöèàëèçàöèÿ ğåçóëüòàòà ---
+# --- Ğ˜Ğ½Ğ¸Ñ†Ğ¸Ğ°Ğ»Ğ¸Ğ·Ğ°Ñ†Ğ¸Ñ Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚Ğ° ---
 $resultData = @{
     IsAvailable = $false
     CheckSuccess = $null
@@ -62,43 +62,43 @@ $resultData = @{
     ErrorMessage = $null
 }
 
-Write-Verbose "[$NodeName] Check-PROCESS_LIST: Íà÷àëî ïîëó÷åíèÿ ñïèñêà ïğîöåññîâ ñ $TargetIP (ëîêàëüíî)"
+Write-Verbose "[$NodeName] Check-PROCESS_LIST: ĞĞ°Ñ‡Ğ°Ğ»Ğ¾ Ğ¿Ğ¾Ğ»ÑƒÑ‡ĞµĞ½Ğ¸Ñ ÑĞ¿Ğ¸ÑĞºĞ° Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ² Ñ $TargetIP (Ğ»Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ğ¾)"
 
 try {
-    # 1. Ïàğàìåòğû äëÿ Get-Process
+    # 1. ĞŸĞ°Ñ€Ğ°Ğ¼ĞµÑ‚Ñ€Ñ‹ Ğ´Ğ»Ñ Get-Process
     $getProcessParams = @{}
     $filteringByName = $false
     if ($Parameters.ContainsKey('process_names') -and $Parameters.process_names -is [array] -and $Parameters.process_names.Count -gt 0) {
         $getProcessParams.Name = $Parameters.process_names
-        $getProcessParams.ErrorAction = 'SilentlyContinue' # Íå ïàäàòü, åñëè ïğîöåññ íå íàéäåí
+        $getProcessParams.ErrorAction = 'SilentlyContinue' # ĞĞµ Ğ¿Ğ°Ğ´Ğ°Ñ‚ÑŒ, ĞµÑĞ»Ğ¸ Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑ Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½
         $filteringByName = $true
-        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ôèëüòğ ïî èìåíàì: $($Parameters.process_names -join ', ')"
+        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ¤Ğ¸Ğ»ÑŒÑ‚Ñ€ Ğ¿Ğ¾ Ğ¸Ğ¼ĞµĞ½Ğ°Ğ¼: $($Parameters.process_names -join ', ')"
     } else {
-        $getProcessParams.ErrorAction = 'Stop' # Ïàäàòü ïğè îáùèõ îøèáêàõ
-        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ïîëó÷åíèå âñåõ ïğîöåññîâ."
+        $getProcessParams.ErrorAction = 'Stop' # ĞŸĞ°Ğ´Ğ°Ñ‚ÑŒ Ğ¿Ñ€Ğ¸ Ğ¾Ğ±Ñ‰Ğ¸Ñ… Ğ¾ÑˆĞ¸Ğ±ĞºĞ°Ñ…
+        Write-Verbose "[$NodeName] Check-PROCESS_LIST: ĞŸĞ¾Ğ»ÑƒÑ‡ĞµĞ½Ğ¸Ğµ Ğ²ÑĞµÑ… Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ²."
     }
 
     $includeUsername = [bool]($Parameters.include_username | Get-OrElse $false)
     $includePath = [bool]($Parameters.include_path | Get-OrElse $false)
-    if($includeUsername) { Write-Verbose "[$NodeName] Check-PROCESS_LIST: Âêëş÷àÿ Username." }
-    if($includePath) { Write-Verbose "[$NodeName] Check-PROCESS_LIST: Âêëş÷àÿ Path." }
+    if($includeUsername) { Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ’ĞºĞ»ÑÑ‡Ğ°Ñ Username." }
+    if($includePath) { Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ’ĞºĞ»ÑÑ‡Ğ°Ñ Path." }
 
-    # 2. Âûïîëíåíèå Get-Process
-    Write-Verbose "[$NodeName] Check-PROCESS_LIST: Âûçîâ Get-Process..."
+    # 2. Ğ’Ñ‹Ğ¿Ğ¾Ğ»Ğ½ĞµĞ½Ğ¸Ğµ Get-Process
+    Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ’Ñ‹Ğ·Ğ¾Ğ² Get-Process..."
     $processesRaw = Get-Process @getProcessParams
-    $resultData.IsAvailable = $true # Åñëè Get-Process íå óïàë, çíà÷èò ïğîâåğêà äîñòóïíà
-    $processCount = if($processesRaw) { @($processesRaw).Count } else { 0 } # Ñ÷èòàåì êîëè÷åñòâî
-    Write-Verbose "[$NodeName] Check-PROCESS_LIST: Get-Process âûïîëíåí. Íàéäåíî ïğîöåññîâ: $processCount"
+    $resultData.IsAvailable = $true # Ğ•ÑĞ»Ğ¸ Get-Process Ğ½Ğµ ÑƒĞ¿Ğ°Ğ», Ğ·Ğ½Ğ°Ñ‡Ğ¸Ñ‚ Ğ¿Ñ€Ğ¾Ğ²ĞµÑ€ĞºĞ° Ğ´Ğ¾ÑÑ‚ÑƒĞ¿Ğ½Ğ°
+    $processCount = if($processesRaw) { @($processesRaw).Count } else { 0 } # Ğ¡Ñ‡Ğ¸Ñ‚Ğ°ĞµĞ¼ ĞºĞ¾Ğ»Ğ¸Ñ‡ĞµÑÑ‚Ğ²Ğ¾
+    Write-Verbose "[$NodeName] Check-PROCESS_LIST: Get-Process Ğ²Ñ‹Ğ¿Ğ¾Ğ»Ğ½ĞµĞ½. ĞĞ°Ğ¹Ğ´ĞµĞ½Ğ¾ Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ²: $processCount"
 
-    # Îáğàáîòêà ñëó÷àÿ, êîãäà ôèëüòğîâàëè, íî íè÷åãî íå íàøëè
+    # ĞĞ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºĞ° ÑĞ»ÑƒÑ‡Ğ°Ñ, ĞºĞ¾Ğ³Ğ´Ğ° Ñ„Ğ¸Ğ»ÑŒÑ‚Ñ€Ğ¾Ğ²Ğ°Ğ»Ğ¸, Ğ½Ğ¾ Ğ½Ğ¸Ñ‡ĞµĞ³Ğ¾ Ğ½Ğµ Ğ½Ğ°ÑˆĞ»Ğ¸
     if ($filteringByName -and $processCount -eq 0) {
-        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ïğîöåññû ñ èìåíàìè '$($Parameters.process_names -join ', ')' íå íàéäåíû."
-        $resultData.CheckSuccess = $true # Ñ÷èòàåì óñïåõîì, ò.ê. çàïğîñ âûïîëíèëñÿ, ïğîñòî ğåçóëüòàò ïóñò
-        $resultData.Details.message = "Ïğîöåññû ñ óêàçàííûìè èìåíàìè íå íàéäåíû."
+        Write-Verbose "[$NodeName] Check-PROCESS_LIST: ĞŸÑ€Ğ¾Ñ†ĞµÑÑÑ‹ Ñ Ğ¸Ğ¼ĞµĞ½Ğ°Ğ¼Ğ¸ '$($Parameters.process_names -join ', ')' Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ñ‹."
+        $resultData.CheckSuccess = $true # Ğ¡Ñ‡Ğ¸Ñ‚Ğ°ĞµĞ¼ ÑƒÑĞ¿ĞµÑ…Ğ¾Ğ¼, Ñ‚.Ğº. Ğ·Ğ°Ğ¿Ñ€Ğ¾Ñ Ğ²Ñ‹Ğ¿Ğ¾Ğ»Ğ½Ğ¸Ğ»ÑÑ, Ğ¿Ñ€Ğ¾ÑÑ‚Ğ¾ Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚ Ğ¿ÑƒÑÑ‚
+        $resultData.Details.message = "ĞŸÑ€Ğ¾Ñ†ĞµÑÑÑ‹ Ñ ÑƒĞºĞ°Ğ·Ğ°Ğ½Ğ½Ñ‹Ğ¼Ğ¸ Ğ¸Ğ¼ĞµĞ½Ğ°Ğ¼Ğ¸ Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ñ‹."
     }
-    # Îáğàáîòêà, åñëè ïğîöåññû íàéäåíû
+    # ĞĞ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºĞ°, ĞµÑĞ»Ğ¸ Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑÑ‹ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ñ‹
     elseif ($processCount -gt 0) {
-        # 3. Ôîğìèğîâàíèå ñïèñêà ğåçóëüòàòîâ
+        # 3. Ğ¤Ğ¾Ñ€Ğ¼Ğ¸Ñ€Ğ¾Ğ²Ğ°Ğ½Ğ¸Ğµ ÑĞ¿Ğ¸ÑĞºĞ° Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚Ğ¾Ğ²
         $processedList = foreach ($proc in $processesRaw) {
             $procInfo = @{
                 id = $proc.Id
@@ -127,9 +127,9 @@ try {
                 } catch { $procInfo.path = '[Access Error]' }
             }
             [PSCustomObject]$procInfo
-        } # Êîíåö foreach
+        } # ĞšĞ¾Ğ½ĞµÑ† foreach
 
-        # 4. Ñîğòèğîâêà
+        # 4. Ğ¡Ğ¾Ñ€Ñ‚Ğ¸Ñ€Ğ¾Ğ²ĞºĞ°
         $sortByInput = $Parameters.sort_by | Get-OrElse 'Name'
         $sortDesc = [bool]($Parameters.sort_descending | Get-OrElse $false)
         $validSortFields = @('id', 'name', 'cpu_seconds', 'memory_ws_mb', 'start_time')
@@ -140,67 +140,67 @@ try {
         }
         if($sortByActual -notin $validSortFields) {$sortByActual = 'name'}
         $sortDirectionText = if ($sortDesc) { 'Desc' } else { 'Asc' }
-        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ñîğòèğîâêà ïî '$sortByActual' ($sortDirectionText)"
+        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ¡Ğ¾Ñ€Ñ‚Ğ¸Ñ€Ğ¾Ğ²ĞºĞ° Ğ¿Ğ¾ '$sortByActual' ($sortDirectionText)"
         try { $processedList = $processedList | Sort-Object -Property $sortByActual -Descending:$sortDesc }
-        catch { Write-Warning "[$NodeName] Check-PROCESS_LIST: Îøèáêà ñîğòèğîâêè ïî '$sortByActual'. Èñïîëüçóåòñÿ ñîğòèğîâêà ïî Name." ; try { $processedList = $processedList | Sort-Object -Property 'name' } catch {} }
+        catch { Write-Warning "[$NodeName] Check-PROCESS_LIST: ĞÑˆĞ¸Ğ±ĞºĞ° ÑĞ¾Ñ€Ñ‚Ğ¸Ñ€Ğ¾Ğ²ĞºĞ¸ Ğ¿Ğ¾ '$sortByActual'. Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞµÑ‚ÑÑ ÑĞ¾Ñ€Ñ‚Ğ¸Ñ€Ğ¾Ğ²ĞºĞ° Ğ¿Ğ¾ Name." ; try { $processedList = $processedList | Sort-Object -Property 'name' } catch {} }
 
         # 5. Top N
         $topN = $null; if ($Parameters.ContainsKey('top_n') -and $Parameters.top_n -is [int]) { $topN = $Parameters.top_n }
         if ($topN -gt 0) {
-            Write-Verbose "[$NodeName] Check-PROCESS_LIST: Âûáîğ òîï $topN ïğîöåññîâ."
+            Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ’Ñ‹Ğ±Ğ¾Ñ€ Ñ‚Ğ¾Ğ¿ $topN Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ²."
             $processedList = $processedList | Select-Object -First $topN
         }
 
-        # 6. Çàïèñü ğåçóëüòàòà â Details
+        # 6. Ğ—Ğ°Ğ¿Ğ¸ÑÑŒ Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚Ğ° Ğ² Details
         $resultData.Details.processes.AddRange($processedList)
-        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Äîáàâëåíî â ğåçóëüòàò: $($resultData.Details.processes.Count) ïğîöåññîâ."
+        Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ”Ğ¾Ğ±Ğ°Ğ²Ğ»ĞµĞ½Ğ¾ Ğ² Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚: $($resultData.Details.processes.Count) Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ²."
 
-        # 7. Óñòàíîâêà CheckSuccess (ÏÎÊÀ ÍÅÒ ÊĞÈÒÅĞÈÅÂ)
-        $resultData.CheckSuccess = $true # Óñïåøíî, åñëè ñìîãëè ïîëó÷èòü ñïèñîê
+        # 7. Ğ£ÑÑ‚Ğ°Ğ½Ğ¾Ğ²ĞºĞ° CheckSuccess (ĞŸĞĞšĞ ĞĞ•Ğ¢ ĞšĞ Ğ˜Ğ¢Ğ•Ğ Ğ˜Ğ•Ğ’)
+        $resultData.CheckSuccess = $true # Ğ£ÑĞ¿ĞµÑˆĞ½Ğ¾, ĞµÑĞ»Ğ¸ ÑĞ¼Ğ¾Ğ³Ğ»Ğ¸ Ğ¿Ğ¾Ğ»ÑƒÑ‡Ğ¸Ñ‚ÑŒ ÑĞ¿Ğ¸ÑĞ¾Ğº
     }
-    # Îáğàáîòêà ñëó÷àÿ, êîãäà ïğîöåññû íå íàéäåíû È ÍÅ ôèëüòğîâàëè ïî èìåíè
+    # ĞĞ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºĞ° ÑĞ»ÑƒÑ‡Ğ°Ñ, ĞºĞ¾Ğ³Ğ´Ğ° Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑÑ‹ Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ñ‹ Ğ˜ ĞĞ• Ñ„Ğ¸Ğ»ÑŒÑ‚Ñ€Ğ¾Ğ²Ğ°Ğ»Ğ¸ Ğ¿Ğ¾ Ğ¸Ğ¼ĞµĞ½Ğ¸
     elseif (-not $filteringByName -and $processCount -eq 0) {
-         Write-Verbose "[$NodeName] Check-PROCESS_LIST: Get-Process íå âåğíóë ïğîöåññîâ (áåç ôèëüòğà ïî èìåíè)."
-         $resultData.CheckSuccess = $true # Ñ÷èòàåì óñïåõîì, ò.ê. êîìàíäà âûïîëíèëàñü
-         $resultData.Details.message = "Ñïèñîê ïğîöåññîâ ïóñò."
+         Write-Verbose "[$NodeName] Check-PROCESS_LIST: Get-Process Ğ½Ğµ Ğ²ĞµÑ€Ğ½ÑƒĞ» Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ² (Ğ±ĞµĞ· Ñ„Ğ¸Ğ»ÑŒÑ‚Ñ€Ğ° Ğ¿Ğ¾ Ğ¸Ğ¼ĞµĞ½Ğ¸)."
+         $resultData.CheckSuccess = $true # Ğ¡Ñ‡Ğ¸Ñ‚Ğ°ĞµĞ¼ ÑƒÑĞ¿ĞµÑ…Ğ¾Ğ¼, Ñ‚.Ğº. ĞºĞ¾Ğ¼Ğ°Ğ½Ğ´Ğ° Ğ²Ñ‹Ğ¿Ğ¾Ğ»Ğ½Ğ¸Ğ»Ğ°ÑÑŒ
+         $resultData.Details.message = "Ğ¡Ğ¿Ğ¸ÑĞ¾Ğº Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ² Ğ¿ÑƒÑÑ‚."
     }
 
 
 } catch {
-    # Ïåğåõâàò îøèáîê Get-Process (åñëè ErrorAction=Stop) èëè äğóãèõ
+    # ĞŸĞµÑ€ĞµÑ…Ğ²Ğ°Ñ‚ Ğ¾ÑˆĞ¸Ğ±Ğ¾Ğº Get-Process (ĞµÑĞ»Ğ¸ ErrorAction=Stop) Ğ¸Ğ»Ğ¸ Ğ´Ñ€ÑƒĞ³Ğ¸Ñ…
     $resultData.IsAvailable = $false
     $resultData.CheckSuccess = $null
     $exceptionMessage = $_.Exception.Message
     if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-    $errorMessage = "Îøèáêà ïîëó÷åíèÿ ñïèñêà ïğîöåññîâ: {0}" -f $exceptionMessage
+    $errorMessage = "ĞÑˆĞ¸Ğ±ĞºĞ° Ğ¿Ğ¾Ğ»ÑƒÑ‡ĞµĞ½Ğ¸Ñ ÑĞ¿Ğ¸ÑĞºĞ° Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ²: {0}" -f $exceptionMessage
     $resultData.ErrorMessage = $errorMessage
     if ($null -eq $resultData.Details) { $resultData.Details = @{} }
     $resultData.Details.error = $errorMessage
     $resultData.Details.ErrorRecord = $_.ToString()
-    Write-Error "[$NodeName] Check-PROCESS_LIST: Êğèòè÷åñêàÿ îøèáêà: $errorMessage"
+    Write-Error "[$NodeName] Check-PROCESS_LIST: ĞšÑ€Ğ¸Ñ‚Ğ¸Ñ‡ĞµÑĞºĞ°Ñ Ğ¾ÑˆĞ¸Ğ±ĞºĞ°: $errorMessage"
 }
 
-# --- Ôèíàëüíàÿ îáğàáîòêà ğåçóëüòàòà ---
-# Åñëè áûëà îøèáêà IsAvailable = false, òî CheckSuccess äîëæåí áûòü null
+# --- Ğ¤Ğ¸Ğ½Ğ°Ğ»ÑŒĞ½Ğ°Ñ Ğ¾Ğ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºĞ° Ñ€ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚Ğ° ---
+# Ğ•ÑĞ»Ğ¸ Ğ±Ñ‹Ğ»Ğ° Ğ¾ÑˆĞ¸Ğ±ĞºĞ° IsAvailable = false, Ñ‚Ğ¾ CheckSuccess Ğ´Ğ¾Ğ»Ğ¶ĞµĞ½ Ğ±Ñ‹Ñ‚ÑŒ null
 if ($resultData.IsAvailable -eq $false) {
     $resultData.CheckSuccess = $null
 }
-# Åñëè IsAvailable = true, íî CheckSuccess åùå íå óñòàíîâëåí (íå áûëî íàéäåíî ïğîöåññîâ), ñòàâèì true
+# Ğ•ÑĞ»Ğ¸ IsAvailable = true, Ğ½Ğ¾ CheckSuccess ĞµÑ‰Ğµ Ğ½Ğµ ÑƒÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ğ»ĞµĞ½ (Ğ½Ğµ Ğ±Ñ‹Ğ»Ğ¾ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ğ¾ Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑĞ¾Ğ²), ÑÑ‚Ğ°Ğ²Ğ¸Ğ¼ true
 elseif ($resultData.CheckSuccess -eq $null) {
      $resultData.CheckSuccess = $true
 }
 
-# Îáğàáîòêà SuccessCriteria (ÏÎÊÀ ÍÅÒ ĞÅÀËÈÇÀÖÈÈ)
+# ĞĞ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºĞ° SuccessCriteria (ĞŸĞĞšĞ ĞĞ•Ğ¢ Ğ Ğ•ĞĞ›Ğ˜Ğ—ĞĞ¦Ğ˜Ğ˜)
 if ($resultData.IsAvailable -and $resultData.CheckSuccess -and $SuccessCriteria -ne $null) {
-     Write-Verbose "[$NodeName] Check-PROCESS_LIST: SuccessCriteria ïåğåäàíû, íî èõ îáğàáîòêà ïîêà íå ğåàëèçîâàíà."
-     # Çäåñü ìîæíî áóäåò äîáàâèòü ëîãèêó, íàïğèìåğ:
+     Write-Verbose "[$NodeName] Check-PROCESS_LIST: SuccessCriteria Ğ¿ĞµÑ€ĞµĞ´Ğ°Ğ½Ñ‹, Ğ½Ğ¾ Ğ¸Ñ… Ğ¾Ğ±Ñ€Ğ°Ğ±Ğ¾Ñ‚ĞºĞ° Ğ¿Ğ¾ĞºĞ° Ğ½Ğµ Ñ€ĞµĞ°Ğ»Ğ¸Ğ·Ğ¾Ğ²Ğ°Ğ½Ğ°."
+     # Ğ—Ğ´ĞµÑÑŒ Ğ¼Ğ¾Ğ¶Ğ½Ğ¾ Ğ±ÑƒĞ´ĞµÑ‚ Ğ´Ğ¾Ğ±Ğ°Ğ²Ğ¸Ñ‚ÑŒ Ğ»Ğ¾Ğ³Ğ¸ĞºÑƒ, Ğ½Ğ°Ğ¿Ñ€Ğ¸Ğ¼ĞµÑ€:
      # if ($SuccessCriteria.ContainsKey('required_process') -and -not $resultData.Details.processes.name.Contains($SuccessCriteria.required_process)) {
      #     $resultData.CheckSuccess = $false
-     #     $resultData.ErrorMessage = "Îáÿçàòåëüíûé ïğîöåññ '$($SuccessCriteria.required_process)' íå íàéäåí."
+     #     $resultData.ErrorMessage = "ĞĞ±ÑĞ·Ğ°Ñ‚ĞµĞ»ÑŒĞ½Ñ‹Ğ¹ Ğ¿Ñ€Ğ¾Ñ†ĞµÑÑ '$($SuccessCriteria.required_process)' Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½."
      # }
 }
 
-# Âûçîâ New-CheckResultObject äëÿ ôèíàëüíîé ñòàíäàğòèçàöèè
+# Ğ’Ñ‹Ğ·Ğ¾Ğ² New-CheckResultObject Ğ´Ğ»Ñ Ñ„Ğ¸Ğ½Ğ°Ğ»ÑŒĞ½Ğ¾Ğ¹ ÑÑ‚Ğ°Ğ½Ğ´Ğ°Ñ€Ñ‚Ğ¸Ğ·Ğ°Ñ†Ğ¸Ğ¸
 $finalResult = New-CheckResultObject @resultData
-Write-Verbose "[$NodeName] Check-PROCESS_LIST: Çàâåğøåíèå. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
+Write-Verbose "[$NodeName] Check-PROCESS_LIST: Ğ—Ğ°Ğ²ĞµÑ€ÑˆĞµĞ½Ğ¸Ğµ. IsAvailable=$($finalResult.IsAvailable), CheckSuccess=$($finalResult.CheckSuccess)"
 return $finalResult

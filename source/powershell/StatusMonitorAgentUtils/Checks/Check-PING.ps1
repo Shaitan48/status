@@ -1,23 +1,23 @@
-<#
+п»ї<#
 .SYNOPSIS
-    Скрипт проверки доступности узла с помощью Test-Connection (PING).
+    РЎРєСЂРёРїС‚ РїСЂРѕРІРµСЂРєРё РґРѕСЃС‚СѓРїРЅРѕСЃС‚Рё СѓР·Р»Р° СЃ РїРѕРјРѕС‰СЊСЋ Test-Connection (PING).
 .DESCRIPTION
-    Использует Test-Connection для отправки ICMP-запросов к целевому узлу.
-    Возвращает стандартизированный объект результата.
+    РСЃРїРѕР»СЊР·СѓРµС‚ Test-Connection РґР»СЏ РѕС‚РїСЂР°РІРєРё ICMP-Р·Р°РїСЂРѕСЃРѕРІ Рє С†РµР»РµРІРѕРјСѓ СѓР·Р»Сѓ.
+    Р’РѕР·РІСЂР°С‰Р°РµС‚ СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р°.
 .PARAMETER TargetIP
-    [string] Обязательный. IP-адрес или имя хоста для пинга.
+    [string] РћР±СЏР·Р°С‚РµР»СЊРЅС‹Р№. IP-Р°РґСЂРµСЃ РёР»Рё РёРјСЏ С…РѕСЃС‚Р° РґР»СЏ РїРёРЅРіР°.
 .PARAMETER Parameters
-    [hashtable] Опциональный. Параметры для Test-Connection:
-    - timeout_ms (int): Таймаут ожидания ответа в миллисекундах (по умолч. 1000).
-    - count (int): Количество отправляемых запросов (по умолч. 1).
-    - buffer_size (int): Размер буфера ICMP (по умолч. 32).
+    [hashtable] РћРїС†РёРѕРЅР°Р»СЊРЅС‹Р№. РџР°СЂР°РјРµС‚СЂС‹ РґР»СЏ Test-Connection:
+    - timeout_ms (int): РўР°Р№РјР°СѓС‚ РѕР¶РёРґР°РЅРёСЏ РѕС‚РІРµС‚Р° РІ РјРёР»Р»РёСЃРµРєСѓРЅРґР°С… (РїРѕ СѓРјРѕР»С‡. 1000).
+    - count (int): РљРѕР»РёС‡РµСЃС‚РІРѕ РѕС‚РїСЂР°РІР»СЏРµРјС‹С… Р·Р°РїСЂРѕСЃРѕРІ (РїРѕ СѓРјРѕР»С‡. 1).
+    - buffer_size (int): Р Р°Р·РјРµСЂ Р±СѓС„РµСЂР° ICMP (РїРѕ СѓРјРѕР»С‡. 32).
 .PARAMETER SuccessCriteria
-    [hashtable] Опциональный. Критерии успеха:
-    - max_rtt_ms (int): Максимально допустимое время ответа (RTT) в мс.
+    [hashtable] РћРїС†РёРѕРЅР°Р»СЊРЅС‹Р№. РљСЂРёС‚РµСЂРёРё СѓСЃРїРµС…Р°:
+    - max_rtt_ms (int): РњР°РєСЃРёРјР°Р»СЊРЅРѕ РґРѕРїСѓСЃС‚РёРјРѕРµ РІСЂРµРјСЏ РѕС‚РІРµС‚Р° (RTT) РІ РјСЃ.
 .PARAMETER NodeName
-    [string] Опциональный. Имя узла для логирования.
+    [string] РћРїС†РёРѕРЅР°Р»СЊРЅС‹Р№. РРјСЏ СѓР·Р»Р° РґР»СЏ Р»РѕРіРёСЂРѕРІР°РЅРёСЏ.
 .OUTPUTS
-    Hashtable - Стандартизированный объект результата
+    Hashtable - РЎС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ СЂРµР·СѓР»СЊС‚Р°С‚Р°
                 (IsAvailable, CheckSuccess, Timestamp, Details, ErrorMessage).
 #>
 param(
@@ -31,18 +31,18 @@ param(
     [string]$NodeName = "Unknown Node"
 )
 
-# Импортируем New-CheckResultObject, если он еще не доступен (на случай прямого запуска скрипта)
+# РРјРїРѕСЂС‚РёСЂСѓРµРј New-CheckResultObject, РµСЃР»Рё РѕРЅ РµС‰Рµ РЅРµ РґРѕСЃС‚СѓРїРµРЅ (РЅР° СЃР»СѓС‡Р°Р№ РїСЂСЏРјРѕРіРѕ Р·Р°РїСѓСЃРєР° СЃРєСЂРёРїС‚Р°)
 if (-not (Get-Command New-CheckResultObject -ErrorAction SilentlyContinue)) {
     try {
-        # Пытаемся найти psm1 в родительской папке
+        # РџС‹С‚Р°РµРјСЃСЏ РЅР°Р№С‚Рё psm1 РІ СЂРѕРґРёС‚РµР»СЊСЃРєРѕР№ РїР°РїРєРµ
         $UtilsModulePath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils.psm1"
         if (Test-Path $UtilsModulePath) {
-            Write-Verbose "Check-PING: Загрузка New-CheckResultObject из $UtilsModulePath"
-            . $UtilsModulePath # Используем dot-sourcing для загрузки функций
-        } else { throw "Не удалось найти StatusMonitorAgentUtils.psm1" }
+            Write-Verbose "Check-PING: Р—Р°РіСЂСѓР·РєР° New-CheckResultObject РёР· $UtilsModulePath"
+            . $UtilsModulePath # РСЃРїРѕР»СЊР·СѓРµРј dot-sourcing РґР»СЏ Р·Р°РіСЂСѓР·РєРё С„СѓРЅРєС†РёР№
+        } else { throw "РќРµ СѓРґР°Р»РѕСЃСЊ РЅР°Р№С‚Рё StatusMonitorAgentUtils.psm1" }
     } catch {
-        Write-Error "Check-PING: Не удалось загрузить функцию New-CheckResultObject! $($_.Exception.Message)"
-        # Создаем заглушку, чтобы скрипт не упал полностью
+        Write-Error "Check-PING: РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С„СѓРЅРєС†РёСЋ New-CheckResultObject! $($_.Exception.Message)"
+        # РЎРѕР·РґР°РµРј Р·Р°РіР»СѓС€РєСѓ, С‡С‚РѕР±С‹ СЃРєСЂРёРїС‚ РЅРµ СѓРїР°Р» РїРѕР»РЅРѕСЃС‚СЊСЋ
         function New-CheckResultObject { param($IsAvailable, $CheckSuccess=$null, $Details=$null, $ErrorMessage=$null) return @{IsAvailable=$IsAvailable; CheckSuccess=$CheckSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$Details; ErrorMessage=$ErrorMessage} }
     }
 }
@@ -55,7 +55,7 @@ $TtlValue = 128
 if ($TimeoutMs -lt 500) { $TtlValue = 64 }
 if ($TimeoutMs -gt 2000) { $TtlValue = 255 }
 
-Write-Verbose "[$NodeName] Check-PING: Начало проверки для $TargetIP (Count: $PingCount, Timeout: $TimeoutMs, Buffer: $BufferSize, TTL: $TtlValue)"
+Write-Verbose "[$NodeName] Check-PING: РќР°С‡Р°Р»Рѕ РїСЂРѕРІРµСЂРєРё РґР»СЏ $TargetIP (Count: $PingCount, Timeout: $TimeoutMs, Buffer: $BufferSize, TTL: $TtlValue)"
 
 $isAvailable = $false
 $checkSuccess = $null
@@ -63,8 +63,8 @@ $details = $null
 $errorMessage = $null
 
 try {
-    # В PowerShell Core (v6+) Test-Connection не имеет BufferSize и TTL.
-    # В PowerShell 5.1 они есть. Делаем проверку версии.
+    # Р’ PowerShell Core (v6+) Test-Connection РЅРµ РёРјРµРµС‚ BufferSize Рё TTL.
+    # Р’ PowerShell 5.1 РѕРЅРё РµСЃС‚СЊ. Р”РµР»Р°РµРј РїСЂРѕРІРµСЂРєСѓ РІРµСЂСЃРёРё.
     $invokeParams = @{
         ComputerName = $TargetIP
         Count        = $PingCount
@@ -73,10 +73,10 @@ try {
     if ($PSVersionTable.PSVersion.Major -le 5) {
         $invokeParams.TimeToLive = $TtlValue
         $invokeParams.BufferSize = $BufferSize
-        # Таймаут в Test-Connection не очень надежен, лучше не использовать или делать свою обертку
+        # РўР°Р№РјР°СѓС‚ РІ Test-Connection РЅРµ РѕС‡РµРЅСЊ РЅР°РґРµР¶РµРЅ, Р»СѓС‡С€Рµ РЅРµ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РёР»Рё РґРµР»Р°С‚СЊ СЃРІРѕСЋ РѕР±РµСЂС‚РєСѓ
         # if($TimeoutMs) { $invokeParams.TimeoutSeconds = [math]::Ceiling($TimeoutMs / 1000) }
     } else {
-         # В PowerShell Core можно использовать -PingTimeout для общего таймаута
+         # Р’ PowerShell Core РјРѕР¶РЅРѕ РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ -PingTimeout РґР»СЏ РѕР±С‰РµРіРѕ С‚Р°Р№РјР°СѓС‚Р°
          if($TimeoutMs) { $invokeParams.PingTimeout = [math]::Ceiling($TimeoutMs / 1000) }
     }
 
@@ -84,7 +84,7 @@ try {
 
     $isAvailable = $true
     $firstResponse = $pingResult | Select-Object -First 1
-    # Обработка разных версий PS для получения RTT и IP
+    # РћР±СЂР°Р±РѕС‚РєР° СЂР°Р·РЅС‹С… РІРµСЂСЃРёР№ PS РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ RTT Рё IP
     $rtt = $null
     $actualIp = $null
     if ($firstResponse.PSObject.Properties.Name -contains 'ResponseTime') {
@@ -98,7 +98,7 @@ try {
          $actualIp = $firstResponse.Address # PS Core
     }
 
-    Write-Verbose "[$NodeName] Check-PING: Пинг успешен. RTT: $($rtt)ms, Ответивший IP: $actualIp"
+    Write-Verbose "[$NodeName] Check-PING: РџРёРЅРі СѓСЃРїРµС€РµРЅ. RTT: $($rtt)ms, РћС‚РІРµС‚РёРІС€РёР№ IP: $actualIp"
 
     $details = @{
         response_time_ms = $rtt
@@ -107,47 +107,47 @@ try {
         ping_count = $PingCount
     }
 
-    # Проверяем критерии успеха
+    # РџСЂРѕРІРµСЂСЏРµРј РєСЂРёС‚РµСЂРёРё СѓСЃРїРµС…Р°
     $maxRtt = $null
     if ($SuccessCriteria -ne $null -and $SuccessCriteria.ContainsKey('max_rtt_ms')) {
         if ([int]::TryParse($SuccessCriteria.max_rtt_ms, [ref]$maxRtt)) {
-            Write-Verbose "[$NodeName] Check-PING: Применяется критерий max_rtt_ms = $maxRtt"
-            if ($rtt -ne $null -and $rtt -gt $maxRtt) { # Добавили проверку $rtt -ne $null
+            Write-Verbose "[$NodeName] Check-PING: РџСЂРёРјРµРЅСЏРµС‚СЃСЏ РєСЂРёС‚РµСЂРёР№ max_rtt_ms = $maxRtt"
+            if ($rtt -ne $null -and $rtt -gt $maxRtt) { # Р”РѕР±Р°РІРёР»Рё РїСЂРѕРІРµСЂРєСѓ $rtt -ne $null
                 $checkSuccess = $false
-                $errorMessage = "Время ответа (RTT) {0}ms превышает максимально допустимое ({1}ms)." -f $rtt, $maxRtt
+                $errorMessage = "Р’СЂРµРјСЏ РѕС‚РІРµС‚Р° (RTT) {0}ms РїСЂРµРІС‹С€Р°РµС‚ РјР°РєСЃРёРјР°Р»СЊРЅРѕ РґРѕРїСѓСЃС‚РёРјРѕРµ ({1}ms)." -f $rtt, $maxRtt
                 $details.success_criteria_failed = $errorMessage
                 Write-Verbose "[$NodeName] Check-PING: $errorMessage"
             } else {
                 $checkSuccess = $true
-                Write-Verbose "[$NodeName] Check-PING: RTT $($rtt)ms соответствует критерию (<= $maxRtt ms)."
+                Write-Verbose "[$NodeName] Check-PING: RTT $($rtt)ms СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ РєСЂРёС‚РµСЂРёСЋ (<= $maxRtt ms)."
             }
         } else {
             $checkSuccess = $false
-            $errorMessage = "Некорректное значение 'max_rtt_ms' в SuccessCriteria: '$($SuccessCriteria.max_rtt_ms)'."
+            $errorMessage = "РќРµРєРѕСЂСЂРµРєС‚РЅРѕРµ Р·РЅР°С‡РµРЅРёРµ 'max_rtt_ms' РІ SuccessCriteria: '$($SuccessCriteria.max_rtt_ms)'."
             $details.success_criteria_error = $errorMessage
             Write-Warning "[$NodeName] Check-PING: $errorMessage"
         }
     } else {
         $checkSuccess = $true
-        Write-Verbose "[$NodeName] Check-PING: Критерии успеха не заданы, CheckSuccess=True."
+        Write-Verbose "[$NodeName] Check-PING: РљСЂРёС‚РµСЂРёРё СѓСЃРїРµС…Р° РЅРµ Р·Р°РґР°РЅС‹, CheckSuccess=True."
     }
 
 } catch {
-    # --- ИЗМЕНЕНО: Используем оператор -f ---
+    # --- РР—РњР•РќР•РќРћ: РСЃРїРѕР»СЊР·СѓРµРј РѕРїРµСЂР°С‚РѕСЂ -f ---
     $isAvailable = $false
     $checkSuccess = $null
     $exceptionMessage = $_.Exception.Message
     if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-    $errorMessage = "Ошибка PING для {0}: {1}" -f $TargetIP, $exceptionMessage
+    $errorMessage = "РћС€РёР±РєР° PING РґР»СЏ {0}: {1}" -f $TargetIP, $exceptionMessage
     $details = @{ error = $errorMessage; target_ip = $TargetIP; ErrorRecord = $_.ToString() }
     Write-Warning "[$NodeName] Check-PING: $errorMessage"
 }
 
-# Формируем и возвращаем стандартизированный результат
+# Р¤РѕСЂРјРёСЂСѓРµРј Рё РІРѕР·РІСЂР°С‰Р°РµРј СЃС‚Р°РЅРґР°СЂС‚РёР·РёСЂРѕРІР°РЅРЅС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚
 $finalResult = New-CheckResultObject -IsAvailable $isAvailable `
                                      -CheckSuccess $checkSuccess `
                                      -Details $details `
                                      -ErrorMessage $errorMessage
 
-Write-Verbose "[$NodeName] Check-PING: Возвращаемый результат: $($finalResult | ConvertTo-Json -Depth 3 -Compress)"
+Write-Verbose "[$NodeName] Check-PING: Р’РѕР·РІСЂР°С‰Р°РµРјС‹Р№ СЂРµР·СѓР»СЊС‚Р°С‚: $($finalResult | ConvertTo-Json -Depth 3 -Compress)"
 return $finalResult
