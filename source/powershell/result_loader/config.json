@@ -1,6 +1,6 @@
 {
     "api_base_url": "http://localhost:48030/api",
-    "api_key": "jehKRDz5rQN0Xeak5-J2lh18yL8I5zJ4UGSUtaIG8j0",
+    "api_key": "zwhd4NDpNEQ4WARdCrGRiN6br6hzr_N14_YwOmJADj0",
     "check_folder": "F:\\status\\builds\\results_offline", 
     "log_file": "F:\\status\\builds\\Logs\\result_loader.log",
     "log_level": "Info",

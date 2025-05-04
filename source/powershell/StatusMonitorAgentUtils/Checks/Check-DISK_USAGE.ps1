@@ -1,168 +1,148 @@
-﻿<#
+﻿# F:\status\source\powershell\StatusMonitorAgentUtils\Checks\Check-DISK_USAGE.ps1
+# --- Версия 2.0 ---
+# Изменения:
+# - Логика проверки SuccessCriteria вынесена в универсальную функцию Test-SuccessCriteria.
+# - Стандартизирован формат $Details.
+# - Убран прямой расчет CheckSuccess на основе min_percent_free.
+# - Добавлен вызов Test-SuccessCriteria.
+
+<#
 .SYNOPSIS
-    Скрипт проверки использования дискового пространства.
+    Скрипт проверки использования дискового пространства. (v2.0)
 .DESCRIPTION
-    Получает информацию о логических дисках (объем, свободное место)
-    с помощью Get-Volume. Позволяет фильтровать диски и проверять
-    соответствие критериям успеха (минимальный % свободного места).
-    Возвращает стандартизированный объект результата.
+    Получает информацию о локальных дисках типа 'Fixed' с помощью Get-Volume.
+    Позволяет фильтровать диски по букве.
+    Формирует стандартизированный объект $Details с массивом 'disks', содержащим
+    детальную информацию о каждом проверенном диске.
+    Для определения итогового CheckSuccess использует универсальную функцию
+    Test-SuccessCriteria, сравнивающую $Details с переданным $SuccessCriteria.
+    Ожидаемый формат SuccessCriteria для проверки дисков:
+    @{ disks = @{ _condition_ = 'all'; _where_ = @{ drive_letter='C' }; percent_free = @{ '>' = 10 } } }
+    (Пример: для всех дисков, где буква 'C', % свободного места должен быть > 10).
 .PARAMETER TargetIP
-    [string] IP или имя хоста для проверки (передается диспетчером).
-    Игнорируется этим скриптом, т.к. Get-Volume не использует -ComputerName
-    напрямую при удаленном вызове через Invoke-Command. Диспетчер сам
-    решает, выполнять скрипт локально или удаленно.
+    [string] Обязательный. IP или имя хоста. Используется для логирования,
+             скрипт выполняется локально.
 .PARAMETER Parameters
     [hashtable] Опциональный. Параметры проверки:
-    - drives ([string[]]): Массив букв дисков для проверки (например, @('C', 'D')).
-                           Регистр не важен. Если не указан или пуст,
-                           проверяются все локальные диски типа 'Fixed'.
+    - drives ([string[]]): Массив букв дисков для проверки (регистр не важен).
+                           Если не указан, проверяются все локальные диски типа 'Fixed'.
 .PARAMETER SuccessCriteria
-    [hashtable] Опциональный. Критерии успеха. Ключи - БОЛЬШИЕ буквы дисков
-               (без двоеточия, например, 'C') или специальный ключ '_default_'.
-               Значения - хэш-таблицы с критериями.
-    Поддерживаемые критерии:
-    - min_percent_free (int): Минимально допустимый процент свободного места.
-    Пример: @{
-                C = @{ min_percent_free = 10 } # Для диска C минимум 10%
-                D = @{ min_percent_free = 15 } # Для диска D минимум 15%
-                _default_ = @{ min_percent_free = 5 } # Для остальных дисков минимум 5%
-            }
+    [hashtable] Опциональный. Критерии успеха. Ожидается структура для проверки
+                массива 'disks' в $Details (см. пример выше). Обрабатывается
+                функцией Test-SuccessCriteria.
 .PARAMETER NodeName
-    [string] Опциональный. Имя узла для логирования (передается диспетчером).
+    [string] Опциональный. Имя узла для логирования.
 .OUTPUTS
-    Hashtable - Стандартизированный объект результата
-                (IsAvailable, CheckSuccess, Timestamp, Details, ErrorMessage).
-                Details содержит массив 'disks', где каждый элемент - хэш-таблица
-                с информацией о конкретном диске.
+    Hashtable - Стандартизированный объект результата проверки.
+                Поле Details (hashtable) содержит:
+                - disks (List<object>): Массив хэш-таблиц с информацией о дисках
+                  (drive_letter, label, filesystem, size_bytes, free_bytes,
+                  used_bytes, size_gb, free_gb, used_gb, percent_free, percent_used).
+                - message (string): Опциональное сообщение (напр., если диски не найдены).
+                - error (string): Опциональное сообщение об ошибке выполнения.
+                - ErrorRecord (string): Опционально, полный текст исключения.
 .NOTES
-    Версия: 1.1 (Исправлена ошибка с Add() и ToUpper())
-    Зависит от функции New-CheckResultObject, которая должна быть
-    доступна в окружении выполнения (загружена из StatusMonitorAgentUtils.psm1).
+    Версия: 2.0.1 (Добавлены комментарии, форматирование, улучшена обработка 0 размера диска).
+    Зависит от функций New-CheckResultObject и Test-SuccessCriteria из StatusMonitorAgentUtils.psm1.
+    Требует ОС Windows 8 / Server 2012 или новее для Get-Volume.
 #>
 param(
-    # Целевой IP или имя хоста. Не используется напрямую в Get-Volume,
-    # но принимается для совместимости с диспетчером.
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$TargetIP,
 
-    # Параметры, специфичные для проверки дисков (например, список букв).
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [hashtable]$Parameters = @{},
 
-    # Критерии для определения успешности проверки (например, мин. % свободного места).
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [hashtable]$SuccessCriteria = $null,
 
-    # Имя узла для более информативного логирования.
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [string]$NodeName = "Unknown Node"
 )
 
-# --- Начало логики проверки ---
-
-# Инициализация хэш-таблицы для результата.
-# IsAvailable = $false по умолчанию (пока проверка не выполнена успешно).
-# Details.disks инициализируется как Generic List для возможности добавления элементов.
-$resultData = @{
-    IsAvailable = $false
-    CheckSuccess = $null
-    Details = @{ disks = [System.Collections.Generic.List[object]]::new() }
-    ErrorMessage = $null
+# --- Инициализация переменных ---
+$isAvailable = $false
+$checkSuccess = $null
+$errorMessage = $null
+$finalResult = $null
+# Инициализируем $Details с пустым списком дисков
+$details = @{
+    disks = [System.Collections.Generic.List[object]]::new()
+    # message будет добавлено при необходимости
 }
-# Флаг общего успеха по всем критериям для всех проверенных дисков.
-$overallCheckSuccess = $true
-# Список для сбора сообщений об ошибках (особенно при несоответствии критериям).
-$errorMessages = [System.Collections.Generic.List[string]]::new()
 
-Write-Verbose "[$NodeName] Check-DISK_USAGE: Начало проверки дисков."
+Write-Verbose "[$NodeName] Check-DISK_USAGE (v2.0.1): Начало проверки дисков на $TargetIP (локально на $env:COMPUTERNAME)"
 
-# Основной блок try/catch для отлова критических ошибок (например, недоступность Get-Volume).
+# --- Основной блок Try/Catch ---
 try {
 
-    # 1. Получаем информацию о томах с помощью Get-Volume.
-    # Get-Volume возвращает информацию о дисковых томах системы.
-    # Используем -ErrorAction Stop, чтобы прервать выполнение и перейти в catch при ошибке командлета.
+    # --- 1. Выполнение Get-Volume ---
     Write-Verbose "[$NodeName] Check-DISK_USAGE: Вызов Get-Volume..."
+    # Выполняем команду, перехватывая критические ошибки (например, командлет не найден на старой ОС)
     $volumes = Get-Volume -ErrorAction Stop
 
-    # Если Get-Volume выполнился без ошибок, считаем, что проверка стала доступной.
-    $resultData.IsAvailable = $true
-    Write-Verbose "[$NodeName] Check-DISK_USAGE: Получено томов: $($volumes.Count)"
+    # Если команда выполнилась без исключения, считаем проверку доступной
+    $isAvailable = $true
+    Write-Verbose "[$NodeName] Check-DISK_USAGE: Get-Volume выполнен. Получено томов: $($volumes.Count)"
 
-    # 2. Фильтруем тома, которые нужно проверить.
-
-    # Массив для хранения целевых букв дисков (в верхнем регистре).
-    $targetDriveLetters = @()
-    # Проверяем, передан ли параметр 'drives' и является ли он непустым массивом.
+    # --- 2. Фильтрация томов ---
+    $targetDriveLetters = @() # Массив для целевых букв (Upper Case)
+    # Проверяем параметр 'drives'
     if ($Parameters.ContainsKey('drives') -and $Parameters.drives -is [array] -and $Parameters.drives.Count -gt 0) {
-        # Если да, приводим каждую букву к верхнему регистру и убираем пробелы.
         $targetDriveLetters = $Parameters.drives | ForEach-Object { $_.Trim().ToUpper() }
         Write-Verbose "[$NodeName] Check-DISK_USAGE: Фильтрация по указанным дискам: $($targetDriveLetters -join ', ')"
     } else {
-        # Если параметр 'drives' не задан, будем проверять все подходящие диски.
-        Write-Verbose "[$NodeName] Check-DISK_USAGE: Параметр 'drives' не указан, проверяем все диски типа 'Fixed'."
+        Write-Verbose "[$NodeName] Check-DISK_USAGE: Параметр 'drives' не указан, обрабатываем все диски типа 'Fixed'."
     }
 
-    # Фильтруем полученные тома:
+    # Фильтруем тома по типу 'Fixed', наличию буквы и списку $targetDriveLetters (если он задан)
     $filteredVolumes = $volumes | Where-Object {
-        # Оставляем только диски типа 'Fixed' (локальные жесткие диски).
         $isFixed = $_.DriveType -eq 'Fixed'
-        # Оставляем только диски, у которых есть назначенная буква.
         $currentDriveLetterChar = $_.DriveLetter
         $hasLetter = $null -ne $currentDriveLetterChar -and (-not [string]::IsNullOrWhiteSpace($currentDriveLetterChar))
-
-        # Преобразуем букву (которая является [char]) в строку для дальнейших операций.
         $currentDriveLetterString = $currentDriveLetterChar.ToString()
-
-        # Проверяем, входит ли буква диска в целевой список (если список задан).
-        # Если $targetDriveLetters пуст (т.е. параметр 'drives' не был задан), то это условие всегда true.
-        $isInTargetList = $targetDriveLetters.Count -eq 0 -or $targetDriveLetters -contains $currentDriveLetterString.ToUpper()
-
-        # Итоговое условие: диск должен быть Fixed, иметь букву и соответствовать списку (если он задан).
+        $isInTargetList = ($targetDriveLetters.Count -eq 0) -or ($targetDriveLetters -contains $currentDriveLetterString.ToUpper())
+        # Условие: Fixed И HasLetter И (Нет фильтра ИЛИ Входит в фильтр)
         $isFixed -and $hasLetter -and $isInTargetList
     }
-    Write-Verbose "[$NodeName] Check-DISK_USAGE: Томов после фильтрации: $($filteredVolumes.Count)"
+    Write-Verbose "[$NodeName] Check-DISK_USAGE: Количество томов после фильтрации: $($filteredVolumes.Count)"
 
-    # Если после фильтрации не осталось дисков для проверки.
+    # --- 3. Обработка отфильтрованных томов и формирование $Details ---
     if ($filteredVolumes.Count -eq 0) {
-         # Считаем результат успешным (нет дисков - нет проблем).
-         $resultData.CheckSuccess = $true
-         # Добавляем информационное сообщение в Details.
-         $resultData.Details.message = "Нет дисков типа 'Fixed'"
-         if ($targetDriveLetters.Count -gt 0) {
-             $resultData.Details.message += " соответствующих указанным буквам ($($targetDriveLetters -join ', '))"
-         }
-         $resultData.Details.message += "."
-         Write-Verbose "[$NodeName] Check-DISK_USAGE: $($resultData.Details.message)"
+        # Если дисков для проверки не осталось
+        $details.message = "Нет локальных дисков типа 'Fixed'"
+        if ($targetDriveLetters.Count -gt 0) {
+            $details.message += ", соответствующих указанным буквам ($($targetDriveLetters -join ', '))"
+        }
+        $details.message += "."
+        Write-Verbose "[$NodeName] Check-DISK_USAGE: $($details.message)"
+        # CheckSuccess остается $null, будет установлен в $true ниже, если $isAvailable = $true
     } else {
-        # 3. Обрабатываем каждый отфильтрованный том.
+        # Если есть диски для обработки
         foreach ($vol in $filteredVolumes) {
-
-            # Получаем букву диска, преобразуем в строку и верхний регистр.
             $driveLetter = $vol.DriveLetter.ToString().ToUpper()
+            Write-Verbose "[$NodeName] Check-DISK_USAGE: Обработка диска $driveLetter"
 
-            # Создаем хэш-таблицу для хранения информации об этом диске.
-            $diskInfo = @{
+            # Собираем информацию о диске
+            $diskInfo = [ordered]@{
                 drive_letter = $driveLetter
-                label        = $vol.FileSystemLabel # Метка тома
-                filesystem   = $vol.FileSystem     # Файловая система (NTFS, FAT32 и т.д.)
-                size_bytes   = $vol.Size           # Общий размер в байтах
-                free_bytes   = $vol.SizeRemaining  # Свободно в байтах
-                used_bytes   = $vol.Size - $vol.SizeRemaining # Занято в байтах
-                # Поля для рассчитанных значений (GB, %) - инициализируем null.
+                label        = $vol.FileSystemLabel
+                filesystem   = $vol.FileSystem
+                size_bytes   = $vol.Size
+                free_bytes   = $vol.SizeRemaining
+                used_bytes   = $vol.Size - $vol.SizeRemaining
                 size_gb      = $null
                 free_gb      = $null
                 used_gb      = $null
                 percent_free = $null
                 percent_used = $null
-                # Поля для результатов проверки критериев.
-                criteria_applied = $null # Какой критерий был применен ([hashtable] или $null).
-                criteria_passed  = $null # Результат проверки критерия ([bool] или $null).
-                criteria_failed_reason = $null # Причина провала критерия ([string] или $null).
+                # <<< УБРАНЫ ПОЛЯ КРИТЕРИЕВ ИЗ Details >>>
+                # criteria_applied = $null
+                # criteria_passed  = $null
+                # criteria_failed_reason = $null
             }
 
-            # Рассчитываем значения в ГБ и процентах.
-            # Проверяем, что размер диска > 0, чтобы избежать деления на ноль.
+            # Рассчитываем производные значения (GB, %)
             if ($diskInfo.size_bytes -gt 0) {
                 $diskInfo.size_gb = [math]::Round($diskInfo.size_bytes / 1GB, 2)
                 $diskInfo.free_gb = [math]::Round($diskInfo.free_bytes / 1GB, 2)
@@ -170,105 +150,90 @@ try {
                 $diskInfo.percent_free = [math]::Round(($diskInfo.free_bytes / $diskInfo.size_bytes) * 100, 1)
                 $diskInfo.percent_used = [math]::Round(($diskInfo.used_bytes / $diskInfo.size_bytes) * 100, 1)
             } else {
-                # Если размер 0 (например, пустой картридер), устанавливаем нулевые значения.
-                $diskInfo.size_gb = 0
-                $diskInfo.free_gb = 0
-                $diskInfo.used_gb = 0
-                $diskInfo.percent_free = 0
-                $diskInfo.percent_used = 100
+                # Обработка дисков с нулевым размером
+                Write-Warning "[$NodeName] Check-DISK_USAGE: Диск $driveLetter имеет размер 0 байт."
+                $diskInfo.size_gb = 0; $diskInfo.free_gb = 0; $diskInfo.used_gb = 0
+                $diskInfo.percent_free = 0; $diskInfo.percent_used = 0 # Условно 0% свободно, 0% занято
             }
 
-            # 4. Проверяем критерии успеха для этого диска.
-            $criterion = $null
-            # Если критерии вообще переданы.
-            if ($SuccessCriteria -ne $null) {
-                # Ищем критерий для конкретной буквы диска (в верхнем регистре).
-                if ($SuccessCriteria.ContainsKey($driveLetter)) {
-                    $criterion = $SuccessCriteria[$driveLetter]
-                    Write-Verbose "[$NodeName] Check-DISK_USAGE: Найден критерий для диска $driveLetter"
-                }
-                # Если конкретного нет, ищем критерий по умолчанию '_default_'.
-                elseif ($SuccessCriteria.ContainsKey('_default_')) {
-                    $criterion = $SuccessCriteria['_default_']
-                    Write-Verbose "[$NodeName] Check-DISK_USAGE: Используется критерий _default_ для диска $driveLetter"
-                }
-            }
+            # Добавляем информацию о диске в список $Details.disks
+            $details.disks.Add($diskInfo)
 
-            # Применяем критерий, если он найден, является хэш-таблицей и содержит ключ 'min_percent_free'.
-            if ($criterion -is [hashtable] -and $criterion.ContainsKey('min_percent_free')) {
-                # Запоминаем, какой критерий применили.
-                $diskInfo.criteria_applied = $criterion
+            # <<< УБРАНА ЛОГИКА ПРОВЕРКИ КРИТЕРИЕВ ЗДЕСЬ >>>
 
-                $minPercentFree = $null
-                # Пытаемся преобразовать значение критерия в целое число.
-                if ([int]::TryParse($criterion.min_percent_free, [ref]$minPercentFree)) {
-                     Write-Verbose "[$NodeName] Check-DISK_USAGE: Диск $driveLetter - Проверка критерия min_percent_free = $minPercentFree %"
-                     # Проверяем, если процент свободного места рассчитан и он меньше требуемого.
-                     if ($diskInfo.percent_free -ne $null -and $diskInfo.percent_free -lt $minPercentFree) {
-                         # Критерий НЕ пройден.
-                         $diskInfo.criteria_passed = $false
-                         $failReason = "Свободно {0}% < Требуется {1}%" -f $diskInfo.percent_free, $minPercentFree
-                         $diskInfo.criteria_failed_reason = $failReason
-                         # Добавляем сообщение об ошибке в общий список.
-                         $errorMessages.Add(("Диск {0}: {1}" -f $driveLetter, $failReason)) | Out-Null
-                         # Устанавливаем общий флаг успеха в $false.
-                         $overallCheckSuccess = $false
-                         Write-Verbose "[$NodeName] Check-DISK_USAGE: Диск $driveLetter - НЕУДАЧА по критерию: $failReason"
-                     } else {
-                          # Критерий пройден.
-                          $diskInfo.criteria_passed = $true
-                          Write-Verbose "[$NodeName] Check-DISK_USAGE: Диск $driveLetter - УСПЕХ по критерию."
-                     }
-                } else {
-                     # Некорректное значение в критерии (не число).
-                     $diskInfo.criteria_passed = $false # Считаем неудачей.
-                     $failReason = "Некорректное значение min_percent_free ('$($criterion.min_percent_free)')"
-                     $diskInfo.criteria_failed_reason = $failReason
-                     # Добавляем сообщение об ошибке в общий список.
-                     $errorMessages.Add(("Диск {0}: {1}" -f $driveLetter, $failReason)) | Out-Null
-                     $overallCheckSuccess = $false
-                     Write-Warning "[$NodeName] Check-DISK_USAGE: Диск $driveLetter - $failReason"
-                }
-            } else {
-                 # Критерий для этого диска не найден или не содержит min_percent_free.
-                 $diskInfo.criteria_passed = $null # Явно указываем, что критерий не применялся.
-                 Write-Verbose "[$NodeName] Check-DISK_USAGE: Диск $driveLetter - Критерий min_percent_free не найден/не применен."
-            }
-
-            # Добавляем собранную информацию о диске в итоговый список в Details.
-            $resultData.Details.disks.Add($diskInfo)
-
-        } # Конец цикла foreach ($vol in $filteredVolumes)
+        } # Конец foreach ($vol in $filteredVolumes)
     } # Конец else (если были диски для проверки)
 
-    # Устанавливаем итоговый результат CheckSuccess.
-    $resultData.CheckSuccess = $overallCheckSuccess
-    # Если хотя бы один критерий не был пройден, формируем общее сообщение об ошибке.
-    if (-not $overallCheckSuccess) {
-        $resultData.ErrorMessage = $errorMessages -join '; '
+    # --- 4. Вызов универсальной функции проверки критериев ---
+    $failReason = $null
+
+    if ($isAvailable) { # Проверяем критерии ТОЛЬКО если проверка прошла
+        if ($SuccessCriteria -ne $null -and $SuccessCriteria.Keys.Count -gt 0) {
+            Write-Verbose "[$NodeName] Check-DISK_USAGE: Вызов Test-SuccessCriteria..."
+            # Вызываем универсальную функцию
+            $criteriaResult = Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria
+            $checkSuccess = $criteriaResult.Passed # $true, $false или $null
+            $failReason = $criteriaResult.FailReason
+
+            if ($checkSuccess -eq $null) {
+                $errorMessage = "Ошибка при обработке SuccessCriteria: $failReason"
+                Write-Warning "[$NodeName] $errorMessage"
+            } elseif ($checkSuccess -eq $false) {
+                $errorMessage = $failReason # Причина провала станет ErrorMessage
+                Write-Verbose "[$NodeName] Check-DISK_USAGE: SuccessCriteria НЕ пройдены: $failReason"
+            } else {
+                $errorMessage = $null # Критерии пройдены
+                Write-Verbose "[$NodeName] Check-DISK_USAGE: SuccessCriteria пройдены."
+            }
+        } else {
+            # Критерии не заданы
+            $checkSuccess = $true
+            $errorMessage = $null
+            Write-Verbose "[$NodeName] Check-DISK_USAGE: SuccessCriteria не заданы, CheckSuccess=true."
+        }
+    } else {
+        # Если IsAvailable = $false
+        $checkSuccess = $null
+        if ([string]::IsNullOrEmpty($errorMessage)) {
+            # $errorMessage должен был установиться в catch блоке ниже
+            $errorMessage = "Ошибка выполнения проверки дисков (IsAvailable=false)."
+        }
     }
 
+    # --- 5. Формирование итогового результата ---
+    $finalResult = New-CheckResultObject -IsAvailable $isAvailable `
+                                         -CheckSuccess $checkSuccess `
+                                         -Details $details `
+                                         -ErrorMessage $errorMessage
+
+# <<< Закрываем основной try блок >>>
 } catch {
-    # Ловим критическую ошибку (например, Get-Volume не сработал).
-    $resultData.IsAvailable = $false
-    $resultData.CheckSuccess = $null
-    # Формируем сообщение об ошибке.
+    # --- Обработка КРИТИЧЕСКИХ ошибок скрипта ---
+    # Например, Get-Volume не найден или другая ошибка PowerShell
+    $isAvailable = $false
+    $checkSuccess = $null
     $exceptionMessage = $_.Exception.Message
     if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-    $errorMessage = "Ошибка получения информации о дисках: {0}" -f $exceptionMessage
-    $resultData.ErrorMessage = $errorMessage
-    # Убеждаемся, что Details существует и добавляем информацию об ошибке.
-    if ($null -eq $resultData.Details) { $resultData.Details = @{} }
-    $resultData.Details.error = $errorMessage
-    $resultData.Details.ErrorRecord = $_.ToString()
-    # Выводим ошибку в поток ошибок.
-    Write-Error "[$NodeName] Check-DISK_USAGE: Критическая ошибка: $errorMessage"
-}
+    $critErrorMessage = "Критическая ошибка при проверке дисков: {0}" -f $exceptionMessage
 
-# Формируем финальный объект результата с помощью общей функции.
-# Передаем все собранные данные @resultData (splatting).
-$finalResult = New-CheckResultObject @resultData
-Write-Verbose "[$NodeName] Check-DISK_USAGE: Возвращаемый результат: $($finalResult | ConvertTo-Json -Depth 4 -Compress)"
+    # Формируем Details с ошибкой
+    $detailsError = @{ error = $critErrorMessage; ErrorRecord = $_.ToString() }
 
-# Возвращаем результат.
+    # Создаем финальный результат ВРУЧНУЮ
+    $finalResult = @{
+        IsAvailable  = $isAvailable
+        CheckSuccess = $checkSuccess
+        Timestamp    = (Get-Date).ToUniversalTime().ToString("o")
+        Details      = $detailsError
+        ErrorMessage = $critErrorMessage
+    }
+    Write-Error "[$NodeName] Check-DISK_USAGE: Критическая ошибка: $critErrorMessage"
+} # <<< Закрываем основной catch блок >>>
+
+# --- Возврат результата ---
+# Используем стандартный доступ к свойствам, проверив $finalResult
+$isAvailableStr = if ($finalResult) { $finalResult.IsAvailable } else { '[result is null]' }
+$checkSuccessStr = if ($finalResult) { $finalResult.CheckSuccess } else { '[result is null]' }
+Write-Verbose "[$NodeName] Check-DISK_USAGE (v2.0.1): Завершение. IsAvailable=$isAvailableStr, CheckSuccess=$checkSuccessStr"
+
 return $finalResult

@@ -1,0 +1,23 @@
+# Используем официальный образ PowerShell (на базе Linux по умолчанию)
+FROM mcr.microsoft.com/powershell:latest
+
+# Устанавливаем рабочую директорию
+WORKDIR /tests
+
+# Копируем ВСЮ папку модуля с тестами внутрь контейнера
+# Убедись, что Dockerfile лежит в ПАПКЕ powershell/
+# или измени путь копирования на `COPY ./ ./` если Dockerfile в корне powershell/StatusMonitorAgentUtils
+COPY ./StatusMonitorAgentUtils /tests/StatusMonitorAgentUtils
+
+# Устанавливаем Pester и другие зависимости (если нужны)
+# Используем pwsh для выполнения команд PowerShell
+# УБИРАЕМ Set-ExecutionPolicy
+RUN pwsh -Command "Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser; \
+                   # Install-Module SqlServer -Force -SkipPublisherCheck -Scope CurrentUser; # Пример другой зависимости
+                   Write-Host 'Pester installed.'"
+
+# Устанавливаем рабочую директорию ВНУТРЬ папки с тестами модуля
+WORKDIR /tests/StatusMonitorAgentUtils/tests
+
+# Команда по умолчанию для запуска тестов
+CMD ["pwsh", "-Command", "Invoke-Pester -Output Detailed -CI -PassThru"]
