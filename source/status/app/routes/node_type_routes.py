@@ -4,7 +4,14 @@ import psycopg2
 from flask import Blueprint, request, jsonify, g
 from typing import Optional
 from ..repositories import node_type_repository
-from ..errors import ApiBadRequest, ApiNotFound, ApiConflict, ApiInternalError, ApiValidationFailure
+from ..errors import (
+    ApiBadRequest,
+    ApiNotFound,
+    ApiConflict,
+    ApiInternalError,
+    ApiValidationFailure,
+    ApiException
+)
 from flask_login import login_required
 
 logger = logging.getLogger(__name__)

@@ -89,17 +89,54 @@ BEGIN
 
 -- Обработка исключений
 EXCEPTION
-    WHEN SQLSTATE 'P0002' THEN -- Задание не найдено
-        INSERT INTO system_events (event_type, severity, message, source, object_id, assignment_id, details)
-        VALUES ('DB_WARN', 'WARN', format('Попытка записи результата для несуществующего задания ID=%s. Исполнитель: %s (Хост: %s)', p_assignment_id, p_executor_object_id, p_executor_host),
-                'record_check_result_proc', p_executor_object_id, p_assignment_id,
-                jsonb_build_object('assignment_version', p_assignment_version, 'agent_version', p_agent_version)); -- Логируем версии
-        RAISE;
+    WHEN SQLSTATE 'P0002' THEN -- Задание не найдено (no_data_found в Oracle, P0002 в PG по RAISE)
+        -- <<< НАЧАЛО ИЗМЕНЕНИЯ >>>
+        -- Записываем событие, но НЕ указываем assignment_id, чтобы избежать ошибки FK
+        INSERT INTO system_events (
+            event_type, severity, message, source, object_id, details
+            -- Убираем assignment_id из INSERT
+        )
+        VALUES (
+            'DB_WARN', 'WARN',
+            format('Попытка записи результата для несуществующего задания ID=%s. Исполнитель: %s (Хост: %s)', p_assignment_id, p_executor_object_id, p_executor_host),
+            'record_check_result_proc', p_executor_object_id,
+            jsonb_build_object(
+                 'original_assignment_id', p_assignment_id, -- Сохраняем ID в деталях
+                 'assignment_version', p_assignment_version,
+                 'agent_version', p_agent_version
+            )
+            -- Убираем p_assignment_id отсюда
+        );
+        -- <<< КОНЕЦ ИЗМЕНЕНИЯ >>>
+        -- Вместо RAISE Exception теперь просто логируем и выходим
+        -- RAISE; -- Убираем RAISE, чтобы не возвращать ошибку 500
+        -- Процедура завершится без ошибки, но результат не будет записан.
+        -- Route должен вернуть 404.
+        -- Хотя нет, repo сейчас проверяет pgcode='P0002'. Значит надо вернуть ошибку.
+        -- Вернем RAISE, но изменим INSERT в system_events
+
+        -- <<< ВЕРНУЛИ RAISE, НО INSERT ИЗМЕНЕН >>>
+         RAISE; -- Пробрасываем ошибку, чтобы репозиторий ее поймал как ValueError
+
     WHEN OTHERS THEN -- Другие ошибки
-        INSERT INTO system_events (event_type, severity, message, source, object_id, node_id, assignment_id, details)
-        VALUES ('DB_ERROR', 'ERROR', format('Ошибка обработки результата задания %s (Узел: %s): %s', p_assignment_id, COALESCE(v_node_name, 'N/A'), SQLERRM),
-                'record_check_result_proc', p_executor_object_id, v_node_id, p_assignment_id,
-                jsonb_build_object('sqlstate', SQLSTATE, 'assignment_version', p_assignment_version, 'agent_version', p_agent_version)); -- Логируем версии
+        -- <<< НАЧАЛО ИЗМЕНЕНИЯ (для единообразия) >>>
+        INSERT INTO system_events (
+            event_type, severity, message, source, object_id, node_id, details
+             -- Убираем assignment_id, node_check_id
+        )
+        VALUES (
+            'DB_ERROR', 'ERROR',
+            format('Ошибка обработки результата (Задание %s, Узел: %s): %s', COALESCE(p_assignment_id, 'N/A'), COALESCE(v_node_name, 'N/A'), SQLERRM),
+            'record_check_result_proc', p_executor_object_id, v_node_id,
+            jsonb_build_object(
+                'sqlstate', SQLSTATE,
+                'original_assignment_id', p_assignment_id, -- Сохраняем ID
+                'assignment_version', p_assignment_version,
+                'agent_version', p_agent_version
+            )
+            -- Убираем assignment_id, v_node_check_id отсюда
+        );
+        -- <<< КОНЕЦ ИЗМЕНЕНИЯ >>>
         RAISE;
 END;
 $$;

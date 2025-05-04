@@ -105,10 +105,10 @@ CREATE TABLE node_types (
     description TEXT,                      -- Описание типа узла. Необязательно.
     parent_type_id INTEGER REFERENCES node_types(id) ON DELETE SET NULL, -- ID родительского типа (ссылка на node_types.id). NULL для корневых типов. Внешний ключ будет добавлен позже. При удалении родителя тип становится корневым (SET NULL).
     priority INTEGER DEFAULT 10 NOT NULL,  -- Приоритет отображения/сортировки типов. Обязателен, по умолчанию 10.
-    icon_filename VARCHAR(100) NULL,       -- Имя файла иконки для типа узла (в static/icons/). Необязательно.
+    icon_filename VARCHAR(100) NULL       -- Имя файла иконки для типа узла (в static/icons/). Необязательно.
 
     -- Ограничение уникальности: Имя типа должно быть уникально В ПРЕДЕЛАХ ОДНОГО родителя.
-    CONSTRAINT unique_type_name_parent UNIQUE (name, parent_type_id)
+    -- CONSTRAINT unique_type_name_parent UNIQUE (name, parent_type_id) -- Уникальность имени типа узла в пределах одного родителя (если задан). Отсутствие UNIQUE грозит путаницей в типах узлов.
 );
 -- Комментарий к таблице: Позволяет классифицировать узлы, что используется для группировки, определения свойств по умолчанию и отображения.
 COMMENT ON TABLE node_types IS 'Иерархический справочник типов узлов.';

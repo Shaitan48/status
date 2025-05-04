@@ -18,3 +18,4 @@ Werkzeug>=2.3.0     # <<< УБЕДИТЕСЬ, что Werkzeug достаточн
 pytest
 Flask-Testing
 requests
+pytest-mock

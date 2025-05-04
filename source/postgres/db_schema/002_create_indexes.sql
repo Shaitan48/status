@@ -64,6 +64,20 @@ COMMENT ON INDEX idx_node_types_parent IS 'Ускоряет поиск доче�
 CREATE INDEX IF NOT EXISTS idx_node_types_priority_name ON node_types(priority, name);
 COMMENT ON INDEX idx_node_types_priority_name IS 'Оптимизирует сортировку списка типов узлов по приоритету и имени.';
 
+-- Индекс для уникальности имен В ПРЕДЕЛАХ ОДНОГО РОДИТЕЛЯ (когда родитель НЕ NULL)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_node_types_unique_name_parent_not_null
+    ON node_types (name, parent_type_id)
+    WHERE parent_type_id IS NOT NULL;
+COMMENT ON INDEX idx_node_types_unique_name_parent_not_null
+    IS 'Обеспечивает уникальность имени типа узла внутри одного родительского типа.';
+
+-- Индекс для уникальности имен КОРНЕВЫХ типов (когда родитель NULL)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_node_types_unique_name_parent_is_null
+    ON node_types (name) -- Индекс только по имени
+    WHERE parent_type_id IS NULL; -- Но только для строк, где родитель NULL
+COMMENT ON INDEX idx_node_types_unique_name_parent_is_null
+    IS 'Обеспечивает уникальность имени типа узла среди корневых типов (без родителя).';
+
 -- -----------------------------------------------------------------------------
 -- Индексы для таблицы: node_property_types
 -- -----------------------------------------------------------------------------

@@ -21,8 +21,10 @@ INSERT INTO node_types (name, description, parent_type_id, priority, icon_filena
 ('Сетевое оборудование', 'Сетевая инфраструктура', NULL, 30, 'network.svg'),
 ('Прочее оборудование', 'Дополнительное оборудование', NULL, 40, 'chip.svg')
 -- Конфликт по имени и отсутствию родителя (parent_type_id IS NULL)
-ON CONFLICT (name, parent_type_id) WHERE parent_type_id IS NULL DO UPDATE SET
-    description = EXCLUDED.description, priority = EXCLUDED.priority, icon_filename = EXCLUDED.icon_filename;
+ON CONFLICT (name) WHERE parent_type_id IS NULL DO UPDATE SET
+    description = EXCLUDED.description,
+    priority = EXCLUDED.priority,
+    icon_filename = EXCLUDED.icon_filename;
 
 -- Комментарий: Добавление некоторых дочерних типов. ID генерируются.
 INSERT INTO node_types (name, description, parent_type_id, priority, icon_filename) VALUES
@@ -32,16 +34,20 @@ INSERT INTO node_types (name, description, parent_type_id, priority, icon_filena
 ('АРМы(ДЛ)', 'АРМ должностных лиц', (SELECT id FROM node_types WHERE name='АРМы' AND parent_type_id IS NULL LIMIT 1), 20, 'workstation.svg'),
 ('АРМы(ОПК)', 'АРМ операторов', (SELECT id FROM node_types WHERE name='АРМы' AND parent_type_id IS NULL LIMIT 1), 20, 'workstation.svg')
 -- Конфликт по имени и ID родителя
-ON CONFLICT (name, parent_type_id) DO UPDATE SET
-    description = EXCLUDED.description, priority = EXCLUDED.priority, icon_filename = EXCLUDED.icon_filename;
+ON CONFLICT (name, parent_type_id) WHERE parent_type_id IS NOT NULL DO UPDATE SET
+    description = EXCLUDED.description,
+    priority = EXCLUDED.priority,
+    icon_filename = EXCLUDED.icon_filename;
 
 -- ===>>> НАЧАЛО ИЗМЕНЕНИЯ <<<===
 -- Комментарий: Добавляем тип для каналов связи. ID генерируется.
 INSERT INTO node_types (name, description, parent_type_id, priority, icon_filename) VALUES
 ('Каналы связи', 'Сетевые каналы (ViPNet и т.п.)', (SELECT id FROM node_types WHERE name='Сетевое оборудование' AND parent_type_id IS NULL LIMIT 1), 15, 'link.svg') -- Указали родителя ID=7 по имени
 -- Конфликт по имени и ID родителя
-ON CONFLICT (name, parent_type_id) DO UPDATE SET
-    description = EXCLUDED.description, priority = EXCLUDED.priority, icon_filename = EXCLUDED.icon_filename;
+ON CONFLICT (name, parent_type_id) WHERE parent_type_id IS NOT NULL DO UPDATE SET
+    description = EXCLUDED.description,
+    priority = EXCLUDED.priority,
+    icon_filename = EXCLUDED.icon_filename;
 -- ===>>> КОНЕЦ ИЗМЕНЕНИЯ <<<===
 
 -- Сброс последовательности до максимального ID, который был вставлен или обновлен.

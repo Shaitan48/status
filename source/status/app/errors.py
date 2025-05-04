@@ -44,6 +44,7 @@ class ApiBadRequest(ApiException):
     message = "Bad request."
 
 class ApiValidationFailure(ApiBadRequest):
+    status_code = 422
     error_code = "VALIDATION_FAILURE"
     message = "Input validation failed."
 

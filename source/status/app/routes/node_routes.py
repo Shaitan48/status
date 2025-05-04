@@ -6,7 +6,7 @@ from typing import Optional
 from ..repositories import node_repository, assignment_repository # Добавили assignment_repository
 import json # Для обработки JSON в assignments_status
 from datetime import datetime # Для обработки дат в assignments_status
-from ..errors import ApiNotFound, ApiInternalError, ApiException, ApiValidationFailure # Импортируем нужные исключения
+from ..errors import ApiNotFound, ApiInternalError, ApiException, ApiValidationFailure, ApiConflict # Импортируем нужные исключения
 from flask_login import login_required
 
 logger = logging.getLogger(__name__)
