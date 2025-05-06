@@ -7,8 +7,8 @@ $ErrorActionPreference = "Stop"; try { $mp=Join-Path $PSScriptRoot "StatusMonito
 
 # --- 2. Определение тестовых сценариев ---
 $baseProcessAssignment = @{
-    assignment_id = 400; method_name = 'PROCESS_LIST'; node_name = 'Process Test'; ip_address = $null
-    parameters = @{}; success_criteria = $null
+   assignment_id = 400; method_name = 'PROCESS_LIST'; node_name = 'Process Test'; ip_address = $null # <--- ip_address = $null
+   parameters = @{}; success_criteria = $null
 }
 
 # *** Результаты зависят от запущенных процессов на машине теста! ***
