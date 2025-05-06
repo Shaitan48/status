@@ -1,6 +1,8 @@
 ﻿# ManualTest-Check-PING.ps1 (v2.1)
 # Скрипт для ручного тестирования Check-PING.ps1 через диспетчер
 
+    
+
 # --- 1. Загрузка модуля Utils ---
 $ErrorActionPreference = "Stop"
 try {
