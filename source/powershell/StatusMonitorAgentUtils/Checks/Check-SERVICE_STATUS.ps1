@@ -1,157 +1,103 @@
 ﻿# F:\status\source\powershell\StatusMonitorAgentUtils\Checks\Check-SERVICE_STATUS.ps1
-# --- Версия 2.0 ---
-# Изменения:
-# - Логика проверки SuccessCriteria вынесена в универсальную функцию Test-SuccessCriteria.
-# - Стандартизирован формат $Details.
-# - Убран прямой расчет CheckSuccess на основе сравнения статуса.
-# - Добавлен вызов Test-SuccessCriteria.
-
+# --- Версия 2.0.1 --- Интеграция Test-SuccessCriteria
 <#
 .SYNOPSIS
-    Проверяет статус указанной системной службы. (v2.0)
+    Проверяет статус указанной системной службы. (v2.0.1)
 .DESCRIPTION
-    Обращается к службе локально с помощью Get-Service для получения
-    текущего статуса и другой информации.
-    Формирует стандартизированный объект $Details с данными службы.
-    Для определения итогового CheckSuccess использует универсальную функцию
-    Test-SuccessCriteria, сравнивающую $Details с переданным $SuccessCriteria.
-    Ожидаемый формат SuccessCriteria для проверки статуса:
-    @{ status = 'Running' } или @{ status = @{ '!=' = 'Stopped' } }
+    Использует Get-Service для получения статуса службы.
+    Формирует $Details с информацией о службе.
+    Вызывает Test-SuccessCriteria для определения CheckSuccess.
 .PARAMETER TargetIP
-    [string] Обязательный. IP или имя хоста. Используется для логирования,
-             скрипт выполняется локально.
+    [string] Обязательный. IP или имя хоста (для логирования).
 .PARAMETER Parameters
-    [hashtable] Обязательный. Должен содержать ключ 'service_name'.
-    Пример: @{ service_name = "Spooler" }
+    [hashtable] Обязательный. Должен содержать 'service_name'.
 .PARAMETER SuccessCriteria
-    [hashtable] Необязательный. Критерии успеха для сравнения с полями в $Details.
-                Пример: @{ status = "Running"; start_type = "Automatic" }
-                Обрабатывается функцией Test-SuccessCriteria.
+    [hashtable] Опциональный. Критерии успеха для полей в $Details
+                (напр., @{ status = 'Running'; start_type = 'Automatic' }).
 .PARAMETER NodeName
-    [string] Необязательный. Имя узла для логирования.
+    [string] Опциональный. Имя узла для логирования.
 .OUTPUTS
     Hashtable - Стандартизированный объект результата проверки.
-                Поле Details (hashtable) содержит (при успехе):
-                - service_name (string): Имя службы.
-                - status (string): Текущий статус ('Running', 'Stopped', ...).
-                - display_name (string): Отображаемое имя.
-                - start_type (string): Тип запуска ('Automatic', 'Manual', ...).
-                - can_stop (bool): Может ли быть остановлена.
-                А также (при ошибке):
-                - error (string): Сообщение об ошибке.
-                - ErrorRecord (string): Полный текст исключения.
 .NOTES
-    Версия: 2.0.1 (Добавлены комментарии, форматирование, улучшена обработка ошибок).
-    Зависит от функций New-CheckResultObject и Test-SuccessCriteria.
+    Версия: 2.0.1 (Интеграция Test-SuccessCriteria).
+    Зависит от New-CheckResultObject, Test-SuccessCriteria.
 #>
 param(
     [Parameter(Mandatory = $true)]
-    [string]$TargetIP, # Используется для логирования
-
-    [Parameter(Mandatory = $true)]
-    [hashtable]$Parameters,
-
+    [string]$TargetIP,
+    [Parameter(Mandatory = $false)]
+    [hashtable]$Parameters = @{},
     [Parameter(Mandatory = $false)]
     [hashtable]$SuccessCriteria = $null,
-
     [Parameter(Mandatory = $false)]
     [string]$NodeName = "Unknown Node"
 )
 
-# --- Инициализация переменных ---
-$isAvailable = $false
-$checkSuccess = $null
-$errorMessage = $null
-$finalResult = $null
-# Details инициализируем базовыми данными, которые точно известны
-$details = @{
-    service_name = $null # Будет установлен из параметров
-    # Остальные поля (status, display_name и т.д.) добавим после Get-Service
-}
+# --- Инициализация ---
+$isAvailable = $false; $checkSuccess = $null; $errorMessage = $null; $finalResult = $null
+$details = @{ service_name = $null } # Базовые детали
 
 Write-Verbose "[$NodeName] Check-SERVICE_STATUS (v2.0.1): Начало проверки для $TargetIP (локально)"
 
-# --- Основной блок Try/Catch ---
-try {
-    # --- 1. Валидация обязательных параметров ---
+# --- Основной Try/Catch ---
+try { # <<< НАЧАЛО ОСНОВНОГО TRY >>>
+    # 1. Валидация параметра service_name
     $serviceName = $Parameters.service_name
     if (-not $serviceName -or $serviceName -isnot [string] -or $serviceName.Trim() -eq '') {
-        throw "Параметр 'service_name' отсутствует или пуст в Parameters."
+        throw "Параметр 'service_name' отсутствует или пуст."
     }
     $serviceName = $serviceName.Trim()
-    $details.service_name = $serviceName # Записываем имя службы в Details
+    $details.service_name = $serviceName
     Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Проверяемая служба '$serviceName'"
 
-    # --- 2. Выполнение Get-Service ---
-    # Выполняем всегда локально в контексте агента
+    # 2. Выполнение Get-Service (локально)
     $service = $null
-    # Используем внутренний try/catch для отлова ошибки "служба не найдена"
     try {
         Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Вызов Get-Service -Name '$serviceName'..."
-        # ErrorAction Stop, чтобы ошибка попала в catch
         $service = Get-Service -Name $serviceName -ErrorAction Stop
-
-        # --- УСПЕШНО ПОЛУЧИЛИ СЛУЖБУ ---
-        $isAvailable = $true # Сама проверка удалась
+        # --- УСПЕХ Get-Service ---
+        $isAvailable = $true # Проверка выполнена
         $currentStatus = $service.Status.ToString()
-        Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Служба '$serviceName' найдена. Статус: $currentStatus"
-
-        # Заполняем $Details информацией о службе
+        Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Служба найдена. Статус: $currentStatus"
+        # Заполняем $Details
         $details.status = $currentStatus
         $details.display_name = $service.DisplayName
         $details.start_type = $service.StartType.ToString()
         $details.can_stop = $service.CanStop
-        # Добавьте другие нужные свойства $service в $Details, если требуется
+        # Добавьте другие нужные свойства, если необходимо
+        # $details.can_pause_and_continue = $service.CanPauseAndContinue
 
-        # <<< ЛОГИКА ПРОВЕРКИ КРИТЕРИЕВ УБРАНА ОТСЮДА >>>
-
-    # Ловим конкретную ошибку "служба не найдена"
     } catch [Microsoft.PowerShell.Commands.ServiceCommandException] {
         # --- ОШИБКА: Служба не найдена ---
-        $isAvailable = $false # Не смогли выполнить проверку
+        $isAvailable = $false
         $errorMessage = "Служба '$serviceName' не найдена на '$($env:COMPUTERNAME)'."
-        # Добавляем ошибку в Details
         $details.error = $errorMessage
         Write-Warning "[$NodeName] Check-SERVICE_STATUS: $errorMessage"
         # CheckSuccess остается $null
-
-    # Ловим другие ошибки Get-Service (маловероятно при локальном вызове, но возможно)
     } catch {
         # --- ОШИБКА: Другая ошибка Get-Service ---
-        $isAvailable = $false # Не смогли выполнить проверку
-        $exceptionMessage = $_.Exception.Message
-        if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-        $errorMessage = "Ошибка Get-Service для '$serviceName': $exceptionMessage"
-        $details.error = $errorMessage
-        $details.ErrorRecord = $_.ToString()
+        $isAvailable = $false
+        $errorMessage = "Ошибка Get-Service для '$serviceName': $($_.Exception.Message)"
+        $details.error = $errorMessage; $details.ErrorRecord = $_.ToString()
         Write-Warning "[$NodeName] Check-SERVICE_STATUS: $errorMessage"
         # CheckSuccess остается $null
     }
 
-    # --- 3. Вызов универсальной функции проверки критериев ---
+    # --- 3. Проверка критериев успеха (вызов универсальной функции) ---
     $failReason = $null
-
-    # Проверяем критерии только если сама проверка удалась ($isAvailable = true)
-    if ($isAvailable) {
-        if ($SuccessCriteria -ne $null -and $SuccessCriteria.Keys.Count -gt 0) {
+    if ($isAvailable -eq $true) { # Проверяем критерии только если Get-Service успешен
+        if ($SuccessCriteria -ne $null -and $SuccessCriteria.PSObject.Properties.Count -gt 0) {
             Write-Verbose "[$NodeName] Check-SERVICE_STATUS: Вызов Test-SuccessCriteria..."
-            # Передаем $Details (со status, start_type и т.д.) и $SuccessCriteria
             $criteriaResult = Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria
             $checkSuccess = $criteriaResult.Passed
             $failReason = $criteriaResult.FailReason
-
-            if ($checkSuccess -eq $null) {
-                # Ошибка в самих критериях
-                $errorMessage = "Ошибка при обработке SuccessCriteria: $failReason"
-                Write-Warning "[$NodeName] $errorMessage"
-            } elseif ($checkSuccess -eq $false) {
-                # Критерии не пройдены
-                $errorMessage = $failReason # Используем причину как сообщение
-                Write-Verbose "[$NodeName] Check-SERVICE_STATUS: SuccessCriteria НЕ пройдены: $failReason"
+            if ($checkSuccess -ne $true) { # Если $false или $null (ошибка критерия)
+                $errorMessage = $failReason | Get-OrElse "Критерии успеха не пройдены."
+                Write-Verbose "[$NodeName] Check-SERVICE_STATUS: SuccessCriteria НЕ пройдены/ошибка: $errorMessage"
             } else {
-                # Критерии пройдены
-                $errorMessage = $null # Ошибки нет
-                Write-Verbose "[$NodeName] Check-SERVICE_STATUS: SuccessCriteria пройдены."
+                 Write-Verbose "[$NodeName] Check-SERVICE_STATUS: SuccessCriteria пройдены."
+                 # Если критерии пройдены, убедимся, что сообщение об ошибке пустое
+                 $errorMessage = $null
             }
         } else {
             # Критерии не заданы
@@ -160,12 +106,10 @@ try {
             Write-Verbose "[$NodeName] Check-SERVICE_STATUS: SuccessCriteria не заданы, CheckSuccess=true."
         }
     } else {
-        # Если IsAvailable = $false
+        # Get-Service не удался ($isAvailable = $false) -> CheckSuccess остается $null
         $checkSuccess = $null
-        # $errorMessage уже был установлен в блоках catch выше
-        if ([string]::IsNullOrEmpty($errorMessage)) {
-            $errorMessage = "Ошибка выполнения проверки статуса службы (IsAvailable=false)."
-        }
+        # $errorMessage уже установлен в блоках catch выше
+        if ([string]::IsNullOrEmpty($errorMessage)) { $errorMessage = "Ошибка проверки статуса службы (IsAvailable=false)." }
     }
 
     # --- 4. Формирование итогового результата ---
@@ -174,31 +118,16 @@ try {
                                          -Details $details `
                                          -ErrorMessage $errorMessage
 
-# <<< Закрываем основной try блок >>>
+# <<< Закрываем основной try >>>
 } catch {
-    # --- Обработка КРИТИЧЕСКИХ ошибок скрипта ---
-    # Например, ошибка валидации параметра service_name
-    $isAvailable = $false
-    $checkSuccess = $null
-    $exceptionMessage = $_.Exception.Message
-    if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-    $critErrorMessage = "Критическая ошибка скрипта Check-SERVICE_STATUS: {0}" -f $exceptionMessage
-
-    # Формируем Details с ошибкой
+    # --- Обработка КРИТИЧЕСКИХ ошибок (например, валидация параметра) ---
+    $isAvailable = $false; $checkSuccess = $null
+    $critErrorMessage = "Критическая ошибка Check-SERVICE_STATUS: $($_.Exception.Message)"
     $detailsError = @{ error = $critErrorMessage; ErrorRecord = $_.ToString() }
-    # Добавляем имя службы, если успели его получить
     if ($details.service_name) { $detailsError.service_name = $details.service_name }
-
-    # Создаем финальный результат ВРУЧНУЮ
-    $finalResult = @{
-        IsAvailable  = $isAvailable
-        CheckSuccess = $checkSuccess
-        Timestamp    = (Get-Date).ToUniversalTime().ToString("o")
-        Details      = $detailsError
-        ErrorMessage = $critErrorMessage
-    }
+    $finalResult = @{ IsAvailable=$isAvailable; CheckSuccess=$checkSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$detailsError; ErrorMessage=$critErrorMessage }
     Write-Error "[$NodeName] Check-SERVICE_STATUS: Критическая ошибка: $critErrorMessage"
-} # <<< Закрываем основной catch блок >>>
+} # <<< Закрываем основной catch >>>
 
 # --- Возврат результата ---
 $isAvailableStr = if ($finalResult) { $finalResult.IsAvailable } else { '[result is null]' }

@@ -1,369 +1,118 @@
-﻿# F:\status\source\powershell\StatusMonitorAgentUtils\ManualTest-SQL-Checks-Kaskad.ps1
-# --- Скрипт для ручного тестирования SQL-проверок на базе testDB_kaskad ---
+﻿# ManualTest-SQL-Checks-Kaskad.ps1 (v2.1)
+# --- Скрипт для ручного тестирования SQL-проверок на базе testDB_kaskad через диспетчер ---
 
 # --- 1. Загрузка модуля Utils ---
-$ErrorActionPreference = "Stop" # Прерывать выполнение при ошибке
-try {
-    # Путь к манифесту модуля относительно ЭТОГО скрипта
-    $modulePath = Join-Path -Path $PSScriptRoot -ChildPath "StatusMonitorAgentUtils.psd1"
-    Write-Host "INFO: Загрузка модуля из '$modulePath'..." -ForegroundColor Cyan
-    Import-Module $modulePath -Force
-    Write-Host "INFO: Модуль StatusMonitorAgentUtils загружен." -ForegroundColor Green
-} catch {
-    Write-Error "КРИТИЧЕСКАЯ ОШИБКА: Не удалось загрузить модуль Utils: $($_.Exception.Message)"
-    exit 1
-} finally {
-    $ErrorActionPreference = "Continue" # Возвращаем стандартное поведение
-}
-Write-Host "INFO: Проверка наличия команды Invoke-StatusMonitorCheck:"
-Get-Command Invoke-StatusMonitorCheck -ErrorAction SilentlyContinue | Format-Table Name, ModuleName -AutoSize
-Write-Host "INFO: Проверка наличия команды Invoke-Sqlcmd:"
-Get-Command Invoke-Sqlcmd -ErrorAction SilentlyContinue | Format-Table Name, ModuleName -AutoSize
-if (-not (Get-Command Invoke-Sqlcmd -ErrorAction SilentlyContinue)) {
-    Write-Warning "Модуль SqlServer не найден или не загружен. SQL-проверки не будут работать."
-    # Можно добавить: Install-Module SqlServer -Force -Scope CurrentUser; Import-Module SqlServer
-    # exit 1 # Или прервать выполнение
-}
-Write-Host $('-'*80)
+$ErrorActionPreference = "Stop"
+try { $modulePath = Join-Path -Path $PSScriptRoot -ChildPath "StatusMonitorAgentUtils.psd1"; Import-Module $modulePath -Force } catch { Write-Error "..."; exit 1 } finally { $ErrorActionPreference = "Continue" }
+# Проверка модуля SqlServer
+if (-not (Get-Command Invoke-Sqlcmd -EA SilentlyContinue)) { Write-Warning "Модуль SqlServer не найден!" }
+Write-Host "Модуль Utils загружен." -FG Green; Write-Host $('-'*80)
 
-# --- 2. Параметры подключения к тестовой БД ---
-# Имя инстанса SQL Server с нестандартным портом
-$TestSqlServerInstance = "localhost,48010"
+# --- 2. Параметры ТЕСТОВОЙ БД Kaskad (из testDB_kaskad/docker-compose.yml) ---
+$TestSqlServerInstance = "localhost,48010" # Порт из docker-compose
 $TestDatabaseName = "kaskad"
-# Для SQL аутентификации (раскомментировать и использовать при необходимости)
 $TestSqlUsername = "sa"
-$TestSqlPassword = "escort123"
+$TestSqlPassword = "escort123" # Пароль из docker-compose
 
-Write-Host "ПАРАМЕТРЫ ТЕСТОВОЙ БД:"
-Write-Host "  Сервер: $TestSqlServerInstance"
-Write-Host "  База:   $TestDatabaseName"
-# if ($TestSqlUsername) { Write-Host "  Режим:  SQL Auth ($TestSqlUsername)" }
-# else { Write-Host "  Режим:  Windows Auth" }
-Write-Host $('-'*80)
+Write-Host "ПАРАМЕТРЫ ТЕСТОВОЙ БД Kaskad:"; Write-Host "  Сервер: $TestSqlServerInstance"; Write-Host "  База:   $TestDatabaseName"; Write-Host "  Режим:  SQL Auth ($TestSqlUsername)"; Write-Host $('-'*80)
 
-# --- 3. Базовый объект Задания (для копирования) ---
+# --- 3. Базовый объект Задания ---
 $baseAssignment = @{
-    assignment_id = 9000 # Начальный ID
-    method_name   = ''     # Будет заменен
-    node_name     = "Kaskad DB Test"
-    ip_address    = $TestSqlServerInstance # Сервер передаем как IP/Host
-    parameters    = @{}  # Будут добавлены
-    success_criteria = $null # Будет добавлен при необходимости
+    assignment_id = 9000; node_name = "Kaskad DB Test"; ip_address = $TestSqlServerInstance
+    parameters = @{ sql_database = $TestDatabaseName; sql_username = $TestSqlUsername; sql_password = $TestSqlPassword }; success_criteria = $null
 }
 
-# ==============================================================================
-# === ТЕСТЫ ДЛЯ Check-SQL_QUERY_EXECUTE.ps1 ===
-# ==============================================================================
-Write-Host "НАЧАЛО ТЕСТОВ: Check-SQL_QUERY_EXECUTE" -ForegroundColor Yellow
-Write-Host $('-'*80)
-
-# --- Тест 1: first_row (успех) ---
-$assignment1 = $baseAssignment.PSObject.Copy()
-$assignment1.assignment_id += 1
-$assignment1.method_name = 'SQL_QUERY_EXECUTE'
-$assignment1.node_name = "SQL Execute: First Row (Success)"
-$assignment1.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT TOP 1 id, CreationDate, Revise FROM dbo.ReviseData WHERE id = 1115" # Запрос существующей записи
-    return_format = 'first_row'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-
-    
+# --- Функция для выполнения и вывода теста ---
+function Run-ManualSqlTest {
+    param([Parameter(Mandatory=$true)]$Assignment, [string]$ExpectedResult = "")
+    Write-Host "ЗАПУСК: $($Assignment.node_name)" -ForegroundColor Yellow
+    Write-Host "  Method: $($Assignment.method_name)"
+    Write-Host "  Parameters: $($Assignment.parameters | ConvertTo-Json -Depth 3 -Compress)"
+    Write-Host "  SuccessCriteria: $($Assignment.success_criteria | ConvertTo-Json -Depth 4 -Compress)"
+    $result = Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$Assignment)
+    Write-Host "РЕЗУЛЬТАТ:"; Write-Host ($result | ConvertTo-Json -Depth 5) -FG Gray
+    if ($result.IsAvailable) { Write-Host "  Доступность: OK" -FG Green } else { Write-Host "  Доступность: FAIL" -FG Red }
+    if ($result.CheckSuccess) { Write-Host "  Критерии: PASS $ExpectedResult" -FG Green } elseif ($result.CheckSuccess -eq $false) { Write-Host "  Критерии: FAIL $ExpectedResult" -FG Red } else { Write-Host "  Критерии: N/A $ExpectedResult" -FG Yellow }
+    if ($result.ErrorMessage) { Write-Host "  Ошибка: $($result.ErrorMessage)" -FG Magenta }
+    Write-Host ("-"*40)
 }
-Write-Host "ЗАПУСК: $($assignment1.node_name)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment1) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
 
-# --- Тест 2: all_rows (успех, ожидаем 1 строку) ---
-$assignment2 = $baseAssignment.PSObject.Copy()
-$assignment2.assignment_id += 2
-$assignment2.method_name = 'SQL_QUERY_EXECUTE'
-$assignment2.node_name = "SQL Execute: All Rows (Success, 1 row)"
-$assignment2.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT id, CreationDate FROM dbo.ReviseData WHERE id = 1115" # Только 2 столбца
-    return_format = 'all_rows'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
+# =================================================
+# === ТЕСТЫ Check-SQL_QUERY_EXECUTE ===
+# =================================================
+Write-Host "ТЕСТЫ: Check-SQL_QUERY_EXECUTE" -FG Yellow
 
-}
-Write-Host "ЗАПУСК: $($assignment2.node_name)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment2) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+$execBase = $baseAssignment.PSObject.Copy(); $execBase.method_name = 'SQL_QUERY_EXECUTE'
+$execId = $execBase.assignment_id
 
-# --- Тест 3: row_count (успех, ожидаем 1) ---
-$assignment3 = $baseAssignment.PSObject.Copy()
-$assignment3.assignment_id += 3
-$assignment3.method_name = 'SQL_QUERY_EXECUTE'
-$assignment3.node_name = "SQL Execute: Row Count (Success, expects 1)"
-$assignment3.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT id FROM dbo.ReviseData" # Считаем все строки (должна быть 1)
-    return_format = 'row_count'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment3.node_name)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment3) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- first_row ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - First Row"; $assign.parameters.sql_query = "SELECT TOP 1 * FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.return_format = 'first_row'
+Run-ManualSqlTest -Assignment $assign
 
-# --- Тест 4: scalar (успех, получаем ID) ---
-$assignment4 = $baseAssignment.PSObject.Copy()
-$assignment4.assignment_id += 4
-$assignment4.method_name = 'SQL_QUERY_EXECUTE'
-$assignment4.node_name = "SQL Execute: Scalar (Success, get ID)"
-$assignment4.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT TOP 1 id FROM dbo.ReviseData ORDER BY CreationDate DESC"
-    return_format = 'scalar'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment4.node_name)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment4) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- row_count ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Row Count (1)"; $assign.parameters.sql_query = "SELECT id FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.return_format = 'row_count'
+Run-ManualSqlTest -Assignment $assign
 
-# --- Тест 5: non_query (успех, временная таблица) ---
-$assignment5 = $baseAssignment.PSObject.Copy()
-$assignment5.assignment_id += 5
-$assignment5.method_name = 'SQL_QUERY_EXECUTE'
-$assignment5.node_name = "SQL Execute: Non-Query (Success, temp table)"
-$assignment5.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "IF OBJECT_ID('tempdb..#TempTestExec') IS NULL BEGIN CREATE TABLE #TempTestExec(col1 INT) END;"
-    return_format = 'non_query'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment5.node_name)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment5) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- row_count с критерием (PASS) ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Row Count Criteria OK"; $assign.parameters.sql_query = "SELECT id FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.return_format = 'row_count'; $assign.success_criteria = @{ row_count = @{ '==' = 1 } }
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем PASS)"
 
-# --- Тест 6: Ошибка SQL (неверное имя таблицы) ---
-$assignment6 = $baseAssignment.PSObject.Copy()
-$assignment6.assignment_id += 6
-$assignment6.method_name = 'SQL_QUERY_EXECUTE'
-$assignment6.node_name = "SQL Execute: SQL Error (Bad Table)"
-$assignment6.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT * FROM dbo.NonExistentTable"
-    return_format = 'first_row'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment6.node_name) (Ожидаем IsAvailable=false)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment6) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- row_count с критерием (FAIL) ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Row Count Criteria FAIL"; $assign.parameters.sql_query = "SELECT id FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.return_format = 'row_count'; $assign.success_criteria = @{ row_count = @{ '>' = 5 } }
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем FAIL)"
 
-# --- Тест 7: Ошибка подключения (неверное имя БД) ---
-$assignment7 = $baseAssignment.PSObject.Copy()
-$assignment7.assignment_id += 7
-$assignment7.method_name = 'SQL_QUERY_EXECUTE'
-$assignment7.node_name = "SQL Execute: Connection Error (Bad DB)"
-$assignment7.parameters = @{
-    sql_database = "NonExistentKaskadDB" # Неверная БД
-    sql_query = "SELECT 1"
-    return_format = 'scalar'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment7.node_name) (Ожидаем IsAvailable=false)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment7) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- scalar ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Scalar (Get ID)"; $assign.parameters.sql_query = "SELECT TOP 1 id FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.return_format = 'scalar'
+Run-ManualSqlTest -Assignment $assign
 
-# --- Тест 8: row_count с критерием (успех) ---
-$assignment8 = $baseAssignment.PSObject.Copy()
-$assignment8.assignment_id += 8
-$assignment8.method_name = 'SQL_QUERY_EXECUTE'
-$assignment8.node_name = "SQL Execute: Row Count with Criteria (Success)"
-$assignment8.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT id FROM dbo.ReviseData WHERE id = 1115" # 1 строка
-    return_format = 'row_count'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-# Критерий: количество строк должно быть равно 1
-$assignment8.success_criteria = @{ row_count = @{ '==' = 1 } }
-Write-Host "ЗАПУСК: $($assignment8.node_name) (Ожидаем CheckSuccess=true)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment8) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- scalar с критерием (PASS) ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Scalar Criteria OK"; $assign.parameters.sql_query = "SELECT COUNT(*) FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.return_format = 'scalar'; $assign.success_criteria = @{ scalar_value = @{ '>=' = 1 } }
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем PASS)"
 
-# --- Тест 9: row_count с критерием (неуспех) ---
-$assignment9 = $baseAssignment.PSObject.Copy()
-$assignment9.assignment_id += 9
-$assignment9.method_name = 'SQL_QUERY_EXECUTE'
-$assignment9.node_name = "SQL Execute: Row Count with Criteria (Fail)"
-$assignment9.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT id FROM dbo.ReviseData" # 1 строка
-    return_format = 'row_count'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-# Критерий: количество строк должно быть БОЛЬШЕ 5
-$assignment9.success_criteria = @{ row_count = @{ '>' = 5 } }
-Write-Host "ЗАПУСК: $($assignment9.node_name) (Ожидаем CheckSuccess=false)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment9) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- non_query ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Non-Query (Temp)"; $assign.parameters.sql_query = "IF OBJECT_ID('tempdb..#TempTestExec') IS NULL CREATE TABLE #TempTestExec(col1 INT);"; $assign.parameters.return_format = 'non_query'
+Run-ManualSqlTest -Assignment $assign
 
-# --- Тест 10: scalar с критерием (успех) ---
-$assignment10 = $baseAssignment.PSObject.Copy()
-$assignment10.assignment_id += 10
-$assignment10.method_name = 'SQL_QUERY_EXECUTE'
-$assignment10.node_name = "SQL Execute: Scalar with Criteria (Success)"
-$assignment10.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT COUNT(*) FROM dbo.ReviseData" # Получаем кол-во
-    return_format = 'scalar'
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-# Критерий: скалярное значение (кол-во) должно быть >= 1
-$assignment10.success_criteria = @{ scalar_value = @{ '>=' = 1 } }
-Write-Host "ЗАПУСК: $($assignment10.node_name) (Ожидаем CheckSuccess=true)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment10) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- Ошибка SQL (Bad Table) ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - SQL Error (Bad Table)"; $assign.parameters.sql_query = "SELECT * FROM dbo.NonExistentTable"; $assign.parameters.return_format = 'first_row'
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем Доступность: FAIL)"
 
-Write-Host "КОНЕЦ ТЕСТОВ: Check-SQL_QUERY_EXECUTE" -ForegroundColor Green
-Write-Host $('='*80)
-Write-Host ""
+# --- Ошибка подключения (Bad DB) ---
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Connect Error (Bad DB)"; $assign.parameters.sql_database = "NonExistentDB"; $assign.parameters.sql_query = "SELECT 1"; $assign.parameters.return_format = 'scalar'
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем Доступность: FAIL)"
 
-# ==============================================================================
-# === ТЕСТЫ ДЛЯ Check-SQL_XML_QUERY.ps1 ===
-# ==============================================================================
-Write-Host "НАЧАЛО ТЕСТОВ: Check-SQL_XML_QUERY" -ForegroundColor Yellow
-Write-Host $('-'*80)
+Write-Host "КОНЕЦ ТЕСТОВ: Check-SQL_QUERY_EXECUTE" -FG Green; Write-Host $('='*80); Write-Host ""
 
-# --- Тест 11: Успешное извлечение XML и ключей ---
-$assignment11 = $baseAssignment.PSObject.Copy()
-$assignment11.assignment_id += 11
-$assignment11.method_name = 'SQL_XML_QUERY'
-$assignment11.node_name = "SQL XML Query: Success"
-$assignment11.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT TOP 1 Revise FROM dbo.ReviseData WHERE id = 1115"
-    xml_column_name = 'Revise'
-    keys_to_extract = @('VersionStat', 'ArrivalStationID', 'TS_Version', 'NonExistentKey')
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment11.node_name) (Ожидаем извлеченные значения и null для NonExistentKey)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment11) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# =================================================
+# === ТЕСТЫ Check-SQL_XML_QUERY ===
+# =================================================
+Write-Host "ТЕСТЫ: Check-SQL_XML_QUERY" -FG Yellow
 
-# --- Тест 12: Успешное извлечение с критерием ---
-$assignment12 = $baseAssignment.PSObject.Copy()
-$assignment12.assignment_id += 12
-$assignment12.method_name = 'SQL_XML_QUERY'
-$assignment12.node_name = "SQL XML Query: Criteria Success"
-$assignment12.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT TOP 1 Revise FROM dbo.ReviseData WHERE id = 1115"
-    xml_column_name = 'Revise'
-    keys_to_extract = @('VersionStat', 'TS_Version')
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-# Критерий: VersionStat должен быть равен '20221206' И TS_Version > 100
-$assignment12.success_criteria = @{
-    extracted_data = @{
-        VersionStat = @{ '==' = '20221206' }
-        TS_Version = @{ '>' = 100 }
-    }
-}
-Write-Host "ЗАПУСК: $($assignment12.node_name) (Ожидаем CheckSuccess=true)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment12) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+$xmlBase = $baseAssignment.PSObject.Copy(); $xmlBase.method_name = 'SQL_XML_QUERY'
+$xmlId = $xmlBase.assignment_id + 10 # Смещаем ID
 
-# --- Тест 13: Неуспех по критерию ---
-$assignment13 = $baseAssignment.PSObject.Copy()
-$assignment13.assignment_id += 13
-$assignment13.method_name = 'SQL_XML_QUERY'
-$assignment13.node_name = "SQL XML Query: Criteria Fail (TS_Version)"
-$assignment13.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT TOP 1 Revise FROM dbo.ReviseData WHERE id = 1115"
-    xml_column_name = 'Revise'
-    keys_to_extract = @('TS_Version')
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-# Критерий: TS_Version должен быть МЕНЬШЕ 100
-$assignment13.success_criteria = @{ extracted_data = @{ TS_Version = @{ '<' = 100 } } }
-Write-Host "ЗАПУСК: $($assignment13.node_name) (Ожидаем CheckSuccess=false)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment13) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- Успешное извлечение ---
+$assign = $xmlBase.PSObject.Copy(); $assign.assignment_id = ++$xmlId; $assign.node_name += " - XML Extract OK"; $assign.parameters.sql_query = "SELECT TOP 1 Revise FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.xml_column_name = 'Revise'; $assign.parameters.keys_to_extract = @('VersionStat', 'TS_Version', 'NonExistentKey')
+Run-ManualSqlTest -Assignment $assign
 
-# --- Тест 14: Ошибка - неверное имя столбца XML ---
-$assignment14 = $baseAssignment.PSObject.Copy()
-$assignment14.assignment_id += 14
-$assignment14.method_name = 'SQL_XML_QUERY'
-$assignment14.node_name = "SQL XML Query: Error (Bad XML Column)"
-$assignment14.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT TOP 1 id, Revise FROM dbo.ReviseData WHERE id = 1115"
-    xml_column_name = 'InvalidXmlColumnName' # Неверное имя
-    keys_to_extract = @('VersionStat')
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment14.node_name) (Ожидаем IsAvailable=false)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment14) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- Успех с критерием ---
+$assign = $xmlBase.PSObject.Copy(); $assign.assignment_id = ++$xmlId; $assign.node_name += " - XML Criteria OK"; $assign.parameters.sql_query = "SELECT TOP 1 Revise FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.xml_column_name = 'Revise'; $assign.parameters.keys_to_extract = @('VersionStat', 'TS_Version'); $assign.success_criteria = @{ extracted_data = @{ VersionStat = @{ '==' = '20221206' }; TS_Version = @{ '>' = 100 } } }
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем PASS)"
 
-# --- Тест 15: Ошибка - столбец не XML ---
-$assignment15 = $baseAssignment.PSObject.Copy()
-$assignment15.assignment_id += 15
-$assignment15.method_name = 'SQL_XML_QUERY'
-$assignment15.node_name = "SQL XML Query: Error (Column Not XML)"
-$assignment15.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT TOP 1 id, CreationDate FROM dbo.ReviseData WHERE id = 1115"
-    xml_column_name = 'CreationDate' # Это DATETIME, а не XML
-    keys_to_extract = @('Year') # Не важно, что извлекать
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment15.node_name) (Ожидаем IsAvailable=false, ошибка парсинга XML)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment15) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- Неуспех по критерию ---
+$assign = $xmlBase.PSObject.Copy(); $assign.assignment_id = ++$xmlId; $assign.node_name += " - XML Criteria FAIL"; $assign.parameters.sql_query = "SELECT TOP 1 Revise FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.xml_column_name = 'Revise'; $assign.parameters.keys_to_extract = @('TS_Version'); $assign.success_criteria = @{ extracted_data = @{ TS_Version = @{ '<' = 100 } } }
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем FAIL)"
 
-# --- Тест 16: Ошибка - SQL запрос не вернул строк ---
-$assignment16 = $baseAssignment.PSObject.Copy()
-$assignment16.assignment_id += 16
-$assignment16.method_name = 'SQL_XML_QUERY'
-$assignment16.node_name = "SQL XML Query: Error (No Rows)"
-$assignment16.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT Revise FROM dbo.ReviseData WHERE id = 99999" # Несуществующий ID
-    xml_column_name = 'Revise'
-    keys_to_extract = @('VersionStat')
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment16.node_name) (Ожидаем IsAvailable=true, Details.message, CheckSuccess=true)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment16) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- Ошибка (Bad XML Column) ---
+$assign = $xmlBase.PSObject.Copy(); $assign.assignment_id = ++$xmlId; $assign.node_name += " - XML Error (Bad Column)"; $assign.parameters.sql_query = "SELECT TOP 1 id, Revise FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.xml_column_name = 'InvalidXmlColumn'; $assign.parameters.keys_to_extract = @('VersionStat')
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем Доступность: FAIL)"
 
-# --- Тест 17: Ошибка SQL (как в тесте 6) ---
-$assignment17 = $baseAssignment.PSObject.Copy()
-$assignment17.assignment_id += 17
-$assignment17.method_name = 'SQL_XML_QUERY'
-$assignment17.node_name = "SQL XML Query: SQL Error (Bad Table)"
-$assignment17.parameters = @{
-    sql_database = $TestDatabaseName
-    sql_query = "SELECT Revise FROM dbo.NonExistentTable"
-    xml_column_name = 'Revise'
-    keys_to_extract = @('AnyKey')
-    sql_username = $TestSqlUsername
-    sql_password = $TestSqlPassword
-}
-Write-Host "ЗАПУСК: $($assignment17.node_name) (Ожидаем IsAvailable=false)"
-Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$assignment17) | ConvertTo-Json -Depth 5
-Write-Host $('-'*40)
+# --- Ошибка (Column Not XML) ---
+$assign = $xmlBase.PSObject.Copy(); $assign.assignment_id = ++$xmlId; $assign.node_name += " - XML Error (Not XML)"; $assign.parameters.sql_query = "SELECT TOP 1 CreationDate FROM dbo.ReviseData WHERE id = 1115"; $assign.parameters.xml_column_name = 'CreationDate'; $assign.parameters.keys_to_extract = @('Year')
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем Доступность: FAIL)"
 
+# --- Ошибка (No Rows) ---
+$assign = $xmlBase.PSObject.Copy(); $assign.assignment_id = ++$xmlId; $assign.node_name += " - XML Error (No Rows)"; $assign.parameters.sql_query = "SELECT Revise FROM dbo.ReviseData WHERE id = 99999"; $assign.parameters.xml_column_name = 'Revise'; $assign.parameters.keys_to_extract = @('VersionStat')
+Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем Доступность: OK, но нет данных)" # IsAvailable=true, т.к. SQL запрос выполнился
 
-Write-Host "КОНЕЦ ТЕСТОВ: Check-SQL_XML_QUERY" -ForegroundColor Green
-Write-Host $('='*80)
+Write-Host "КОНЕЦ ТЕСТОВ: Check-SQL_XML_QUERY" -FG Green; Write-Host $('='*80)

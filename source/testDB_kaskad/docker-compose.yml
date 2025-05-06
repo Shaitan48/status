@@ -1,33 +1,100 @@
+# F:\status\source\testDB_kaskad\docker-compose.yml
+# --- Версия 2.0 ---
+# Добавлен тестовый экземпляр PostgreSQL для интеграционных тестов Flask.
+# Оба сервиса подключены к сети pu_share для доступа извне (тестов).
+# Инициализация MS SQL упрощена.
+# Инициализация PostgreSQL использует СКРИПТЫ СХЕМЫ из основного проекта.
 version: '3.8'
 
 services:
-  sqlserver2017:
-    image: mcr.microsoft.com/mssql/server:2017-latest
-    container_name: sqlserver2017
+  sqlserver_test:
+    image: mcr.microsoft.com/mssql/server:2017-latest # Или :latest
+    container_name: sqlserver_test_kaskad
     environment:
       ACCEPT_EULA: "Y"
       SA_PASSWORD: "escort123"
+      MSSQL_PID: "Developer"
+      TZ: Europe/Moscow
     ports:
       - "48010:1433"
+    networks:
+      - test_db_net
+      - pu_share
     restart: unless-stopped
     volumes:
-      - sqlserver-data:/var/opt/mssql
-      - ./init-db.sql:/init-db.sql
-      - ./insert_revised_data.sql:/insert_revised_data.sql
+      - sqlserver_test_data:/var/opt/mssql
+      # --- СКРИПТЫ ДЛЯ АВТО-ИНИЦИАЛИЗАЦИИ MS SQL ---
+      # Скрипты в этой папке выполняются в алфавитном порядке при первом запуске
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01_init_schema.sql
+      - ./insert_revised_data.sql:/docker-entrypoint-initdb.d/02_insert_data.sql
+    healthcheck: # Оставляем healthcheck для надежности
+        test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "escort123", "-Q", "SELECT 1"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
 
-  db_init:
-    image: mcr.microsoft.com/mssql-tools
-    depends_on:
-      - sqlserver2017
+  # --- PostgreSQL для интеграционных тестов Flask API ---
+  postgres_test:
+    image: postgres:14
+    container_name: postgres_test_statusmonitor # Уникальное имя
+    environment:
+      POSTGRES_USER: pu_user          # Те же или другие credentials
+      POSTGRES_PASSWORD: pu_password
+      POSTGRES_DB: pu_db_test         # <<< ОТДЕЛЬНОЕ ИМЯ БД ДЛЯ ТЕСТОВ >>>
+      TZ: Europe/Moscow
+    ports:
+      - "48037:5432" # <<< ОТДЕЛЬНЫЙ ПОРТ НА ХОСТЕ >>>
+    networks:
+      - test_db_net
+      - pu_share
+    restart: unless-stopped
+    # --- ИНИЦИАЛИЗАЦИЯ СХЕМЫ ---
+    # Монтируем скрипты СХЕМЫ и БАЗОВЫХ ДАННЫХ из основного проекта
+    # Это гарантирует, что тестовая БД имеет ту же структуру, что и основная
+    # НЕ монтируем seed_data, тесты должны сами подготавливать нужные данные
     volumes:
-      - ./init-db.sql:/init-db.sql
-      - ./insert_revised_data.sql:/insert_revised_data.sql
-    command: >
-      bash -c "
-        sleep 30 &&
-        /opt/mssql-tools/bin/sqlcmd -S sqlserver2017 -U sa -P escort123 -i /init-db.sql &&
-        /opt/mssql-tools/bin/sqlcmd -S sqlserver2017 -U sa -P escort123 -d kaskad -i /insert_revised_data.sql
-      "
+      # --- DB Schema (из основного проекта) ---
+      - ../postgres/db_schema/001_create_tables.sql:/docker-entrypoint-initdb.d/01_001_create_tables.sql:ro
+      - ../postgres/db_schema/002_create_indexes.sql:/docker-entrypoint-initdb.d/01_002_create_indexes.sql:ro
+      - ../postgres/db_schema/003_create_functions_procedures.sql:/docker-entrypoint-initdb.d/01_003_create_functions_procedures.sql:ro
+      - ../postgres/db_schema/004_create_views.sql:/docker-entrypoint-initdb.d/01_004_create_views.sql:ro
+      - ../postgres/db_schema/005_add_foreign_keys.sql:/docker-entrypoint-initdb.d/01_005_add_foreign_keys.sql:ro
+      # --- DB Core Data (из основного проекта) ---
+      - ../postgres/db_core_data/001_settings.sql:/docker-entrypoint-initdb.d/02_001_settings.sql:ro
+      - ../postgres/db_core_data/002_check_methods.sql:/docker-entrypoint-initdb.d/02_002_check_methods.sql:ro
+      - ../postgres/db_core_data/003_node_property_types.sql:/docker-entrypoint-initdb.d/02_003_node_property_types.sql:ro
+      - ../postgres/db_core_data/004_node_types.sql:/docker-entrypoint-initdb.d/02_004_node_types.sql:ro
+      - ../postgres/db_core_data/005_node_properties_base.sql:/docker-entrypoint-initdb.d/02_005_node_properties_base.sql:ro
+      # --- ДАННЫЕ ТЕСТОВОЙ БД БУДУТ ЭФЕМЕРНЫМИ (нет монтирования /var/lib/postgresql/data) ---
 
+  # --- pgAdmin для ТЕСТОВОЙ БД PostgreSQL (опционально) ---
+  pgadmin_test:
+    image: dpage/pgadmin4:latest # Можно использовать последнюю версию
+    container_name: pgadmin_test_statusmonitor # Уникальное имя
+    environment:
+      PGADMIN_DEFAULT_EMAIL: testadmin@test.com
+      PGADMIN_DEFAULT_PASSWORD: testadmin
+      TZ: Europe/Moscow
+    ports:
+      - "48038:80" # <<< ОТДЕЛЬНЫЙ ПОРТ НА ХОСТЕ >>>
+    depends_on:
+      - postgres_test
+    networks:
+      - test_db_net
+      - pu_share
+    volumes:
+      - pgadmin_test_data:/var/lib/pgadmin # Сохраняем настройки pgAdmin для тестов
+    restart: unless-stopped
+
+# --- Сети ---
+networks:
+  test_db_net: # Внутренняя сеть этого стека
+    driver: bridge
+  pu_share:    # Внешняя сеть, созданная вручную (`docker network create pu_share`)
+    external: true
+
+# --- Тома ---
 volumes:
-  sqlserver-data:
+  sqlserver_test_data: # Данные для MS SQL (можно удалить, если не нужно сохранять)
+  pgadmin_test_data:   # Настройки pgAdmin для тестов
+  # postgres_test_data: {} # Раскомментируйте, если нужно сохранять данные тестового Postgres

@@ -1,0 +1,15 @@
+{
+    "mode": "Online",
+    "object_id": 1516,
+    "log_file": "C:/StatusMonitor/Logs/hybrid-agent.log",
+    "log_level": "Info",
+    "agent_script_version": "hybrid_agent_v7.0",
+    "api_base_url": "http://localhost:48030/api",
+    "api_key": "ЗАМЕНИТЕ_НА_ВАШ_AGENT_КЛЮЧ",
+    "api_poll_interval_seconds": 60,
+    "default_check_interval_seconds": 300,
+    "assignments_file_path_pattern": "C:/StatusMonitor/OfflineConfig/*.json.status.*",
+    "output_path": "C:/StatusMonitor/OfflineResults",
+    "output_name_template": "{ddMMyy_HHmmss}_{object_id}_HybridOffline.zrpu",
+    "offline_cycle_interval_seconds": 0
+}

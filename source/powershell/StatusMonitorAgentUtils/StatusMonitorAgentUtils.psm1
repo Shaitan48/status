@@ -241,7 +241,7 @@ function Test-SuccessCriteria {
     Write-Host "--- Test-SuccessCriteria [Вход] ---" # ...
 
     $overallResult = @{ Passed = $true; FailReason = $null }
-    if ($null -eq $CriteriaObject.PSObject) { /* ... ошибка ... */ return $overallResult }
+    if ($null -eq $CriteriaObject.PSObject) { <# ... ошибка ... #> return $overallResult }
     # ... (проверка DetailsObject) ...
 
     # --- ИТЕРАЦИЯ ПО КЛЮЧАМ КРИТЕРИЯ ---
@@ -252,12 +252,12 @@ function Test-SuccessCriteria {
         Write-Host "  [Цикл] Path='$Path', Key='$key', CriteriaValue Type='$($currentCriteriaValue.GetType().FullName)'" -ForegroundColor DarkYellow
 
         # ... (проверка _condition_ ...) ...
-        if ($key -in @('_condition_', '_where_', '_criteria_', '_count_')) { /*...*/ continue }
+        if ($key -in @('_condition_', '_where_', '_criteria_', '_count_')) { <#...#> continue }
 
         # --- Проверка наличия ключа '$key' в $DetailsObject ---
         $keyExists = $false; $currentDetailsValue = $null; $propertyAccessError = $null
-        if ($null -ne $DetailsObject.PSObject) { /* ... код проверки и получения значения v2.1.8 ... */ }
-        if (-not $keyExists) { /* ... обработка отсутствия ключа ... */ continue }
+        if ($null -ne $DetailsObject.PSObject) { <# ... код проверки и получения значения v2.1.8 ... #> }
+        if (-not $keyExists) { <# ... обработка отсутствия ключа ... #> continue }
         elseif ($null -ne $propertyAccessError) { $overallResult.Passed = $null; $overallResult.FailReason = $propertyAccessError; break }
 
         # --- КЛЮЧ НАЙДЕН, ЗНАЧЕНИЕ В $currentDetailsValue ---

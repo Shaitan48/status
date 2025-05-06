@@ -1,23 +1,47 @@
-# Используем официальный образ PowerShell (на базе Linux по умолчанию)
+# powershell/Dockerfile.tests
+# Dockerfile для запуска Pester тестов для PowerShell модулей проекта Status Monitor
+
+# Используем официальный образ PowerShell (например, на базе Linux Alpine для легковесности)
+# Выберите версию PowerShell, наиболее близкую к вашей целевой среде (5.1),
+# но учтите, что официальные образы в основном идут с PowerShell 7+.
+# Для PS 5.1 может потребоваться образ Windows Server Core, что усложнит сборку.
+# Давайте пока остановимся на последней версии PowerShell Core, т.к. Pester 5 лучше работает с ней.
+# Если возникнут проблемы совместимости с 5.1, нужно будет пересмотреть базовый образ.
 FROM mcr.microsoft.com/powershell:latest
 
-# Устанавливаем рабочую директорию
-WORKDIR /tests
+# Устанавливаем рабочую директорию внутри контейнера
+WORKDIR /app/tests
 
-# Копируем ВСЮ папку модуля с тестами внутрь контейнера
-# Убедись, что Dockerfile лежит в ПАПКЕ powershell/
-# или измени путь копирования на `COPY ./ ./` если Dockerfile в корне powershell/StatusMonitorAgentUtils
-COPY ./StatusMonitorAgentUtils /tests/StatusMonitorAgentUtils
+# Копируем ВСЮ папку powershell из хоста ВНУТРЬ /app/powershell в контейнере
+# Это включает сам модуль StatusMonitorAgentUtils и папку tests
+COPY ./ /app/powershell/
 
-# Устанавливаем Pester и другие зависимости (если нужны)
-# Используем pwsh для выполнения команд PowerShell
-# УБИРАЕМ Set-ExecutionPolicy
-RUN pwsh -Command "Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser; \
-                   # Install-Module SqlServer -Force -SkipPublisherCheck -Scope CurrentUser; # Пример другой зависимости
-                   Write-Host 'Pester installed.'"
+# Устанавливаем Pester последней версии
+# Используем pwsh для выполнения команд PowerShell внутри контейнера
+# Set-PSRepository -Name PSGallery -InstallationPolicy Trusted # Доверенный репозиторий
+# Install-Module Pester -Force -SkipPublisherCheck # Установка Pester
+# Убрал Scope CurrentUser, т.к. в контейнере это не так важно и может вызвать проблемы
+# <<< УЛУЧШЕННАЯ УСТАНОВКА PESTER (обходит возможные проблемы с репозиторием) >>>
+RUN pwsh -Command " \
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force; \
+    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted; \
+    Install-Module -Name Pester -Repository PSGallery -Force -SkipPublisherCheck; \
+    Write-Host 'Pester установлен.'"
 
-# Устанавливаем рабочую директорию ВНУТРЬ папки с тестами модуля
-WORKDIR /tests/StatusMonitorAgentUtils/tests
+# Установка других зависимостей, если они нужны для тестов
+# Например, если бы тесты SQL требовали модуль SqlServer ВНУТРИ контейнера
+# RUN pwsh -Command "Install-Module -Name SqlServer -Repository PSGallery -Force -SkipPublisherCheck"
 
-# Команда по умолчанию для запуска тестов
+# Устанавливаем рабочую директорию ВНУТРИ папки с тестами модуля Utils
+# Это нужно, чтобы Invoke-Pester корректно находил тесты
+WORKDIR /app/powershell/StatusMonitorAgentUtils/tests
+
+# Команда по умолчанию для запуска всех *.Tests.ps1 файлов Pester в текущей директории
+# -Output Detailed : Подробный вывод
+# -CI : Режим для CI/CD систем (меняет exit code при ошибках)
+# -PassThru : Возвращает объект с результатами (может быть полезно для CI)
+# Можно добавить -Path для указания конкретных файлов/папок
 CMD ["pwsh", "-Command", "Invoke-Pester -Output Detailed -CI -PassThru"]
+
+# Альтернативная команда для запуска конкретного файла:
+# CMD ["pwsh", "-Command", "Invoke-Pester -Path ./Check-PING.Tests.ps1 -Output Detailed -CI"]

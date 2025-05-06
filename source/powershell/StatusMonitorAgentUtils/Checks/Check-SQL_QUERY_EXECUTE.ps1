@@ -1,329 +1,121 @@
 ﻿# F:\status\source\powershell\StatusMonitorAgentUtils\Checks\Check-SQL_QUERY_EXECUTE.ps1
-# --- Версия 2.0 ---
-# Изменения:
-# - Логика проверки SuccessCriteria вынесена в универсальную функцию Test-SuccessCriteria.
-# - Стандартизирован формат $Details для каждого return_format.
-# - Убран прямой расчет CheckSuccess на основе скалярных сравнений.
-# - Добавлен вызов Test-SuccessCriteria.
-
+# --- Версия 2.0.2 --- Исправлена зависимость от Get-OrElse
 <#
 .SYNOPSIS
-    Выполняет SQL-запрос к MS SQL Server и возвращает результат. (v2.0)
+    Выполняет SQL-запрос к MS SQL Server и возвращает результат. (v2.0.2)
 .DESCRIPTION
-    Подключается к SQL Server, выполняет запрос и обрабатывает результат
-    в соответствии с параметром 'return_format'.
-    Формирует стандартизированный объект $Details с результатом запроса.
-    Для определения итогового CheckSuccess использует универсальную функцию
-    Test-SuccessCriteria, сравнивающую $Details с переданным $SuccessCriteria.
-.PARAMETER TargetIP
-    [string] Обязательный. Имя или IP-адрес экземпляра SQL Server.
-.PARAMETER Parameters
-    [hashtable] Обязательный. Параметры подключения и запроса:
-    - sql_database (string): Имя БД. Обязательно.
-    - sql_query (string): Текст SQL-запроса. Обязательно.
-    - return_format (string): Формат возврата ('first_row', 'all_rows', 'row_count', 'scalar', 'non_query', default: 'first_row').
-    - sql_username (string): Имя пользователя SQL (опционально).
-    - sql_password (string): Пароль SQL (опционально, небезопасно).
-    - query_timeout_sec (int): Таймаут запроса (default: 30).
-.PARAMETER SuccessCriteria
-    [hashtable] Необязательный. Критерии успеха для сравнения с полями в $Details.
-                Формат зависит от return_format. Примеры:
-                - scalar: @{ scalar_value = @{ '>=' = 10 } }
-                - row_count: @{ row_count = @{ '==' = 0 } }
-                - non_query: @{ non_query_success = $true } # Проверка успешности выполнения
-                - first_row/all_rows: Критерии для полей внутри строки/массива (требует доработки Test-SuccessCriteria).
-                Обрабатывается функцией Test-SuccessCriteria.
-.PARAMETER NodeName
-    [string] Необязательный. Имя узла для логирования.
-.OUTPUTS
-    Hashtable - Стандартизированный объект результата проверки.
-                Поле Details (hashtable) содержит:
-                - server_instance, database_name, query_executed, return_format_used
-                - И ОДНО из следующих полей в зависимости от return_format:
-                  - query_result (hashtable или List<object>) и rows_returned (int)
-                  - row_count (int)
-                  - scalar_value (any)
-                  - non_query_success (bool)
-                А также (при ошибке):
-                - error (string)
-                - ErrorRecord (string)
+    Подключается к SQL Server, выполняет запрос, обрабатывает результат
+    согласно 'return_format'.
+    Формирует $Details с результатом запроса (scalar_value, row_count, query_result).
+    Вызывает Test-SuccessCriteria для определения CheckSuccess.
 .NOTES
-    Версия: 2.0.1 (Добавлены комментарии, форматирование, проверка модуля).
-    Зависит от функций New-CheckResultObject и Test-SuccessCriteria.
-    Требует наличия модуля PowerShell 'SqlServer'.
-    Требует прав доступа к SQL Server.
+    Версия: 2.0.2 (Убрана зависимость от Get-OrElse).
+    Зависит от New-CheckResultObject, Test-SuccessCriteria.
+    Требует модуль 'SqlServer'.
 #>
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$TargetIP, # ServerInstance
-
-    [Parameter(Mandatory = $false)]
-    [hashtable]$Parameters = @{},
-
-    [Parameter(Mandatory = $false)]
-    [hashtable]$SuccessCriteria = $null,
-
-    [Parameter(Mandatory = $false)]
-    [string]$NodeName = "Unknown Node"
+    [Parameter(Mandatory = $true)][string]$TargetIP,
+    [Parameter(Mandatory = $false)][hashtable]$Parameters = @{},
+    [Parameter(Mandatory = $false)][hashtable]$SuccessCriteria = $null,
+    [Parameter(Mandatory = $false)][string]$NodeName = "Unknown Node"
 )
 
-# --- Инициализация переменных ---
-$isAvailable = $false
-$checkSuccess = $null
-$errorMessage = $null
-$finalResult = $null
+# --- Инициализация ---
+$isAvailable = $false; $checkSuccess = $null; $errorMessage = $null; $finalResult = $null
+$details = @{ server_instance=$TargetIP; database_name=$null; query_executed=$null; return_format_used='first_row' }
 
-# Инициализируем $Details базовой информацией
-$details = @{
-    server_instance    = $TargetIP
-    database_name      = $null
-    query_executed     = $null
-    return_format_used = 'first_row' # Значение по умолчанию
-    # Поле с результатом будет добавлено позже
-}
+Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE (v2.0.2): Начало выполнения SQL на $TargetIP"
 
-Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE (v2.0.1): Начало выполнения SQL на $TargetIP"
+try { # <<< Основной TRY >>>
+    # 1. Параметры
+    $SqlServerInstance = $TargetIP; $DatabaseName = $Parameters.sql_database; $SqlQuery = $Parameters.sql_query; $SqlUsername = $Parameters.sql_username; $SqlPassword = $Parameters.sql_password
+    if (-not $DatabaseName) { throw "Отсутствует 'sql_database'." }
+    if (-not $SqlQuery) { throw "Отсутствует 'sql_query'." }
+    if ($SqlUsername -and (-not $SqlPassword)) { throw "'sql_password' обязателен при 'sql_username'." }
+    $details.database_name = $DatabaseName; $details.query_executed = $SqlQuery
 
-# --- Основной блок Try/Catch ---
-try {
-    # --- 1. Валидация и извлечение параметров ---
-    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Обработка параметров..."
-    $SqlServerInstance = $TargetIP
-    $DatabaseName = $Parameters.sql_database
-    $SqlQuery = $Parameters.sql_query
-    $SqlUsername = $Parameters.sql_username
-    $SqlPassword = $Parameters.sql_password
-
-    # Проверка обязательных параметров
-    if (-not $DatabaseName) { throw "Отсутствует обязательный параметр 'sql_database'." }
-    if (-not $SqlQuery) { throw "Отсутствует обязательный параметр 'sql_query'." }
-    if ($SqlUsername -and (-not $SqlPassword)) { throw "Параметр 'sql_password' обязателен при указании 'sql_username'." }
-
-    # Обновляем детали
-    $details.database_name = $DatabaseName
-    $details.query_executed = $SqlQuery
-
-    # Формат возврата результата
-    $ReturnFormat = 'first_row' # По умолчанию
-    if ($Parameters.ContainsKey('return_format') -and -not [string]::IsNullOrWhiteSpace($Parameters.return_format)) {
+    # --- ИСПРАВЛЕНО: Получение return_format без Get-OrElse ---
+    $ReturnFormat = 'first_row' # Значение по умолчанию
+    if ($Parameters.ContainsKey('return_format') -and (-not [string]::IsNullOrWhiteSpace($Parameters.return_format))) {
         $tempFormat = $Parameters.return_format.ToLower()
         $validFormats = @('first_row', 'all_rows', 'row_count', 'scalar', 'non_query')
         if ($tempFormat -in $validFormats) { $ReturnFormat = $tempFormat }
         else { throw "Недопустимое значение 'return_format': '$($Parameters.return_format)'." }
     }
     $details.return_format_used = $ReturnFormat
-    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Используется return_format: $ReturnFormat"
+    Write-Verbose "... Используется return_format: $ReturnFormat"
 
-    # Таймаут запроса
-    $QueryTimeoutSec = 30
+    # --- ИСПРАВЛЕНО: Получение query_timeout_sec без Get-OrElse ---
+    $QueryTimeoutSec = 30 # Значение по умолчанию
     if ($Parameters.ContainsKey('query_timeout_sec') -and $Parameters.query_timeout_sec -ne $null) {
         $parsedTimeout = 0
         if ([int]::TryParse($Parameters.query_timeout_sec, [ref]$parsedTimeout) -and $parsedTimeout -gt 0) {
             $QueryTimeoutSec = $parsedTimeout
-        } else {
-            Write-Warning "[$NodeName] Check-SQL_QUERY_EXECUTE: Некорректное 'query_timeout_sec', используется $QueryTimeoutSec сек."
-        }
+        } else { Write-Warning "[$NodeName] ... Некорректное 'query_timeout_sec', используется $QueryTimeoutSec сек." }
     }
-    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Используется query_timeout_sec: $QueryTimeoutSec сек."
+    Write-Verbose "... Используется query_timeout_sec: $QueryTimeoutSec сек."
 
-    # --- 2. Формирование параметров для Invoke-Sqlcmd ---
-    $invokeSqlParams = @{
-        ServerInstance          = $SqlServerInstance
-        Database                = $DatabaseName
-        Query                   = $SqlQuery
-        QueryTimeout            = $QueryTimeoutSec
-        ErrorAction             = 'Stop' # Перехватываем ошибки SQL
-        TrustServerCertificate  = $true
-    }
-    if ($SqlUsername) {
-        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Используется SQL Server аутентификация для '$SqlUsername'."
-        $securePassword = ConvertTo-SecureString -String $SqlPassword -AsPlainText -Force
-        $invokeSqlParams.Credential = New-Object System.Management.Automation.PSCredential($SqlUsername, $securePassword)
-    } else {
-        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Используется Windows аутентификация."
-    }
+    # 2. Параметры Invoke-Sqlcmd
+    $invokeSqlParams = @{ ServerInstance=$SqlServerInstance; Database=$DatabaseName; Query=$SqlQuery; QueryTimeout=$QueryTimeoutSec; ErrorAction='Stop'; TrustServerCertificate=$true }
+    if ($SqlUsername) { $securePassword = ConvertTo-SecureString -String $SqlPassword -AsPlainText -Force; $invokeSqlParams.Credential = New-Object System.Management.Automation.PSCredential($SqlUsername, $securePassword) }
 
-    # --- 3. Проверка и загрузка модуля SqlServer ---
-    if (-not (Get-Command Invoke-Sqlcmd -ErrorAction SilentlyContinue)) {
-        if (-not (Get-Module -ListAvailable -Name SqlServer)) {
-            throw "Модуль PowerShell 'SqlServer' не найден. Установите его: Install-Module SqlServer"
-        }
-        try {
-            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Загрузка модуля SqlServer..."
-            Import-Module SqlServer -ErrorAction Stop
-        } catch {
-            throw "Не удалось загрузить модуль 'SqlServer'. Ошибка: $($_.Exception.Message)"
-        }
-    }
+    # 3. Проверка модуля SqlServer (без изменений)
+    if (-not (Get-Command Invoke-Sqlcmd -EA SilentlyContinue)) { if (-not (Get-Module -ListAvailable -Name SqlServer)) { throw "Модуль 'SqlServer' не найден." }; try { Import-Module SqlServer -EA Stop } catch { throw "Не удалось загрузить модуль 'SqlServer'." } }
 
-    # --- 4. Выполнение SQL-запроса ---
-    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Выполнение запроса к '$SqlServerInstance/$DatabaseName'..."
-    $queryResultData = $null # Результат выполнения команды
-
-    # Для non_query нужно перехватывать ошибку, чтобы понять, был ли успех
+    # 4. Выполнение SQL-запроса
+    Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Выполнение запроса (формат: $ReturnFormat)..."
+    $queryResultData = $null; $nonQuerySuccess = $null
     if ($ReturnFormat -eq 'non_query') {
-        try {
-            Invoke-Sqlcmd @invokeSqlParams | Out-Null # Игнорируем вывод, если он есть
-            $isAvailable = $true
-            $details.non_query_success = $true # Запрос выполнен без ошибок
-            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Non-query запрос выполнен успешно."
-        } catch {
-            # Ошибка при выполнении non-query
-            $isAvailable = $false # Считаем проверку неуспешной
-            $exceptionMessage = $_.Exception.Message
-            if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-            $errorMessage = "Ошибка выполнения non-query SQL: $exceptionMessage"
-            $details.error = $errorMessage
-            $details.ErrorRecord = $_.ToString()
-            $details.non_query_success = $false
-            Write-Warning "[$NodeName] Check-SQL_QUERY_EXECUTE: $errorMessage"
-        }
+        try { Invoke-Sqlcmd @invokeSqlParams | Out-Null; $isAvailable = $true; $nonQuerySuccess = $true; $details.non_query_success = $true; Write-Verbose "... non-query успешно." }
+        catch { $isAvailable = $false; $errorMessage = "Ошибка non-query SQL: $($_.Exception.Message)"; $details.error = $errorMessage; $details.ErrorRecord = $_.ToString(); $details.non_query_success = $false; Write-Warning "... $errorMessage" }
     } else {
-        # Для запросов, возвращающих данные
         $queryResultData = Invoke-Sqlcmd @invokeSqlParams
-        $isAvailable = $true # Если нет исключения, запрос выполнен
-        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Запрос, возвращающий данные, выполнен."
+        $isAvailable = $true
+        Write-Verbose "... запрос с данными выполнен."
+        # 5. Обработка результата (пересоздаем $details)
+        $details = @{ server_instance=$SqlServerInstance; database_name=$DatabaseName; query_executed=$SqlQuery; return_format_used=$ReturnFormat }
+        switch ($ReturnFormat) {
+            'first_row' { $res=@{};$count=0; if($queryResultData){$arr=@($queryResultData);$count=$arr.Length;if($count -gt 0){$first=$arr[0];$first.PSObject.Properties|%{$res[$_.Name]=$_.Value}}}; $details.query_result=$res;$details.rows_returned=$count }
+            'all_rows' { $res=[System.Collections.Generic.List[object]]::new();$count=0; if($queryResultData){foreach($r in @($queryResultData)){$h=@{};$r.PSObject.Properties|%{$h[$_.Name]=$_.Value};$res.Add($h)};$count=$res.Count}; $details.query_result=$res;$details.rows_returned=$count }
+            'row_count' { $count=0; if($queryResultData){$count=@($queryResultData).Length}; $details.row_count=$count }
+            'scalar' { $val=$null; if($queryResultData){$first=@($queryResultData)[0];if($first){$pName=($first.PSObject.Properties|select -f 1).Name;if($pName){$val=$first.$pName}}}; $details.scalar_value=$val }
+        }
+        Write-Verbose ("... результат обработан (формат: {0})." -f $ReturnFormat)
     }
 
-    # --- 5. Обработка результата (если это не non_query и запрос был успешен) ---
-    if ($isAvailable -and $ReturnFormat -ne 'non_query') {
-        Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Обработка результата (формат: $ReturnFormat)..."
-
-        # --- СОЗДАЕМ ДЕТАЛИ ЗАПРОСА ЗАНОВО ВНУТРИ БЛОКА ---
-        $details = @{
-            server_instance    = $SqlServerInstance
-            database_name      = $DatabaseName
-            query_executed     = $SqlQuery
-            return_format_used = $ReturnFormat
-            # Добавляем сюда поля, специфичные для формата
-        }
-
-        switch ($ReturnFormat) {
-            'first_row' {
-                $resultHashTable = $null
-                $rowCount = 0
-                if ($queryResultData -ne $null) {
-                    $resultArray = @($queryResultData)
-                    if ($resultArray.Length -gt 0) {
-                        $firstRow = $resultArray[0]
-                        $resultHashTable = @{}
-                        $firstRow.PSObject.Properties | ForEach-Object { $resultHashTable[$_.Name] = $_.Value }
-                        $rowCount = $resultArray.Length
-                    }
-                }
-                $details.Add('query_result', $resultHashTable) # Добавляем поле
-                $details.Add('rows_returned', $rowCount)     # Добавляем поле
-                Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: first_row результат обработан. Строк: $rowCount."
-            }
-            'all_rows' {
-                $allRowsList = [System.Collections.Generic.List[object]]::new()
-                $rowCount = 0
-                if ($queryResultData -ne $null) {
-                    foreach ($row in @($queryResultData)) {
-                        $rowHashTable = @{}
-                        $row.PSObject.Properties | ForEach-Object { $rowHashTable[$_.Name] = $_.Value }
-                        $allRowsList.Add($rowHashTable)
-                    }
-                    $rowCount = $allRowsList.Count
-                }
-                $details.Add('query_result', $allRowsList) # Добавляем поле
-                $details.Add('rows_returned', $rowCount)  # Добавляем поле
-                Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: all_rows результат обработан. Строк: $rowCount."
-            }
-            'row_count' {
-                $rowCount = 0
-                if ($queryResultData -ne $null) { $rowCount = @($queryResultData).Length }
-                $details.Add('row_count', $rowCount) # Добавляем поле
-                Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: row_count результат обработан. Строк: $rowCount."
-            }
-            'scalar' {
-                $scalarValue = $null
-                if ($queryResultData -ne $null) {
-                    $firstRow = @($queryResultData)[0]
-                    if ($firstRow) {
-                        $firstColumnName = ($firstRow.PSObject.Properties | Select-Object -First 1).Name
-                        if ($firstColumnName) { $scalarValue = $firstRow.$firstColumnName }
-                    }
-                }
-                $details.Add('scalar_value', $scalarValue) # Добавляем поле
-                Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: scalar результат обработан. Значение: '$scalarValue'."
-            }
-        } # Конец switch
-
-        # --- 6. Вызов универсальной функции проверки критериев (ИСПОЛЬЗУЕМ ЗАПОЛНЕННЫЙ $details) ---
-        $failReason = $null
-        if ($SuccessCriteria -ne $null -and $SuccessCriteria.Keys.Count -gt 0) {
+    # 6. Проверка критериев успеха
+    $failReason = $null
+    if ($isAvailable -eq $true) {
+        if ($SuccessCriteria -ne $null -and $SuccessCriteria.PSObject.Properties.Count -gt 0) {
             Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Вызов Test-SuccessCriteria..."
             $criteriaResult = Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria
             $checkSuccess = $criteriaResult.Passed
             $failReason = $criteriaResult.FailReason
-            if ($checkSuccess -eq $null) {
-                $errorMessage = "Ошибка при обработке SuccessCriteria: $failReason"
-                Write-Warning "[$NodeName] $errorMessage"
-            } elseif ($checkSuccess -eq $false) {
-                $errorMessage = $failReason
-                Write-Verbose "[$NodeName] ... SuccessCriteria НЕ пройдены: $failReason"
-            } else {
-                $errorMessage = $null
-                Write-Verbose "[$NodeName] ... SuccessCriteria пройдены."
-            }
+            if ($checkSuccess -ne $true) {
+                # --- ИСПРАВЛЕНО: Используем if или $() вместо Get-OrElse ---
+                $errorMessage = if ([string]::IsNullOrWhiteSpace($failReason)) { "Критерии успеха SQL запроса не пройдены." } else { $failReason }
+                Write-Verbose "[$NodeName] ... SuccessCriteria НЕ пройдены/ошибка: $errorMessage"
+            } else { $errorMessage = $null; Write-Verbose "[$NodeName] ... SuccessCriteria пройдены." }
         } else {
-            $checkSuccess = $true
-            $errorMessage = $null
-            Write-Verbose "[$NodeName] ... SuccessCriteria не заданы, CheckSuccess=true."
-        }
-
-    } elseif ($ReturnFormat -eq 'non_query' -and $isAvailable) {
-        # Для non_query, который прошел без SQL ошибки
-        $checkSuccess = $true # Считаем успешным, если нет критериев
-        $errorMessage = $null
-        if ($SuccessCriteria -ne $null -and $SuccessCriteria.Keys.Count -gt 0) {
-            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: Вызов Test-SuccessCriteria для non_query..."
-            $criteriaResult = Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria
-            $checkSuccess = $criteriaResult.Passed
-            if ($checkSuccess -ne $true) { $errorMessage = $criteriaResult.FailReason }
+            $checkSuccess = $true; $errorMessage = $null
+            Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE: SuccessCriteria не заданы, CheckSuccess=true."
         }
     } else {
-        # Если IsAvailable = $false (ошибка SQL или подключения)
         $checkSuccess = $null
-        if ([string]::IsNullOrEmpty($errorMessage)) {
-            $errorMessage = "Ошибка выполнения SQL запроса (IsAvailable=false)."
-        }
+        if ([string]::IsNullOrEmpty($errorMessage)) { $errorMessage = "Ошибка выполнения SQL запроса (IsAvailable=false)." }
     }
 
-    # --- 7. Формирование итогового результата (используем $details, сформированный выше) ---
-    $finalResult = New-CheckResultObject -IsAvailable $isAvailable `
-                                         -CheckSuccess $checkSuccess `
-                                         -Details $details `
-                                         -ErrorMessage $errorMessage
+    # 7. Формирование результата
+    $finalResult = New-CheckResultObject -IsAvailable $isAvailable -CheckSuccess $checkSuccess -Details $details -ErrorMessage $errorMessage
 
-} catch {
-    # --- Обработка КРИТИЧЕСКИХ ОШИБОК ---
-    $isAvailable = $false
-    $checkSuccess = $null
-    $exceptionMessage = $_.Exception.Message
-    if ($exceptionMessage.Length -gt 500) { $exceptionMessage = $exceptionMessage.Substring(0, 500) + "..." }
-    $critErrorMessage = "Критическая ошибка при выполнении SQL-запроса: {0}" -f $exceptionMessage
-    $detailsError = @{
-        error           = $critErrorMessage
-        ErrorRecord     = $_.ToString()
-        server_instance = $TargetIP
-        database_name   = $Parameters?.sql_database
-        query_executed  = $Parameters?.sql_query
-    }
-    $finalResult = @{
-        IsAvailable  = $isAvailable
-        CheckSuccess = $checkSuccess
-        Timestamp    = (Get-Date).ToUniversalTime().ToString("o")
-        Details      = $detailsError
-        ErrorMessage = $critErrorMessage
-    }
+} catch { # <<< Основной CATCH >>>
+    $isAvailable = $false; $checkSuccess = $null; $critErrorMessage = "Критическая ошибка Check-SQL_QUERY_EXECUTE: $($_.Exception.Message)"
+    $detailsError = @{ error = $critErrorMessage; ErrorRecord = $_.ToString(); server_instance=$TargetIP; database_name=$Parameters?.sql_database; query_executed=$Parameters?.sql_query }
+    $finalResult = @{ IsAvailable=$isAvailable; CheckSuccess=$checkSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$detailsError; ErrorMessage=$critErrorMessage }
     Write-Error "[$NodeName] Check-SQL_QUERY_EXECUTE: Критическая ошибка: $critErrorMessage"
 }
 
 # --- Возврат результата ---
-$isAvailableStr = if ($finalResult) { $finalResult.IsAvailable } else { '[result is null]' }
-$checkSuccessStr = if ($finalResult) { $finalResult.CheckSuccess } else { '[result is null]' }
-Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE (v2.0.1): Завершение. IsAvailable=$isAvailableStr, CheckSuccess=$checkSuccessStr"
-
+$isAvailableStr = if ($finalResult) { $finalResult.IsAvailable } else { '[null]' }; $checkSuccessStr = if ($finalResult) { $finalResult.CheckSuccess } else { '[null]' }
+Write-Verbose "[$NodeName] Check-SQL_QUERY_EXECUTE (v2.0.2): Завершение. IsAvailable=$isAvailableStr, CheckSuccess=$checkSuccessStr"
 return $finalResult

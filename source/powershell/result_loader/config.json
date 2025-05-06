@@ -1,11 +1,14 @@
 {
-    "api_base_url": "http://localhost:48030/api",
-    "api_key": "zwhd4NDpNEQ4WARdCrGRiN6br6hzr_N14_YwOmJADj0",
-    "check_folder": "F:\\status\\builds\\results_offline", 
-    "log_file": "F:\\status\\builds\\Logs\\result_loader.log",
-    "log_level": "Info",
-    "scan_interval_seconds": 30, 
-    "api_timeout_sec": 30,
-    "max_api_retries": 3, 
-    "retry_delay_sec": 5
-  }
+  "api_base_url": "http://localhost:48030/api",
+  "api_key": "ЗАМЕНИТЕ_НА_ВАШ_LOADER_КЛЮЧ",
+  "check_folder": "F:\\status\\builds\\results_offline",
+  "processed_folder": "F:\\status\\builds\\results_offline\\Processed",
+  "error_folder": "F:\\status\\builds\\results_offline\\Error",
+  "unrecoverable_error_folder": "F:\\status\\builds\\results_offline\\Unrecoverable",
+  "log_file": "F:\\status\\builds\\Logs\\result_loader.log",
+  "log_level": "Info",
+  "scan_interval_seconds": 30,
+  "max_api_retries": 3,
+  "retry_delay_seconds": 5,
+  "api_timeout_sec": 60
+}

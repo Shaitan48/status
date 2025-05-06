@@ -1,157 +1,65 @@
-﻿# ManualTest-Check-PING.ps1
-# Скрипт для ручного тестирования Check-PING.ps1
+﻿# ManualTest-Check-PING.ps1 (v2.1)
+# Скрипт для ручного тестирования Check-PING.ps1 через диспетчер
 
 # --- 1. Загрузка модуля Utils ---
 $ErrorActionPreference = "Stop"
 try {
-    # Укажи правильный путь к манифесту модуля
-    $modulePath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils\StatusMonitorAgentUtils.psd1"
+    $modulePath = Join-Path -Path $PSScriptRoot -ChildPath "StatusMonitorAgentUtils.psd1"
     Write-Host "Загрузка модуля из '$modulePath'..." -ForegroundColor Cyan
     Import-Module $modulePath -Force
     Write-Host "Модуль загружен." -ForegroundColor Green
-} catch {
-    Write-Error "Критическая ошибка загрузки модуля Utils: $($_.Exception.Message)"
-    exit 1
-} finally {
-    $ErrorActionPreference = "Continue"
+} catch { Write-Error "Критическая ошибка загрузки модуля Utils: $($_.Exception.Message)"; exit 1 } finally { $ErrorActionPreference = "Continue" }
+Write-Host $('-'*50)
+
+# --- 2. Определение тестовых сценариев ---
+$basePingAssignment = @{
+    assignment_id = 200; method_name = 'PING'; node_name = 'Ping Test'
+    parameters = @{}; success_criteria = $null
 }
 
-# --- 2. Путь к тестируемому скрипту ---
-$checkScriptPath = Join-Path -Path $PSScriptRoot -ChildPath "Checks\Check-PING.ps1"
-if (-not (Test-Path $checkScriptPath -PathType Leaf)) {
-    Write-Error "Скрипт '$checkScriptPath' не найден!"
-    exit 1
-}
-Write-Host "Тестируемый скрипт: $checkScriptPath"
-
-# --- 3. Определение тестовых сценариев ---
 $testCases = @(
-    @{
-        TestName = "Успешный пинг localhost (без критериев)"
-        TargetIP = '127.0.0.1'
-        Parameters = @{ count = 1 }
-        SuccessCriteria = $null
-        ExpectedIsAvailable = $true
-        ExpectedCheckSuccess = $true # т.к. IsAvailable и нет критериев
-        ExpectedError = $false
-    }
-    @{
-        TestName = "Неуспешный пинг (несуществующий IP)"
-        TargetIP = '192.0.2.1' # Зарезервированный немаршрутизируемый IP
-        Parameters = @{ timeout_ms = 500; count = 1 }
-        SuccessCriteria = $null
-        ExpectedIsAvailable = $false
-        ExpectedCheckSuccess = $null # т.к. IsAvailable=false
-        ExpectedError = $true
-    }
-    @{
-        TestName = "Успешный пинг с пройденным критерием RTT"
-        TargetIP = 'ya.ru' # Или другой доступный хост
-        Parameters = @{}
-        SuccessCriteria = @{ rtt_ms = @{ '<=' = 1000 } } # Ожидаем RTT <= 1000ms
-        ExpectedIsAvailable = $true
-        ExpectedCheckSuccess = $true # Критерий должен пройти (если RTT < 1000)
-        ExpectedError = $false
-        # Ожидаем, что Test-SuccessCriteria вернет {Passed=$true}
-    }
-    @{
-        TestName = "Успешный пинг с НЕ пройденным критерием RTT"
-        TargetIP = 'ya.ru'
-        Parameters = @{}
-        SuccessCriteria = @{ rtt_ms = @{ '<=' = 1 } } # Заведомо невыполнимый критерий
-        ExpectedIsAvailable = $true
-        ExpectedCheckSuccess = $false # Критерий НЕ должен пройти
-        ExpectedError = $true # Ожидаем ErrorMessage с причиной провала критерия
-        # Ожидаем, что Test-SuccessCriteria вернет {Passed=$false, FailReason=...}
-    }
-    @{
-        TestName = "Успешный пинг с некорректным критерием RTT"
-        TargetIP = 'ya.ru'
-        Parameters = @{}
-        SuccessCriteria = @{ rtt_ms = @{ '<=' = 'не число' } } # Некорректное значение
-        ExpectedIsAvailable = $true
-        ExpectedCheckSuccess = $null # Ошибка обработки критерия -> null
-        ExpectedError = $true # Ожидаем ErrorMessage с ошибкой критерия
-        # Ожидаем, что Test-SuccessCriteria вернет {Passed=$null, FailReason=...}
-    }
-    @{
-        TestName = "Пинг с двумя критериями (RTT и Потери, потери = 0)"
-        TargetIP = 'ya.ru'
-        Parameters = @{}
-        SuccessCriteria = @{ rtt_ms = @{ '<=' = 1000 }; packet_loss_percent = @{ '==' = 0 } } # Оба должны пройти
-        ExpectedIsAvailable = $true
-        ExpectedCheckSuccess = $true
-        ExpectedError = $false
-    }
+    @{ Name = "Успешный пинг localhost (без критериев)"; Target = '127.0.0.1'; Params = @{ count = 1 } }
+    @{ Name = "Неуспешный пинг (несущ. IP)"; Target = '192.0.2.1'; Params = @{ timeout_ms = 500; count = 1 } }
+    @{ Name = "Успешный пинг ya.ru (RTT <= 1000ms)"; Target = 'ya.ru';
+       # Критерий: RTT должен быть меньше или равен 1000
+       Criteria = @{ rtt_ms = @{ '<=' = 1000 } } }
+    @{ Name = "Успешный пинг ya.ru (RTT <= 1ms - НЕ пройдет)"; Target = 'ya.ru';
+       # Критерий: RTT должен быть меньше или равен 1 (заведомо ложно)
+       Criteria = @{ rtt_ms = @{ '<=' = 1 } } }
+    @{ Name = "Успешный пинг ya.ru (Потери == 0%)"; Target = 'ya.ru';
+       # Критерий: Процент потерь должен быть равен 0
+       Criteria = @{ packet_loss_percent = @{ '==' = 0 } } }
+    @{ Name = "Успешный пинг ya.ru (Потери < 50% - пройдет)"; Target = 'ya.ru'; Params = @{ count = 4 };
+       # Критерий: Процент потерь должен быть меньше 50
+       Criteria = @{ packet_loss_percent = @{ '<' = 50 } } }
+    @{ Name = "Успешный пинг ya.ru (RTT > 10ms И Потери < 50%)"; Target = 'ya.ru'; Params = @{ count = 4 };
+       # Критерий: Оба условия должны выполниться
+       Criteria = @{ rtt_ms=@{'>'=10}; packet_loss_percent=@{'<'=50} } }
+    @{ Name = "Ошибка: Некорректный критерий (не число)"; Target = 'ya.ru';
+       # Критерий: Некорректное значение порога
+       Criteria = @{ rtt_ms=@{'>'='abc'} } }
 )
 
-# --- 4. Выполнение тестов ---
-Write-Host ("-"*50)
+# --- 3. Выполнение тестов ---
+# (Код цикла выполнения без изменений, как в предыдущем ответе)
+$testIdCounter = $basePingAssignment.assignment_id
 foreach ($testCase in $testCases) {
-    Write-Host "Запуск теста: $($testCase.TestName)" -ForegroundColor Yellow
-    Write-Host "Параметры:"
-    Write-Host "  TargetIP: $($testCase.TargetIP)"
-    Write-Host "  Parameters: $($testCase.Parameters | ConvertTo-Json -Depth 1 -Compress)"
-    Write-Host "  SuccessCriteria: $($testCase.SuccessCriteria | ConvertTo-Json -Depth 2 -Compress)"
+    $testIdCounter++
+    $currentAssignment = $basePingAssignment.PSObject.Copy()
+    $currentAssignment.assignment_id = $testIdCounter; $currentAssignment.node_name = $testCase.Name; $currentAssignment.ip_address = $testCase.Target
+    if ($testCase.Params) { $currentAssignment.parameters = $testCase.Params }
+    if ($testCase.Criteria) { $currentAssignment.success_criteria = $testCase.Criteria }
 
-    # <<< ИСПРАВЛЕНО: Подготовка параметров для splatting >>>
-    $scriptArgs = @{
-        TargetIP        = $testCase.TargetIP
-        Parameters      = $testCase.Parameters
-        SuccessCriteria = $testCase.SuccessCriteria
-        NodeName        = $testCase.TestName # Используем имя теста для логов
-    }
+    Write-Host "ЗАПУСК: $($currentAssignment.node_name)" -ForegroundColor Yellow
+    Write-Host "  Target: $($currentAssignment.ip_address)"
+    Write-Host "  Parameters: $($currentAssignment.parameters | ConvertTo-Json -Depth 2 -Compress)"
+    Write-Host "  SuccessCriteria: $($currentAssignment.success_criteria | ConvertTo-Json -Depth 3 -Compress)"
 
-    # Вызов скрипта через оператор '&' и splatting '@scriptArgs'
-    try {
-        # & вызывает скрипт в дочерней области видимости, но функции модуля будут доступны
-        $result = & $checkScriptPath @scriptArgs
-    } catch {
-        Write-Error "Критическая ошибка при ВЫЗОВЕ скрипта '$checkScriptPath': $($_.Exception.Message)"
-        $result = $null # Не удалось получить результат
-    }
-
-    # --- 5. Проверка результата (остается без изменений) ---
-    Write-Host "Результат:"
-    if ($result -ne $null) {
-        # ... (код проверки результата) ...
-        Write-Host ($result | ConvertTo-Json -Depth 4) -ForegroundColor Gray
-
-        # Проверка IsAvailable
-        if ($result.IsAvailable -eq $testCase.ExpectedIsAvailable) {
-            Write-Host "  [PASS] IsAvailable: $($result.IsAvailable)" -ForegroundColor Green
-        } else {
-            Write-Host "  [FAIL] IsAvailable: Ожидалось $($testCase.ExpectedIsAvailable), получено $($result.IsAvailable)" -ForegroundColor Red
-        }
-        # Проверка CheckSuccess
-        if ($result.CheckSuccess -eq $testCase.ExpectedCheckSuccess) {
-            Write-Host "  [PASS] CheckSuccess: $($result.CheckSuccess)" -ForegroundColor Green
-        } else {
-            Write-Host "  [FAIL] CheckSuccess: Ожидалось $($testCase.ExpectedCheckSuccess), получено $($result.CheckSuccess)" -ForegroundColor Red
-        }
-        # Проверка ErrorMessage
-        $hasError = -not [string]::IsNullOrEmpty($result.ErrorMessage)
-        if ($hasError -eq $testCase.ExpectedError) {
-            Write-Host "  [PASS] ErrorMessage: $($hasError) (Сообщение: '$($result.ErrorMessage)')" -ForegroundColor Green
-        } else {
-            Write-Host "  [FAIL] ErrorMessage: Ожидалось $($testCase.ExpectedError), получено $($hasError) (Сообщение: '$($result.ErrorMessage)')" -ForegroundColor Red
-        }
-        # Дополнительно можно проверить содержимое Details
-        if($testCase.ExpectedIsAvailable -eq $true -and $testCase.ExpectedError -eq $false){
-            # Проверяем, есть ли Details, есть ли в нем ключ rtt_ms, и значение НЕ null
-            if($result.Details -ne $null -and ($result.Details.PSObject.Properties.Name -contains 'rtt_ms') -and $result.Details.rtt_ms -ne $null){
-                 Write-Host "  [INFO] RTT: $($result.Details.rtt_ms)ms" -ForegroundColor DarkGray # Сделаем серым, т.к. это инфо
-            } else {
-                 # Выводим WARN только если RTT действительно должен был быть (т.е. ExpectedIsAvailable=true, ExpectedError=false)
-                 Write-Host "  [WARN] RTT равен null или отсутствует в Details при УСПЕШНОМ результате." -ForegroundColor Yellow
-            }
-        }
-
-    } else {
-        Write-Host "  [FAIL] Результат выполнения скрипта равен null!" -ForegroundColor Red
-    }
-    Write-Host ("-"*50)
-    Start-Sleep -Seconds 1 # Небольшая пауза между тестами
+    $result = Invoke-StatusMonitorCheck -Assignment ([PSCustomObject]$currentAssignment)
+    Write-Host "РЕЗУЛЬТАТ:"; Write-Host ($result | ConvertTo-Json -Depth 4) -ForegroundColor Gray
+    if ($result.IsAvailable) { Write-Host "  Доступность: OK" -FG Green } else { Write-Host "  Доступность: FAIL" -FG Red }
+    if ($result.CheckSuccess) { Write-Host "  Критерии: PASS" -FG Green } elseif ($result.CheckSuccess -eq $false) { Write-Host "  Критерии: FAIL" -FG Red } else { Write-Host "  Критерии: N/A" -FG Yellow }
+    if ($result.ErrorMessage) { Write-Host "  Ошибка: $($result.ErrorMessage)" -FG Magenta }
+    Write-Host ("-"*50); Start-Sleep -Seconds 1
 }
-
-Write-Host "Тестирование завершено."
+Write-Host "Ручное тестирование PING завершено."
