@@ -1,0 +1,449 @@
+Хорошо, давайте детализируем Технические Задания (ТЗ) для каждого модуля, добавив больше подробностей о входных/выходных данных, логике, взаимодействии и примерах.
+
+---
+
+## Технические Задания (ТЗ) для Модулей Проекта "Status Monitor" (v4.x Детализированные)
+
+### Общая Схема Взаимодействия Модулей
+
+```mermaid
+graph LR
+    subgraph "Клиентская Часть (PowerShell)"
+        UA["Utils: StatusMonitorAgentUtils"]
+        OA["Агент: Online"]
+        OFA["Агент: Offline"]
+        CFG["Утилита: Конфигуратор"]
+        LOAD["Утилита: Загрузчик Результатов"]
+    end
+
+    subgraph "Серверная Часть (Docker)"
+        API["API Сервер (Flask)"]
+        UI["Web UI (Flask Templates)"]
+        NG["Веб-Сервер (Nginx)"]
+        DB["БД (PostgreSQL)"]
+        DBInit["[Инициализация БД]"]
+    end
+
+    subgraph "Внешние Системы/Пользователи"
+        User[("Пользователь (Администратор)")]
+        FS[("Файловая Система/Транспорт")]
+    end
+
+    %% Связи
+    User -- Управление --> UI
+    UI -- HTTP Запросы --> NG
+    NG -- Проксирует --> API
+    NG -- Отдает статику --> User
+    API -- SQL Запросы --> DB
+    DBInit -- Инициализирует --> DB
+
+    OA -- Запрос заданий (GET /assignments) --> API
+    OA -- Отправка результатов (POST /checks) --> API
+    OA -- Использует --> UA
+
+    CFG -- Запрос конфига (GET /objects/.../offline_config) --> API
+    CFG -- Записывает файл --> FS
+    FS -- Доставка конфига --> OFA
+
+    OFA -- Читает конфиг --> FS
+    OFA -- Использует --> UA
+    OFA -- Записывает результат (*.zrpu) --> FS
+    FS -- Доставка результата --> LOAD
+
+    LOAD -- Читает результат (*.zrpu) --> FS
+    LOAD -- Отправка результатов (POST /checks) --> API
+    LOAD -- Отправка события (POST /events) --> API
+    LOAD -- Перемещает файл --> FS
+
+    style DBInit fill:#ddd,stroke:#333,stroke-width:1px,stroke-dasharray: 5 5
+```
+
+---
+
+### 1. Модуль: База Данных (Инициализация и Схема)
+
+*   **Версия:** ~4.3.0
+*   **Назначение и область ответственности:**
+    *   Определение и поддержка реляционной схемы PostgreSQL для хранения конфигурации, истории и событий системы мониторинга.
+    *   Обеспечение целостности и непротиворечивости данных через ограничения (PK, FK, UNIQUE, CHECK).
+    *   Предоставление механизма автоматической инициализации и/или обновления схемы и базовых справочников при развертывании (через `docker-entrypoint-initdb.d`).
+    *   Инкапсуляция сложной или критичной логики работы с данными в хранимых функциях/процедурах.
+*   **Ключевые Компоненты/Файлы:**
+    *   `postgres/db_schema/*.sql`: Создание/изменение таблиц, индексов, функций, процедур, представлений, ключей.
+    *   `postgres/db_core_data/*.sql`: Заполнение справочников (`check_methods`, `node_types`, `settings` и т.д.).
+    *   `postgres/db_seed_data/**/*.sql`: Наполнение начальными данными (опционально).
+    *   `postgres/docker-compose.yaml`: Определение сервиса PostgreSQL, переменных окружения, монтирование скриптов.
+*   **Входные данные:**
+    *   **SQL-скрипты:** Файлы `.sql`.
+    *   **Docker Environment:** `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `TZ`.
+*   **Методы обработки (основная логика):**
+    1.  **Инициализация Docker:** Контейнер PostgreSQL выполняет скрипты из `/docker-entrypoint-initdb.d/` в алфавитном порядке при первом запуске. Порядок задается именами файлов при монтировании в `docker-compose.yaml`.
+        *   **Schema:** Создание таблиц (`01_001_create_tables.sql`), индексов (`01_002_create_indexes.sql`), функций/процедур (`01_003_create_functions_procedures.sql`), представлений (`01_004_create_views.sql`), внешних ключей (`01_005_add_foreign_keys.sql`).
+        *   **Core Data:** Заполнение базовых справочников (`02_xxx_...`).
+        *   **Seed Data:** Заполнение тестовых данных (`03_xxx_...`).
+    2.  **Хранимые процедуры/функции:**
+        *   `record_check_result(...)`: Принимает данные проверки, записывает их в `node_checks` и `node_check_details`, обновляет `last_node_check_id` и `last_executed_at` в `node_check_assignments`, создает событие `CHECK_RESULT_RECEIVED`. Обрабатывает случай отсутствия `assignment_id`.
+        *   `generate_offline_config(object_id)`: Формирует JSON-структуру со списком активных заданий для указанного `object_id`, добавляет метаданные (версию, код ТС), управляет версионированием в `offline_config_versions`.
+        *   `get_active_assignments_for_object(object_id)`: Возвращает активные задания для указанного `object_id`.
+        *   `get_node_base_info(...)`, `get_node_ping_status(...)`: Функции для получения агрегированных данных (используются сервисным слоем).
+*   **Выходные данные:**
+    *   Экземпляр PostgreSQL с настроенной базой данных (`pu_db`).
+    *   **Структура БД:** Определенные таблицы, индексы, функции, процедуры, представления, ограничения.
+    *   **Данные:** Заполненные справочники (`check_methods`, `node_types` и т.д.), настройки (`settings`), (опционально) начальные данные.
+*   **Примеры API-запросов и ответов:** Не применимо.
+*   **Описание взаимодействия с другими модулями:**
+    *   <-> **Модуль 2 (Backend API):** Предоставляет SQL-интерфейс для всех операций чтения/записи данных. API Сервер подключается к БД и выполняет запросы.
+    *   <- **Docker Compose (`postgres/`):** Управляет жизненным циклом контейнера БД и инициализацией.
+*   **Конфигурация:** `postgres/docker-compose.yaml` (учетные данные, порты, том данных, порядок монтирования скриптов). SQL файлы в соответствующих папках.
+*   **Error Handling:** Целостность данных обеспечивается ограничениями БД. Ошибки выполнения SQL возвращаются вызывающему модулю (API Серверу). Хранимые процедуры могут генерировать специфичные ошибки (например, `P0002` для "Задание не найдено").
+*   **Future Considerations/Improvements:**
+    *   Механизм миграции схемы (например, Alembic) для обновлений без пересоздания БД.
+    *   Оптимизация запросов (анализ планов, добавление индексов).
+    *   Партиционирование больших таблиц (`node_checks`, `node_check_details`, `system_events`).
+    *   Механизмы архивации/очистки старых данных.
+    *   Репликация для отказоустойчивости/масштабирования чтения.
+
+---
+
+### 2. Модуль: Центральный Сервер (Backend API + UI)
+
+*   **Версия:** ~4.x
+*   **Назначение и область ответственности:**
+    *   Предоставление централизованного HTTP-интерфейса (RESTful API и Web UI) для управления системой мониторинга и просмотра ее состояния.
+    *   Обработка входящих данных от агентов и утилит (результаты проверок, события).
+    *   Предоставление конфигурации агентам (списки заданий, оффлайн-конфиги).
+    *   Реализация бизнес-логики (расчет статуса узла, генерация отчетов - *в будущем*).
+    *   Аутентификация и авторизация запросов к API и UI.
+    *   Взаимодействие с базой данных для хранения и извлечения информации.
+*   **Ключевые Компоненты/Файлы:**
+    *   `status/app/`: Код Flask-приложения (маршруты, репозитории, сервисы, модели, шаблоны, статика).
+    *   `status/wsgi.py`: Точка входа WSGI.
+    *   `status/Dockerfile`, `status/entrypoint.sh`: Сборка и запуск Docker-контейнера.
+    *   `status/nginx/nginx.conf`: Конфигурация обратного прокси Nginx.
+    *   `status/.env`: Файл с переменными окружения.
+    *   `status/docker-compose.yaml`: Определение сервисов `web` (Flask/Gunicorn) и `nginx`.
+*   **Входные данные:**
+    *   **HTTP Запросы:** GET, POST, PUT, DELETE.
+    *   **URL:** `/`, `/status`, `/events`, `/manage/...`, `/login`, `/logout`, `/health`, `/api/v1/...`
+    *   **Query Params:** `limit`, `offset`, `object_id`, `node_id`, `method_id`, `severity`, `event_type`, `search_text`, `start_time`, `end_time`, etc.
+    *   **Headers:** `X-API-Key: <ключ>`, `Content-Type: application/json`, `Cookie: session=...`
+    *   **JSON Body:**
+        *   *POST `/api/v1/checks`:* (См. ТЗ Модуля 4 - Выходные данные)
+        *   *POST `/api/v1/events`:* (См. ТЗ Модуля 7 - Выходные данные)
+        *   *POST `/api/v1/checks/bulk`:* (См. ТЗ Модуля 7 - Входные данные *.zrpu*)
+        *   *POST/PUT `/api/v1/nodes`, `/api/v1/subdivisions`, etc.:* JSON с полями соответствующей сущности.
+    *   **Формы HTML:** Данные из форм на страницах `/login`, `/manage/...`.
+    *   **`.env`:** `DATABASE_URL`, `SECRET_KEY`, `FLASK_ENV`, `TZ`.
+*   **Методы обработки (основная логика):**
+    1.  **Nginx:** Маршрутизация запросов: `/static/` -> файлы из `/app/static/`; остальные -> `proxy_pass http://web:5000;`.
+    2.  **Gunicorn:** Прием запроса, запуск worker'а Flask.
+    3.  **Flask:**
+        *   **Контекст:** Создание `request` и `g`.
+        *   **`@before_request`:** Получение соединения БД (`g.db_conn`).
+        *   **Маршрутизация:** Поиск view-функции.
+        *   **Декораторы:** Проверка `@login_required` или `@api_key_required`.
+        *   **View-функция:**
+            *   Парсинг и валидация входных данных (`request.args`, `request.form`, `request.get_json()`). Выброс `ApiBadRequest`/`ApiValidationFailure` при ошибке.
+            *   Вызов **Репозиториев** (`app/repositories/`) для получения/изменения данных в БД. Передача `g.db_conn.cursor()`. Обработка ошибок БД (может выбросить `psycopg2.Error`, `ValueError`, `ApiNotFound`, `ApiConflict`).
+            *   (Опционально) Вызов **Сервисов** (`app/services/`) для бизнес-логики (например, `node_service.get_processed_node_status`).
+            *   Формирование ответа (`jsonify()` для API, `render_template()` для UI).
+        *   **Обработка ошибок:** Перехват исключений (`ApiException`, `psycopg2.Error`, `HTTPException`, `Exception`) глобальными обработчиками (`app/errors.py`), логирование, возврат стандартизированного JSON-ответа об ошибке.
+        *   **`@teardown_appcontext`:** Возврат соединения БД в пул.
+*   **Выходные данные:**
+    *   **API Ответы (JSON):**
+        *   *`GET /api/v1/assignments?object_id=X` (200 OK):* Массив объектов заданий (см. ТЗ Модуля 4).
+        *   *`GET /api/v1/objects/X/offline_config` (200 OK):* JSON с метаданными и массивом заданий (см. ТЗ Модуля 6).
+        *   *`POST /api/v1/checks` (201 Created):* `{"status": "success", "message": "Result for assignment Y accepted."}`
+        *   *`POST /api/v1/events` (201 Created):* `{"status": "success", "event_id": Z}`
+        *   *`POST /api/v1/checks/bulk` (200 OK или 207 Multi-Status):* (См. ТЗ Модуля 7).
+        *   *GET `/api/v1/nodes`, `/api/v1/subdivisions`, etc. (200 OK):* `{"items": [...], "total_count": N, ...}`
+        *   *GET `/api/v1/nodes/Y`, `/api/v1/subdivisions/Y`, etc. (200 OK):* `{...данные сущности...}`
+        *   *POST/PUT/DELETE для CRUD (200 OK, 201 Created, 204 No Content):* Тело ответа зависит от операции (обновленный объект, ID созданного, пустое тело).
+        *   *Ответы об ошибках (4xx, 5xx):*
+            ```json
+            { "error": { "code": "ERROR_CODE", "message": "Error description", "details": { /* опционально */ } } }
+            ```
+    *   **HTML Страницы:** Для UI.
+    *   **Записи в БД:** Результат CRUD операций, запись результатов проверок, событий.
+    *   **Логи:** Записи в лог Gunicorn/Flask.
+*   **Примеры API-запросов и ответов:** (См. примеры структур JSON во входных/выходных данных и в ТЗ других модулей).
+*   **Описание взаимодействия с другими модулями:**
+    *   <-> **Модуль 1 (БД):** Основной потребитель данных из БД и источник изменений в ней.
+    *   <- **Модули 4, 5, 6, 7 (Агенты, Утилиты):** Принимает от них HTTP API запросы.
+    *   <- **Пользователь (Браузер):** Принимает HTTP запросы для UI, отдает HTML/JS/CSS.
+    *   -> **Nginx:** Отправляет ответы через Nginx.
+*   **Конфигурация:** `status/.env` (DATABASE_URL, SECRET_KEY), `status/nginx/nginx.conf`.
+*   **Error Handling:** Кастомные исключения `ApiException` и их подклассы. Глобальные обработчики ошибок Flask. Стандартизированный JSON-формат ошибок API.
+*   **Future Considerations/Improvements:**
+    *   Внедрение WebSocket (Socket.IO) для real-time обновлений UI.
+    *   Разработка API v2 с улучшенной структурой/контрактами.
+    *   Добавление эндпоинтов для генерации отчетов.
+    *   Более гранулярная система прав доступа (RBAC).
+    *   Интеграция с системой уведомлений (Email, Telegram).
+    *   Кэширование часто запрашиваемых данных (например, статусов для dashboard).
+    *   Добавление тестов (unit, integration).
+
+---
+
+### 3. Модуль: PowerShell Agent Utilities (`StatusMonitorAgentUtils`)
+
+*   **Версия:** ~1.1.0
+*   **Назначение и область ответственности:**
+    *   Предоставление стандартизированной, переиспользуемой PowerShell-библиотеки для выполнения конкретных задач мониторинга.
+    *   Абстрагирование логики отдельных проверок от логики работы агентов (Online/Offline).
+    *   Обеспечение единого формата возвращаемого результата для всех типов проверок.
+    *   Реализация логики проверки критериев успеха (`SuccessCriteria`).
+*   **Ключевые Компоненты/Файлы:**
+    *   `StatusMonitorAgentUtils.psm1`: Содержит экспортируемые функции (`Invoke-StatusMonitorCheck`, `New-CheckResultObject`, `Test-SuccessCriteria`) и приватные хелперы (`Compare-Values`, `Test-ArrayCriteria`).
+    *   `StatusMonitorAgentUtils.psd1`: Манифест модуля.
+    *   `Checks/Check-*.ps1`: Индивидуальные скрипты для каждого метода проверки.
+*   **Входные данные:**
+    *   **Для `Invoke-StatusMonitorCheck`:**
+        *   `$Assignment` ([PSCustomObject] или [Hashtable]):
+            ```powershell
+            @{
+                assignment_id = 101
+                method_name   = 'SERVICE_STATUS'
+                ip_address    = 'target.server.local' # Или $null для локальной проверки
+                node_name     = 'WebServer01'
+                parameters    = @{ service_name = 'w3svc'; another_param = 'value' }
+                success_criteria = @{ status = 'Running'; start_type = @{ '!=' = 'Disabled'} }
+            }
+            ```
+    *   **Для скриптов `Checks/Check-*.ps1`:** (Параметры из `$Assignment`)
+        *   `$TargetIP`: Строка или `$null`.
+        *   `$Parameters`: Hashtable или `$null`.
+        *   `$SuccessCriteria`: Hashtable или `$null`.
+        *   `$NodeName`: Строка.
+*   **Методы обработки (основная логика):**
+    1.  **`Invoke-StatusMonitorCheck`:**
+        *   Валидирует `$Assignment`.
+        *   Находит скрипт `.\Checks\Check-$($Assignment.method_name).ps1`.
+        *   Вызывает скрипт через `&` с передачей параметров `$TargetIP`, `$Parameters`, `$SuccessCriteria`, `$NodeName`.
+        *   Обрабатывает ошибки выполнения скрипта.
+        *   Возвращает стандартизированный результат.
+    2.  **Скрипты `Checks/Check-*.ps1`:**
+        *   Выполняют проверку (локально или к `$TargetIP`).
+        *   Обрабатывают ошибки, устанавливают `$isAvailable`.
+        *   Формируют `$details` (Hashtable).
+        *   Если `$isAvailable -eq $true` и `$SuccessCriteria` передан, вызывают `Test-SuccessCriteria`.
+        *   Устанавливают `$checkSuccess` и `$errorMessage`.
+        *   Возвращают результат через `New-CheckResultObject`.
+    3.  **`Test-SuccessCriteria`:**
+        *   Рекурсивно сравнивает `$DetailsObject` и `$CriteriaObject`.
+        *   Использует `Compare-Values` для операторов (`>`, `==`, `contains`, etc.) и `Test-ArrayCriteria` для массивов (`_condition_`).
+    4.  **`New-CheckResultObject`:** Формирует стандартизированную Hashtable результата.
+*   **Выходные данные:**
+    *   **Стандартизированная PowerShell Hashtable:**
+        ```powershell
+        @{
+            IsAvailable  = $true # или $false
+            CheckSuccess = $true # или $false, $null
+            Timestamp    = "2024-05-21T12:15:30.1234567Z" # UTC ISO 8601
+            Details      = @{ # Зависит от метода
+                             # Общие поля:
+                             execution_target = "MY_AGENT_HOSTNAME"
+                             execution_mode = "local_agent" # или "remote" (если бы был Invoke-Command)
+                             check_target_ip = "target.server.local" # или $null
+                             # Специфичные для метода:
+                             # PING: response_time_ms, ip_address, ...
+                             # SERVICE: status, display_name, start_type, ...
+                             # SQL_XML: extracted_data = @{ key1 = val1; ... }
+                             # ERROR: error, ErrorRecord
+                           }
+            ErrorMessage = "Optional error message text" # или $null
+        }
+        ```
+*   **Примеры API-запросов и ответов:** Не применимо.
+*   **Описание взаимодействия с другими модулями:**
+    *   <- **Модуль 4 (Online Агент):** Вызывает `Invoke-StatusMonitorCheck`.
+    *   <- **Модуль 5 (Offline Агент):** Вызывает `Invoke-StatusMonitorCheck`.
+    *   -> **ОС/Сеть/SQL/etc.:** Выполняет системные команды и запросы.
+*   **Конфигурация:** Нет собственной.
+*   **Error Handling:** Перехват ошибок в `Invoke-StatusMonitorCheck` и внутри скриптов `Check-*.ps1`. Возврат стандартизированного объекта с `IsAvailable = $false` и `ErrorMessage`.
+*   **Future Considerations/Improvements:**
+    *   Добавление новых скриптов `Check-*.ps1` для поддержки большего числа методов мониторинга.
+    *   Реализация поддержки удаленного выполнения через `Invoke-Command` (если потребуется).
+    *   Улучшение `Test-SuccessCriteria` для поддержки более сложных проверок (например, полей внутри массивов в `$Details`).
+    *   Написание Unit-тестов (Pester) для каждой функции и скрипта `Check-*.ps1`.
+
+---
+
+### 4. Модуль: Online Агент
+
+*   **Версия:** ~5.5
+*   **Назначение и область ответственности:**
+    *   Выполнение мониторинга на узлах с прямым доступом к API сервера.
+    *   Автоматическое получение и обновление списка заданий от сервера.
+    *   Планирование и запуск проверок согласно заданным интервалам.
+    *   Отправка результатов проверок на сервер в реальном времени.
+*   **Ключевые Компоненты/Файлы:** `powershell/online-agent/online-agent.ps1`, `powershell/online-agent/config.json`.
+*   **Входные данные:**
+    *   **`config.json`:** (См. ТЗ Модуля 4 - Входные данные).
+    *   **API Ответ `GET /api/v1/assignments?object_id=...`:** Массив JSON-объектов заданий (см. ТЗ Модуля 4).
+    *   **Результат `Invoke-StatusMonitorCheck` (из Модуля 3):** Hashtable (см. ТЗ Модуля 3).
+*   **Методы обработки (основная логика):**
+    1.  Чтение `config.json`.
+    2.  Импорт `StatusMonitorAgentUtils`.
+    3.  **Цикл:**
+        *   **Обновление заданий (раз в `api_poll_interval_seconds`):** `GET /assignments`, сравнение/обновление `$script:ActiveAssignments`.
+        *   **Выполнение проверок:** Перебор `$script:ActiveAssignments`. Если время выполнения (`$script:LastExecutedTimes`) + интервал <= текущее время:
+            *   Вызвать `Invoke-StatusMonitorCheck`.
+            *   Получить `$checkResult`.
+            *   Сформировать `$payload` для `POST /checks`.
+            *   Отправить `$payload` через `Send-CheckResultToApi` (с retry).
+            *   Обновить `$script:LastExecutedTimes` при успехе.
+        *   Пауза 1 сек.
+*   **Выходные данные:**
+    *   **HTTP POST `/api/v1/checks`:** (См. ТЗ Модуля 4 - Выходные данные).
+    *   **Лог-файл.**
+*   **Примеры API-запросов и ответов:**
+    *   Запрос: `GET /api/v1/assignments?object_id=1516` -> Ответ: `[ { assignment_id: ... }, ... ]`
+    *   Запрос: `POST /api/v1/checks` (Тело: JSON результата) -> Ответ: `{"status": "success", ...}`
+*   **Описание взаимодействия с другими модулями:**
+    *   -> **Модуль 2 (API Сервер):** GET `/assignments`, POST `/checks`.
+    *   -> **Модуль 3 (Utils):** Вызов `Invoke-StatusMonitorCheck`.
+*   **Конфигурация:** `powershell/online-agent/config.json`.
+*   **Error Handling:** Retry-логика для API запросов, логирование ошибок.
+*   **Future Considerations/Improvements:**
+    *   Упаковка в виде службы Windows.
+    *   Более интеллектуальное планирование проверок (например, разнесение по времени).
+    *   Кэширование заданий на случай временной недоступности API.
+    *   Unit/интеграционные тесты.
+
+---
+
+### 5. Модуль: Offline Агент
+
+*   **Версия:** ~3.1
+*   **Назначение и область ответственности:**
+    *   Выполнение мониторинга на узлах без доступа к API сервера.
+    *   Чтение конфигурации заданий из локального файла.
+    *   Выполнение всех заданий из конфигурации с заданным интервалом.
+    *   Сбор результатов всех проверок за цикл.
+    *   Формирование и сохранение файла `.zrpu` с результатами и метаданными для дальнейшей транспортировки.
+*   **Ключевые Компоненты/Файлы:** `powershell/offline-agent/offline-agent.ps1`, `powershell/offline-agent/config.json`.
+*   **Входные данные:**
+    *   **`config.json`:** (См. ТЗ Модуля 5 - Входные данные).
+    *   **Файл конфигурации `*.json.status.*`:** JSON (См. ТЗ Модуля 5 - Входные данные).
+    *   **Результат `Invoke-StatusMonitorCheck` (из Модуля 3):** Hashtable (см. ТЗ Модуля 3).
+*   **Методы обработки (основная логика):**
+    1.  Чтение `config.json`.
+    2.  Импорт `StatusMonitorAgentUtils`.
+    3.  **Цикл (интервал `check_interval_seconds`):**
+        *   **Поиск/Чтение конфига:** Найти и прочитать последний `*.json.status.*`. Обновить `$script:currentAssignments`, `$script:currentAssignmentVersion`.
+        *   **Выполнение проверок:** Если есть задания:
+            *   Для каждого `$assignment`:
+                *   Вызвать `Invoke-StatusMonitorCheck`.
+                *   Создать `$resultToSave` (результат + `assignment_id`).
+                *   Добавить в `$cycleCheckResultsList`.
+        *   **Сохранение файла:** Если есть результаты:
+            *   Сформировать `$finalPayload` (`agent_script_version`, `assignment_config_version`, `results: $cycleCheckResultsList`).
+            *   Сохранить как `.zrpu` файл в `output_path`.
+*   **Выходные данные:**
+    *   **Файл `*.zrpu`:** JSON файл в `output_path` (см. ТЗ Модуля 5 - Выходные данные).
+    *   **Лог-файл.**
+*   **Примеры API-запросов и ответов:** Не применимо.
+*   **Описание взаимодействия с другими модулями:**
+    *   -> **Модуль 3 (Utils):** Вызов `Invoke-StatusMonitorCheck`.
+    *   <- **Модуль 6 (Конфигуратор):** Чтение файлов `*.json.status.*`.
+    *   -> **Модуль 7 (Загрузчик):** Создание файлов `*.zrpu`.
+    *   -> **Файловая система:** Чтение/запись файлов.
+*   **Конфигурация:** `powershell/offline-agent/config.json`.
+*   **Error Handling:** Логирование ошибок чтения/записи файлов, выполнения проверок.
+*   **Future Considerations/Improvements:**
+    *   Упаковка в виде службы Windows.
+    *   Возможность частичного выполнения проверок при ошибках чтения конфига.
+
+---
+
+### 6. Модуль: Конфигуратор Оффлайн Агентов
+
+*   **Версия:** ~3.6
+*   **Назначение и область ответственности:**
+    *   Генерация и доставка актуальных файлов конфигурации (`*.json.status.*`) для Offline Агентов.
+    *   Получение необходимой информации (задания, код ТС, версия) из API.
+*   **Ключевые Компоненты/Файлы:** `powershell/configurator/generate_and_deliver_config.ps1`, `powershell/configurator/config.json`.
+*   **Входные данные:**
+    *   **`config.json`:** (См. ТЗ Модуля 6 - Входные данные).
+    *   **API Ответ `GET /api/v1/objects/{id}/offline_config`:** JSON (см. ТЗ Модуля 6).
+    *   **(Опционально) API Ответ `GET /api/v1/subdivisions`**: JSON (`{items: [...]}`).
+*   **Методы обработки (основная логика):**
+    1.  Чтение `config.json`.
+    2.  Определение списка `ObjectId` (из конфига или API `/subdivisions`).
+    3.  **Цикл по ObjectId:**
+        *   `GET /objects/{ObjectId}/offline_config`.
+        *   Валидация ответа.
+        *   Извлечение `versionTag`, `transportCode`.
+        *   Формирование имени файла.
+        *   Сохранение **всего** JSON ответа API в файл (UTF-8 без BOM).
+        *   (Опционально) Копирование в папку доставки.
+*   **Выходные данные:**
+    *   **Файлы конфигурации `*.json.status.*`:** В `output_path_base` и папке доставки. Содержимое - JSON от API.
+    *   **Лог-файл.**
+*   **Примеры API-запросов и ответов:**
+    *   Запрос: `GET /api/v1/objects/1060/offline_config` -> Ответ: JSON с заданиями и метаданными.
+*   **Описание взаимодействия с другими модулями:**
+    *   -> **Модуль 2 (API Сервер):** GET `/objects/{id}/offline_config`, GET `/subdivisions`.
+    *   -> **Модуль 5 (Offline Агент):** Создание файлов конфигурации.
+    *   -> **Файловая система:** Запись/копирование файлов.
+*   **Конфигурация:** `powershell/configurator/config.json`.
+*   **Error Handling:** Логирование ошибок API и файловой системы. Пропуск проблемных `ObjectId`.
+*   **Future Considerations/Improvements:**
+    *   Более надежная доставка (проверка перезаписи, временные файлы).
+    *   Возможность запуска по API-триггеру или расписанию.
+    *   Unit-тесты.
+
+---
+
+### 7. Модуль: Загрузчик Результатов Оффлайн Агентов
+
+*   **Версия:** ~3.18
+*   **Назначение и область ответственности:**
+    *   Загрузка данных мониторинга из файлов `.zrpu` (созданных Offline Агентами) в центральную систему через API.
+    *   Обеспечение надежной доставки каждого результата проверки.
+    *   Информирование системы об успешной или неуспешной обработке файла.
+    *   Предотвращение повторной загрузки обработанных файлов.
+*   **Ключевые Компоненты/Файлы:** `powershell/result_loader/result_loader.ps1`, `powershell/result_loader/config.json`.
+*   **Входные данные:**
+    *   **`config.json`:** (См. ТЗ Модуля 7 - Входные данные).
+    *   **Файлы `*.zrpu`:** JSON файлы в `check_folder` (см. ТЗ Модуля 5 - Выходные данные).
+*   **Методы обработки (основная логика):**
+    1.  Чтение `config.json`.
+    2.  **Цикл (интервал `scan_interval_seconds`):**
+        *   Сканирование `check_folder`.
+        *   **Для каждого файла `.zrpu`:**
+            *   Чтение/Парсинг JSON. Обработка ошибок.
+            *   Валидация структуры (наличие `results`, `agent_script_version`, `assignment_config_version`).
+            *   Извлечение метаданных и массива `results`.
+            *   **Цикл по `results`:**
+                *   Извлечь `assignment_id`, `IsAvailable`, `Timestamp`, `Details`, `ErrorMessage`.
+                *   Валидация обязательных полей.
+                *   Сформировать payload для `POST /checks` (с метаданными).
+                *   Отправить запрос через `Invoke-ApiRequestWithRetry`. Обработка ошибок (404, 403, 5xx).
+                *   Обновить счетчики `processedCount`/`failedCount`, записать ошибки в `$fileErrors`.
+            *   Определить итоговый статус файла (`success`, `partial_error`, `error_local`, `error_api`).
+            *   Сформировать payload для `POST /events` (`FILE_PROCESSED`).
+            *   Отправить событие через `Invoke-ApiRequestWithRetry`.
+            *   Переместить файл в `Processed` или `Error`.
+*   **Выходные данные:**
+    *   **HTTP POST `/api/v1/checks`:** JSON с результатом *одной* проверки (см. ТЗ Модуля 4).
+    *   **HTTP POST `/api/v1/events`:** JSON события `FILE_PROCESSED` (см. ТЗ Модуля 7).
+    *   **Перемещенные файлы:** `.zrpu` файлы в папках `Processed`/`Error`.
+    *   **Лог-файл.**
+*   **Примеры API-запросов и ответов:**
+    *   Запрос: `POST /api/v1/checks` (Тело: JSON одного результата + метаданные) -> Ответ: `{"status": "success", ...}` (201) или Ошибка (4xx, 5xx).
+    *   Запрос: `POST /api/v1/events` (Тело: JSON события `FILE_PROCESSED`) -> Ответ: `{"status": "success", "event_id": ...}` (201) или Ошибка.
+*   **Описание взаимодействия с другими модулями:**
+    *   <- **Модуль 5 (Offline Агент):** Чтение файлов `.zrpu`.
+    *   -> **Модуль 2 (API Сервер):** Отправка POST `/checks`, POST `/events`.
+    *   -> **Файловая система:** Чтение/перемещение файлов.
+*   **Конфигурация:** `powershell/result_loader/config.json`.
+*   **Error Handling:** Retry для API запросов, логирование ошибок парсинга/API, перемещение в папку `Error`. Отправка события `FILE_PROCESSED` с деталями ошибок.
+*   **Future Considerations/Improvements:**
+    *   Использование **Bulk API** (`POST /api/v1/checks/bulk`) для отправки всех результатов из файла одним запросом (уменьшит нагрузку на API и сеть). *Текущий скрипт v3.18 уже использует Bulk API.*
+    *   Более детальная обработка ответа 207 Multi-Status от Bulk API.
+    *   Возможность повторной обработки файлов из папки `Error`.
+    *   Unit/интеграционные тесты.
+
+---

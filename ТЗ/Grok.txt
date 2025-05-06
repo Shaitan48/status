@@ -1,0 +1,564 @@
+Введение
+Это техническое задание (ТЗ) описывает доработанную архитектуру проекта "Status Monitor", системы мониторинга IT-инфраструктуры. Основная цель — обеспечить гибкость для добавления новых проверок (например, мониторинг загрузки процессора или дискового пространства) и визуализации их результатов в веб-интерфейсе. Проект разделен на семь систем, каждая из которых обновлена для поддержки модульности, хранения исторических данных и динамической визуализации. Эти изменения позволят вам продолжить разработку, создавая отдельные модули и тесты для каждой системы, минимизируя риски остановки проекта.
+
+1. Серверная часть (Flask/Gunicorn + PostgreSQL)
+Назначение и область ответственности
+
+Центральный компонент, управляющий данными, API и веб-страницами.
+Хранение и управление методами проверок для динамического добавления новых типов мониторинга.
+Сохранение исторических данных проверок для анализа и визуализации.
+Обеспечение API для взаимодействия с другими системами и поддержки будущих функций, таких как обновления в реальном времени.
+Особенности для будущих доработок
+
+Динамическое управление проверками: Таблица check_methods в базе данных хранит информацию о методах проверок, включая их параметры и настройки визуализации.
+Исторические данные: Таблица check_results сохраняет результаты проверок с метками времени для построения трендов.
+Подготовка к реальному времени: Планируется внедрение WebSocket (например, через Flask-SocketIO) для уведомлений о новых результатах.
+Оптимизация базы данных: Индексы и возможное использование временных рядов (например, TimescaleDB) для больших объемов данных.
+Входные данные
+
+HTTP-запросы (GET, POST, PUT, DELETE) от веб-интерфейса, агентов, конфигуратора и загрузчика с параметрами и данными в формате JSON.
+Данные для управления методами проверок (создание, обновление, удаление).
+Запросы на исторические данные с фильтрами (узел, метод, временной диапазон).
+Пример JSON для создания метода проверки:
+json
+
+Копировать
+{
+  "name": "CPU Load",
+  "script_name": "Check-CPU_LOAD",
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "threshold": { "type": "number" }
+    },
+    "required": ["threshold"]
+  },
+  "visualization_type": "line",
+  "visualization_config": {
+    "data_key": "load_percent",
+    "label": "CPU Load (%)"
+  }
+}
+Методы обработки
+
+Маршрутизация: Использование Flask Blueprints для организации API (например, /api/v1/check_methods, /api/v1/checks).
+Валидация: Проверка входных данных с помощью JSON Schema для методов проверок и параметров заданий.
+Работа с базой данных:
+Сохранение методов проверок в таблице check_methods.
+Запись результатов проверок в таблицу check_results с метками времени.
+Оптимизированные запросы для исторических данных с индексами на node_id, method_id, timestamp.
+Бизнес-логика:
+Расчет статуса узлов на основе последних результатов.
+Генерация заданий для агентов по расписанию.
+Обработка ошибок: Возврат HTTP-кодов (400, 401, 404, 500) с JSON-описанием ошибок.
+Логирование: Использование модуля logging для записи операций и ошибок.
+Выходные данные
+
+HTTP-ответы в формате JSON для API или HTML для веб-интерфейса.
+Исторические данные проверок в формате JSON.
+Пример ответа на запрос исторических данных:
+json
+
+Копировать
+[
+  {
+    "timestamp": "2025-05-01T10:00:00Z",
+    "result_code": 0,
+    "result_message": "CPU Load OK",
+    "detailed_data": { "load_percent": 25 }
+  },
+  {
+    "timestamp": "2025-05-01T10:05:00Z",
+    "result_code": 0,
+    "result_message": "CPU Load OK",
+    "detailed_data": { "load_percent": 30 }
+  }
+]
+Примеры API-запросов и ответов
+
+POST /api/v1/check_methods (создание метода проверки):
+Запрос:
+http
+
+Копировать
+POST /api/v1/check_methods HTTP/1.1
+Host: status-monitor.example.com
+Content-Type: application/json
+Authorization: Bearer <token>
+{
+  "name": "CPU Load",
+  "script_name": "Check-CPU_LOAD",
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "threshold": { "type": "number" }
+    }
+  },
+  "visualization_type": "line",
+  "visualization_config": {
+    "data_key": "load_percent",
+    "label": "CPU Load (%)"
+  }
+}
+Ответ (201 Created):
+json
+
+Копировать
+{
+  "id": 4,
+  "name": "CPU Load",
+  "script_name": "Check-CPU_LOAD",
+  "visualization_type": "line"
+}
+GET /api/v1/checks/history (получение истории проверок):
+Запрос:
+http
+
+Копировать
+GET /api/v1/checks/history?node_id=1&method_id=4&start=2025-05-01T00:00:00Z&end=2025-05-06T23:59:59Z HTTP/1.1
+Host: status-monitor.example.com
+Authorization: Bearer <token>
+Ответ (200 OK):
+json
+
+Копировать
+[
+  {
+    "timestamp": "2025-05-01T10:00:00Z",
+    "result_code": 0,
+    "detailed_data": { "load_percent": 25 }
+  }
+]
+Взаимодействие с другими модулями
+
+Веб-интерфейс: Предоставляет данные для отображения и принимает команды управления.
+Онлайн-агент: Отправляет задания (GET /assignments) и принимает результаты (POST /checks).
+Конфигуратор: Предоставляет конфигурацию для оффлайн-агентов (GET /objects/.../offline_config).
+Загрузчик результатов: Принимает результаты и события от оффлайн-агентов.
+База данных: Выполняет CRUD-операции через SQLAlchemy.
+Таблица структуры базы данных
+
+Таблица	Поля
+check_methods	id (INTEGER), name (VARCHAR), script_name (VARCHAR), parameter_schema (JSON), visualization_type (VARCHAR), visualization_config (JSON)
+check_results	id (INTEGER), assignment_id (INTEGER), node_id (INTEGER), method_id (INTEGER), timestamp (TIMESTAMP), result_code (INTEGER), result_message (TEXT), detailed_data (JSON)
+python
+
+Копировать
+from flask import Blueprint, request, jsonify
+from models import Node, CheckMethod, db
+
+nodes_bp = Blueprint('nodes', __name__)
+
+@nodes_bp.route('/api/v1/nodes', methods=['POST'])
+def create_node():
+    data = request.get_json()
+    node = Node(
+        name=data['name'],
+        ip_address=data['ip_address'],
+        parent_subdivision_id=data.get('parent_subdivision_id')
+    )
+    db.session.add(node)
+    db.session.commit()
+    return jsonify({'id': node.id, 'name': node.name}), 201
+
+@nodes_bp.route('/api/v1/nodes/<int:id>', methods=['GET'])
+def get_node(id):
+    node = Node.query.get_or_404(id)
+    return jsonify({'id': node.id, 'name': node.name, 'ip_address': node.ip_address})
+
+@nodes_bp.route('/api/v1/check_methods', methods=['POST'])
+def create_check_method():
+    data = request.get_json()
+    method = CheckMethod(
+        name=data['name'],
+        script_name=data['script_name'],
+        parameter_schema=data['parameter_schema'],
+        visualization_type=data.get('visualization_type'),
+        visualization_config=data.get('visualization_config')
+    )
+    db.session.add(method)
+    db.session.commit()
+    return jsonify({'id': method.id, 'name': method.name}), 201
+Показать в боковой панели
+2. Веб-интерфейс
+Назначение и область ответственности
+
+Графический интерфейс для мониторинга состояния инфраструктуры и управления системой.
+Отображение отчетов и графиков на основе исторических данных проверок.
+Поддержка настраиваемых дашбордов для гибкой визуализации.
+Особенности для будущих доработок
+
+Динамическая визуализация: Интеграция библиотеки Chart.js для построения графиков, автоматически подстраивающихся под тип проверки.
+Настраиваемые дашборды: Возможность добавления виджетов для отображения данных по узлам и проверкам.
+Подготовка к реальному времени: Планируется использование WebSocket для обновления графиков без перезагрузки страницы.
+Входные данные
+
+Действия пользователя: выбор узлов, проверок, временных диапазонов.
+Данные из API (например, GET /api/v1/checks/history).
+Конфигурации визуализации из таблицы check_methods.
+Методы обработки
+
+Формирование AJAX-запросов для получения данных и конфигураций.
+Рендеринг графиков с использованием Chart.js на основе visualization_config.
+Обработка пользовательских действий для настройки дашбордов и фильтров.
+Валидация данных перед отправкой (например, корректность временного диапазона).
+Выходные данные
+
+Визуальные элементы: таблицы, графики (линейные, столбчатые, круговые), формы.
+Настраиваемые дашборды с виджетами.
+Примеры API-запросов и ответов
+
+GET /api/v1/check_methods/4 (получение конфигурации визуализации):
+Запрос:
+http
+
+Копировать
+GET /api/v1/check_methods/4 HTTP/1.1
+Host: status-monitor.example.com
+Accept: application/json
+Ответ (200 OK):
+json
+
+Копировать
+{
+  "id": 4,
+  "name": "CPU Load",
+  "visualization_type": "line",
+  "visualization_config": {
+    "data_key": "load_percent",
+    "label": "CPU Load (%)"
+  }
+}
+Взаимодействие с другими модулями
+
+Серверная часть: Запрашивает данные и конфигурации через API.
+javascript
+
+Копировать
+const visualizationMap = {
+    1: {
+        type: 'line',
+        dataKey: 'latency_ms',
+        label: 'Задержка (мс)',
+        options: {
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'Задержка (мс)' } },
+                x: { title: { display: true, text: 'Время' } }
+            }
+        }
+    },
+    4: {
+        type: 'line',
+        dataKey: 'load_percent',
+        label: 'CPU Load (%)',
+        options: {
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'Загрузка (%)' } },
+                x: { title: { display: true, text: 'Время' } }
+            }
+        }
+    }
+};
+
+function renderVisualization(methodId, data) {
+    const config = visualizationMap[methodId];
+    if (!config) {
+        console.error('Неизвестный method_id:', methodId);
+        return;
+    }
+
+    const ctx = document.getElementById('chartCanvas').getContext('2d');
+    new Chart(ctx, {
+        type: config.type,
+        data: {
+            labels: data.map(item => new Date(item.timestamp).toLocaleString()),
+            datasets: [{
+                label: config.label,
+                data: data.map(item => item.detailed_data[config.dataKey]),
+                backgroundColor: '#36A2EB',
+                borderColor: '#36A2EB',
+                borderWidth: 1
+            }]
+        },
+        options: config.options
+    });
+}
+Показать в боковой панели
+3. Онлайн-агент
+Назначение и область ответственности
+
+Выполнение проверок на узлах с доступом к серверу.
+Динамическая загрузка скриптов проверок для поддержки новых методов.
+Особенности для будущих доработок
+
+Динамическая загрузка скриптов: Автоматическое определение и выполнение скриптов проверок на основе method_id.
+Стандартизированный формат результатов: Все проверки возвращают данные, пригодные для визуализации.
+Входные данные
+
+Задания от сервера (GET /assignments):
+json
+
+Копировать
+[
+  {
+    "assignment_id": 123,
+    "node_id": 456,
+    "method_id": 4,
+    "parameters": { "threshold": 80 }
+  }
+]
+Методы обработки
+
+Периодический опрос сервера для получения заданий.
+Загрузка скрипта Check-<method_id>.ps1 из директории "Checks".
+Выполнение проверки и отправка результатов через POST /checks.
+Выходные данные
+
+Результаты проверок:
+json
+
+Копировать
+{
+  "assignment_id": 123,
+  "node_id": 456,
+  "method_id": 4,
+  "timestamp": "2025-05-06T10:24:00Z",
+  "result_code": 0,
+  "result_message": "CPU Load OK",
+  "detailed_data": { "load_percent": 25 }
+}
+Примеры API-запросов и ответов
+
+POST /checks:
+Запрос:
+http
+
+Копировать
+POST /checks HTTP/1.1
+Host: status-monitor.example.com
+Content-Type: application/json
+Authorization: Bearer <token>
+{
+  "assignment_id": 123,
+  "node_id": 456,
+  "method_id": 4,
+  "result_code": 0,
+  "result_message": "CPU Load OK",
+  "detailed_data": { "load_percent": 25 }
+}
+Ответ (201 Created):
+json
+
+Копировать
+{
+  "check_id": 789,
+  "status": "accepted"
+}
+Взаимодействие с другими модулями
+
+Серверная часть: Запрашивает задания и отправляет результаты.
+PowerShell Utils: Выполняет проверки.
+4. Оффлайн-агент
+Назначение и область ответственности
+
+Выполнение проверок в изолированных сетях.
+Поддержка новых проверок через динамическую загрузку скриптов.
+Особенности для будущих доработок
+
+Аналогично онлайн-агенту, динамическая загрузка скриптов на основе method_id.
+Включение script_name в файлы заданий для автономной работы.
+Входные данные
+
+Файл заданий (.json.status.):
+json
+
+Копировать
+[
+  {
+    "assignment_id": 124,
+    "node_id": 457,
+    "method_id": 4,
+    "script_name": "Check-CPU_LOAD",
+    "parameters": { "threshold": 80 }
+  }
+]
+Методы обработки
+
+Чтение и парсинг файла заданий.
+Загрузка скрипта Check-<method_id>.ps1 или по script_name.
+Выполнение проверки и сохранение результатов.
+Выходные данные
+
+Файл результатов (*.zrpu):
+json
+
+Копировать
+{
+  "assignment_id": 124,
+  "node_id": 457,
+  "method_id": 4,
+  "timestamp": "2025-05-06T10:24:00Z",
+  "result_code": 0,
+  "result_message": "CPU Load OK",
+  "detailed_data": { "load_percent": 25 }
+}
+Взаимодействие с другими модулями
+
+Конфигуратор: Читает файлы заданий.
+PowerShell Utils: Выполняет проверки.
+Загрузчик результатов: Передает результаты серверу.
+5. Конфигуратор
+Назначение и область ответственности
+
+Генерация файлов заданий для оффлайн-агентов.
+Поддержка новых методов проверок через включение script_name.
+Особенности для будущих доработок
+
+Включение script_name в файлы заданий для автономной работы оффлайн-агентов.
+Входные данные
+
+Конфигурация от сервера (GET /objects/.../offline_config):
+json
+
+Копировать
+{
+  "node_id": 457,
+  "assignments": [
+    {
+      "assignment_id": 124,
+      "method_id": 4,
+      "script_name": "Check-CPU_LOAD",
+      "parameters": { "threshold": 80 }
+    }
+  ]
+}
+Методы обработки
+
+Запрос конфигурации через API.
+Формирование файлов заданий с включением script_name.
+Выходные данные
+
+Файлы заданий (.json.status.).
+Взаимодействие с другими модулями
+
+Серверная часть: Запрашивает конфигурацию.
+Оффлайн-агент: Создает файлы заданий.
+6. Загрузчик результатов
+Назначение и область ответственности
+
+Передача результатов оффлайн-агентов на сервер.
+Обработка результатов новых проверок без изменений кода.
+Особенности для будущих доработок
+
+Поддержка любых результатов, соответствующих стандартизированному формату.
+Входные данные
+
+Файлы результатов (*.zrpu).
+Методы обработки
+
+Сканирование директории и парсинг файлов.
+Отправка данных через POST /checks.
+Выходные данные
+
+HTTP-запросы к серверу.
+Взаимодействие с другими модулями
+
+Оффлайн-агент: Читает файлы результатов.
+Серверная часть: Отправляет данные.
+7. Модуль PowerShell Utils
+Назначение и область ответственности
+
+Выполнение проверок для агентов.
+Динамическая загрузка новых скриптов проверок.
+Особенности для будущих доработок
+
+Плагин-архитектура: Скрипты проверок хранятся в директории "Checks" с именами Check-<method_id>.ps1.
+Стандартизированный интерфейс: Каждый скрипт определяет функцию Invoke-Check, возвращающую результат.
+Входные данные
+
+Объект задания с method_id и параметрами.
+Методы обработки
+
+Определение пути к скрипту (Checks/Check-<method_id>.ps1).
+Загрузка и выполнение функции Invoke-Check.
+Обработка ошибок (например, отсутствие скрипта).
+Выходные данные
+
+Объект результата:
+json
+
+Копировать
+{
+  "result_code": 0,
+  "result_message": "CPU Load OK",
+  "detailed_data": { "load_percent": 25 }
+}
+Взаимодействие с другими модулями
+
+Онлайн- и оффлайн-агенты: Вызывают функции проверок.
+powershell
+
+Копировать
+function Invoke-StatusMonitorCheck {
+    param($assignment)
+    $method_id = $assignment.method_id
+    $scriptPath = Join-Path $PSScriptRoot "Checks\Check-$method_id.ps1"
+    if (Test-Path $scriptPath) {
+        . $scriptPath
+        $result = Invoke-Check -params $assignment.parameters
+        return $result
+    } else {
+        throw "Скрипт для method_id $method_id не найден"
+    }
+}
+
+# Пример скрипта проверки загрузки процессора
+function Invoke-Check {
+    param($params)
+    $threshold = $params.threshold
+    $load = (Get-WmiObject Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average
+    if ($load -le $threshold) {
+        return @{
+            result_code = 0
+            result_message = "CPU Load OK: $load%"
+            detailed_data = @{ load_percent = $load }
+        }
+    } else {
+        return @{
+            result_code = 1
+            result_message = "CPU Load превышен: $load%"
+            detailed_data = @{ load_percent = $load }
+        }
+    }
+}
+Показать в боковой панели
+Взаимодействие систем
+Система	Взаимодействие
+Серверная часть	Принимает запросы от всех компонентов, управляет базой данных.
+Веб-интерфейс	Запрашивает данные и конфигурации у сервера, отображает графики.
+Онлайн-агент	Получает задания, выполняет проверки через PowerShell Utils, отправляет результаты.
+Оффлайн-агент	Читает задания из файлов, выполняет проверки, сохраняет результаты.
+Конфигуратор	Запрашивает конфигурацию у сервера, создает файлы заданий.
+Загрузчик результатов	Читает файлы результатов, отправляет данные серверу.
+PowerShell Utils	Используется агентами для выполнения проверок.
+Рекомендации по разработке
+Модульность: Используйте Flask Blueprints и динамическую загрузку скриптов для упрощения добавления функций.
+Тестирование:
+Юнит-тесты для скриптов проверок с использованием Pester.
+Интеграционные тесты для API с pytest.
+Тесты UI с Cypress.
+Документация:
+Документируйте процесс добавления новых проверок и визуализаций.
+Используйте MkDocs для создания документации.
+Безопасность: Используйте HTTPS, проверяйте входные данные, применяйте безопасную аутентификацию.
+Масштабируемость: Оптимизируйте запросы к базе данных и планируйте переход на временные ряды при необходимости.
+Тестирование
+Юнит-тесты: Для каждого скрипта проверки (например, Check-CPU_LOAD.ps1) создавайте тесты Pester, проверяющие успех и ошибки.
+Интеграционные тесты: Проверяйте взаимодействие между сервером, агентами и UI.
+UI-тесты: Автоматизируйте тестирование визуализаций с помощью Cypress.
+Документация
+Для разработчиков: Опишите, как добавлять новые проверки (скрипт, запись в check_methods, настройка визуализации).
+Для пользователей: Объясните, как использовать дашборды и интерпретировать графики.
+Будущие планы
+Обновления в реальном времени: Внедрение WebSocket для мгновенного отображения новых результатов.
+Оптимизация базы данных: Использование TimescaleDB для больших объемов данных.
