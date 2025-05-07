@@ -64,6 +64,8 @@ function Compare-Values {
                 $thresholdIsNumber = [double]::TryParse($Threshold, [System.Globalization.NumberStyles]::Any, $culture, [ref]$numThreshold)
             }
 
+            Write-Host "DEBUG (Compare-Values NUM): Op='$opLower'. Value='$Value' -> ParsedValue($valueIsNumber):$numValue. Threshold='$Threshold' -> ParsedThreshold($thresholdIsNumber):$numThreshold" -ForegroundColor Cyan
+
             if (-not $valueIsNumber -or -not $thresholdIsNumber) {
                 $result.Passed = $null 
                 $reasonParts = @()

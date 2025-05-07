@@ -1,130 +1,366 @@
 ﻿# F:\status\source\powershell\StatusMonitorAgentUtils\Checks\Check-CERT_EXPIRY.ps1
-# --- Версия 2.0.3 --- Исправлена логика установки ErrorMessage при ошибке критерия
+# --- Версия 2.1.0 --- Рефакторинг для читаемости, PS 5.1, улучшена обработка параметров и ошибок
 <#
 .SYNOPSIS
-    Скрипт проверки сроков действия локально установленных сертификатов. (v2.0.3)
+    Скрипт проверки сроков действия локально установленных сертификатов. (v2.1.0)
 .DESCRIPTION
-    Использует Get-ChildItem для поиска сертификатов. Позволяет фильтровать.
-    Формирует $Details со списком 'certificates'.
-    Вызывает Test-SuccessCriteria для определения CheckSuccess.
-.PARAMETER TargetIP [string] Обязательный. IP/Имя хоста (для логирования).
-.PARAMETER Parameters [hashtable] Опциональный. Параметры фильтра: subject_like,
-             issuer_like, thumbprint, require_private_key, eku_oid, min_days_warning.
-.PARAMETER SuccessCriteria [hashtable] Опциональный. Критерии для массива 'certificates'
-             в $Details (напр., @{ certificates=@{_condition_='all';_criteria_=@{days_left=@{'>'=14}}} }).
-.PARAMETER NodeName [string] Опциональный. Имя узла для логирования.
+    Использует Get-ChildItem для поиска сертификатов в указанных или стандартных хранилищах.
+    Позволяет фильтровать сертификаты по различным атрибутам (отпечаток, субъект, издатель, EKU, наличие приватного ключа).
+    Рассчитывает количество дней до истечения и формирует статус для каждого сертификата.
+    Формирует $Details с массивом 'certificates', содержащим подробную информацию.
+    Вызывает Test-SuccessCriteria для определения CheckSuccess на основе собранных данных.
+.PARAMETER TargetIP 
+    [string] Опциональный. IP/Имя хоста (для логирования и контекста). Проверка сертификатов всегда выполняется локально.
+.PARAMETER Parameters 
+    [hashtable] Опциональный. Параметры для настройки поиска и фильтрации:
+                - store_location ([string]): Расположение хранилища (например, 'LocalMachine', 'CurrentUser'). По умолчанию 'LocalMachine'.
+                - store_name ([string]): Имя хранилища (например, 'My', 'WebHosting', 'Remote Desktop'). По умолчанию 'My'.
+                                         Если store_location и store_name не указаны, используются стандартные хранилища.
+                - subject_like ([string]): Фильтр по имени субъекта (CN). Wildcard '*' поддерживается.
+                - issuer_like ([string]): Фильтр по имени издателя. Wildcard '*' поддерживается.
+                - thumbprint ([string]): Точный отпечаток сертификата для поиска (приоритетный фильтр).
+                - require_private_key ([bool]): Искать только сертификаты с приватным ключом. По умолчанию $false.
+                - eku_oid ([string[]]): Массив OID'ов расширенного использования ключа.
+                - min_days_warning ([int]): Дней до истечения для статуса 'ExpiringSoon'. По умолчанию 30.
+.PARAMETER SuccessCriteria 
+    [hashtable] Опциональный. Критерии успеха, применяемые к объекту $details.
+                Часто используется для проверки массива 'certificates':
+                @{ certificates = @{ _condition_='all'; _criteria_=@{days_left=@{'>'=14}; status=@{'!='='Expired'}} } }
+.PARAMETER NodeName 
+    [string] Опциональный. Имя узла для логирования.
 .OUTPUTS Hashtable - Стандартизированный результат.
 .NOTES
-    Версия: 2.0.3 (Исправлен ErrorMessage при ошибке критерия).
-    Зависит от New-CheckResultObject, Test-SuccessCriteria.
+    Версия: 2.1.0
+    Зависит от New-CheckResultObject, Test-SuccessCriteria из модуля StatusMonitorAgentUtils.
 #>
 param(
-    [Parameter(Mandatory = $true)][string]$TargetIP,
-    [Parameter(Mandatory = $false)][hashtable]$Parameters = @{},
-    [Parameter(Mandatory = $false)][hashtable]$SuccessCriteria = $null,
-    [Parameter(Mandatory = $false)][string]$NodeName = "Unknown Node"
+    [Parameter(Mandatory = $false)] # Сделан не обязательным
+    [string]$TargetIP,
+    [Parameter(Mandatory = $false)]
+    [hashtable]$Parameters = @{},
+    [Parameter(Mandatory = $false)]
+    [hashtable]$SuccessCriteria = $null,
+    [Parameter(Mandatory = $false)]
+    [string]$NodeName = "Unknown Node (CERT_EXPIRY)"
 )
 
 # --- Инициализация ---
-$isAvailable = $false; $checkSuccess = $null; $errorMessage = $null; $finalResult = $null
-$details = @{ certificates = [System.Collections.Generic.List[object]]::new(); stores_checked = @() }
+$isAvailable = $false 
+$checkSuccess = $null
+$errorMessage = $null
+$finalResult = $null
+$details = @{
+    certificates = [System.Collections.Generic.List[object]]::new()
+    stores_checked = [System.Collections.Generic.List[string]]::new()
+    filter_applied = $false
+    parameters_used = @{ # Для отладки и информации в Details
+        store_location = $null # Будут установлены из $Parameters или значения по умолчанию
+        store_name = $null
+        subject_like = $null
+        issuer_like = $null
+        thumbprint = $null
+        require_private_key = $false # Значение по умолчанию
+        eku_oid = $null
+        min_days_warning = 30  # Значение по умолчанию
+    }
+    store_access_errors = [System.Collections.Generic.List[string]]::new()
+}
 
-Write-Verbose "[$NodeName] Check-CERT_EXPIRY (v2.0.3): Начало проверки сертификатов на $TargetIP (локально)"
+$logTargetDisplay = if (-not [string]::IsNullOrWhiteSpace($TargetIP)) { $TargetIP } else { $env:COMPUTERNAME + " (локально)" }
+Write-Verbose "[$NodeName] Check-CERT_EXPIRY (v2.1.0): Начало проверки сертификатов. Цель (контекст): $logTargetDisplay"
 
 # --- Основной Try/Catch ---
 try { # <<< НАЧАЛО ОСНОВНОГО TRY >>>
 
-    # --- 1. Параметры фильтрации ---
-    $SubjectLike = $Parameters.subject_like; $IssuerLike = $Parameters.issuer_like; $Thumbprint = $Parameters.thumbprint; $EkuOids = $Parameters.eku_oid
-    $RequirePrivateKey = $false; if ($Parameters.ContainsKey('require_private_key')) { try { $RequirePrivateKey = [bool]$Parameters.require_private_key } catch { Write-Warning "..." } }
-    $minDaysWarning = 30; if ($Parameters.ContainsKey('min_days_warning')) { $parsed=0; if([int]::TryParse($Parameters.min_days_warning,[ref]$parsed) -and $parsed -ge 0){$minDaysWarning=$parsed}else{Write-Warning "..."} }
+    # --- 1. Обработка входных параметров ($Parameters) ---
+    # Сохраняем используемые параметры в $details для информации
+    if ($Parameters.ContainsKey('store_location')) { $details.parameters_used.store_location = $Parameters.store_location }
+    if ($Parameters.ContainsKey('store_name')) { $details.parameters_used.store_name = $Parameters.store_name }
+    if ($Parameters.ContainsKey('subject_like')) { $details.parameters_used.subject_like = $Parameters.subject_like }
+    if ($Parameters.ContainsKey('issuer_like')) { $details.parameters_used.issuer_like = $Parameters.issuer_like }
+    if ($Parameters.ContainsKey('thumbprint')) { $details.parameters_used.thumbprint = $Parameters.thumbprint }
 
-    # --- 2. Поиск сертификатов ---
-    $storesToSearch = @( @{ Path = "Cert:\LocalMachine\My"; Loc = "LocalMachine"; Name = "My" }, @{ Path = "Cert:\LocalMachine\WebHosting"; Loc = "LocalMachine"; Name = "WebHosting" }, @{ Path = "Cert:\CurrentUser\My"; Loc = "CurrentUser"; Name = "My" })
-    $allFoundCertificates = [System.Collections.Generic.List[object]]::new(); $storeAccessErrors = [System.Collections.Generic.List[string]]::new()
-    foreach ($storeInfo in $storesToSearch) {
-        $certStorePath = $storeInfo.Path; $details.stores_checked.Add($certStorePath)
-        try {
-            $certsInStore = Get-ChildItem -Path $certStorePath -EA SilentlyContinue
-            if ($certsInStore) { $allFoundCertificates.AddRange($certsInStore); Write-Verbose "... В '$certStorePath' найдено: $($certsInStore.Count)" }
-            if ($Error.Count -gt 0 -and $Error[0].FullyQualifiedErrorId -match 'StoreCouldNotBeOpened') { $errMsg="Ошибка доступа к '$certStorePath': $($Error[0].Exception.Message)"; $storeAccessErrors.Add($errMsg); Write-Warning "... $errMsg"; $Error.Clear() }
-        } catch { $errMsg="Критическая ошибка доступа к '$certStorePath': $($_.Exception.Message)"; $storeAccessErrors.Add($errMsg); Write-Warning "... $errMsg" }
+    if ($Parameters.ContainsKey('require_private_key')) {
+        try { $details.parameters_used.require_private_key = [bool]$Parameters.require_private_key }
+        catch { Write-Warning "[$NodeName] Некорректное значение для 'require_private_key': '$($Parameters.require_private_key)'. Используется $($details.parameters_used.require_private_key)." }
     }
-    if ($details.stores_checked.Count -gt 0) { $isAvailable = $true; if ($storeAccessErrors.Count -gt 0) { $details.access_errors = $storeAccessErrors } }
-    else { $isAvailable = $false; $errorMessage = "Не удалось получить доступ ни к одному хранилищу."; throw $errorMessage }
-    Write-Verbose "[$NodeName] Check-CERT_EXPIRY: IsAvailable=$isAvailable. Найдено до фильтрации: $($allFoundCertificates.Count)."
+    if ($Parameters.ContainsKey('eku_oid') -and $Parameters.eku_oid -is [array]) {
+        $details.parameters_used.eku_oid = @($Parameters.eku_oid | Where-Object {-not [string]::IsNullOrWhiteSpace($_)})
+        if ($details.parameters_used.eku_oid.Count -eq 0) { $details.parameters_used.eku_oid = $null } # Если массив пуст после фильтрации
+    }
+    if ($Parameters.ContainsKey('min_days_warning')) {
+        $parsedWarnDays = 0
+        if ([int]::TryParse($Parameters.min_days_warning.ToString(), [ref]$parsedWarnDays) -and $parsedWarnDays -ge 0) {
+            $details.parameters_used.min_days_warning = $parsedWarnDays
+        } else {
+            Write-Warning "[$NodeName] Некорректное значение min_days_warning: '$($Parameters.min_days_warning)'. Используется $($details.parameters_used.min_days_warning)."
+        }
+    }
+    # Извлекаем значения для использования в скрипте
+    $pStoreLoc = $details.parameters_used.store_location
+    $pStoreName = $details.parameters_used.store_name
+    $pSubjectLike = $details.parameters_used.subject_like
+    $pIssuerLike = $details.parameters_used.issuer_like
+    $pThumbprint = $details.parameters_used.thumbprint
+    $pRequirePK = $details.parameters_used.require_private_key
+    $pEkuOids = $details.parameters_used.eku_oid
+    $pMinDaysWarn = $details.parameters_used.min_days_warning
+    
+    # --- 2. Определение хранилищ для поиска и сам поиск ---
+    $storesToSearchConfig = [System.Collections.Generic.List[object]]::new()
+    $useSpecificStoreParam = (-not [string]::IsNullOrWhiteSpace($pStoreLoc)) -and (-not [string]::IsNullOrWhiteSpace($pStoreName))
+
+    if ($useSpecificStoreParam) {
+        $storesToSearchConfig.Add(@{ Path = "Cert:\$pStoreLoc\$pStoreName"; Location = $pStoreLoc; Name = $pStoreName })
+        Write-Verbose "[$NodeName] Поиск будет произведен в указанном хранилище: Cert:\$pStoreLoc\$pStoreName"
+    } else {
+        Write-Verbose "[$NodeName] Поиск будет произведен в стандартных хранилищах."
+        $storesToSearchConfig.Add(@{ Path = "Cert:\LocalMachine\My"; Location = "LocalMachine"; Name = "My" })
+        $storesToSearchConfig.Add(@{ Path = "Cert:\LocalMachine\WebHosting"; Location = "LocalMachine"; Name = "WebHosting" })
+        $storesToSearchConfig.Add(@{ Path = "Cert:\CurrentUser\My"; Location = "CurrentUser"; Name = "My" })
+        # $storesToSearchConfig.Add(@{ Path = "Cert:\LocalMachine\Remote Desktop"; Location = "LocalMachine"; Name = "Remote Desktop" })
+    }
+
+    $allFoundCertificatesList = [System.Collections.Generic.List[PSObject]]::new() # Типизированный список
+
+    foreach ($storeInfo in $storesToSearchConfig) {
+        $currentStorePath = $storeInfo.Path
+        $details.stores_checked.Add($currentStorePath)
+        Write-Verbose "[$NodeName] Проверка хранилища: $currentStorePath"
+        try {
+            if (-not (Test-Path -Path $currentStorePath -PathType Container -ErrorAction SilentlyContinue)) {
+                $storeErrorMsg = "Хранилище '$currentStorePath' не найдено или недоступно."
+                Write-Warning "[$NodeName] $storeErrorMsg"
+                $details.store_access_errors.Add($storeErrorMsg)
+                continue # Переходим к следующему хранилищу
+            }
+            
+            $certsInCurrentStore = Get-ChildItem -Path $currentStorePath -ErrorAction SilentlyContinue
+            if ($Error.Count -gt 0) { # Ошибки при Get-ChildItem
+                ($Error | ForEach-Object { 
+                    $errMsg = "Ошибка доступа к '$currentStorePath': $($_.Exception.Message.Trim())"
+                    Write-Warning "[$NodeName] $errMsg"; $details.store_access_errors.Add($errMsg)
+                })
+                $Error.Clear()
+            }
+            if ($null -ne $certsInCurrentStore) {
+                # Get-ChildItem может вернуть один объект или массив, приводим к массиву
+                $certsInCurrentStoreArray = @($certsInCurrentStore)
+                $allFoundCertificatesList.AddRange($certsInCurrentStoreArray)
+                Write-Verbose "[$NodeName] В '$currentStorePath' найдено сертификатов: $($certsInCurrentStoreArray.Count)"
+            }
+        } catch { # Критическая ошибка, не связанная с Get-ChildItem (например, Test-Path)
+            $criticalErrorMsg = "Непредвиденная ошибка при работе с хранилищем '$currentStorePath': $($_.Exception.Message.Trim())"
+            Write-Warning "[$NodeName] $criticalErrorMsg"
+            $details.store_access_errors.Add($criticalErrorMsg)
+        }
+    }
+
+    if ($details.stores_checked.Count -eq 0) { # Не было задано ни одного хранилища, или все указанные не существуют
+        $isAvailable = $false
+        $errorMessage = "Не указаны или не найдены хранилища для проверки сертификатов."
+        throw $errorMessage 
+    }
+    # Если хотя бы одно хранилище было проверено (даже с ошибкой доступа, но путь был валиден), считаем проверку доступной
+    $isAvailable = $true 
+    Write-Verbose "[$NodeName] Check-CERT_EXPIRY: IsAvailable=$isAvailable. Всего найдено сертификатов до фильтрации: $($allFoundCertificatesList.Count)."
 
     # --- 3. Фильтрация сертификатов ---
-    $filteredCertificates = $allFoundCertificates; $filterApplied = $false
-    if (-not [string]::IsNullOrWhiteSpace($Thumbprint)) { $filterApplied=$true; $t = $Thumbprint.Trim().ToUpper(); $filteredCertificates = $filteredCertificates |? { $_.Thumbprint -eq $t } }
-    else { if (-not [string]::IsNullOrWhiteSpace($SubjectLike)) { $filterApplied=$true; $filteredCertificates = $filteredCertificates |? { $_.Subject -like $SubjectLike } }
-           if (-not [string]::IsNullOrWhiteSpace($IssuerLike)) { $filterApplied=$true; $filteredCertificates = $filteredCertificates |? { $_.Issuer -like $IssuerLike } } }
-    if ($RequirePrivateKey) { $filterApplied=$true; $filteredCertificates = $filteredCertificates |? { $_.HasPrivateKey } }
-    if ($EkuOids -is [array] -and $EkuOids.Count -gt 0) { $filterApplied=$true; $filteredCertificates = $filteredCertificates |? { $eku = $_.Extensions |? {$_.Oid.FriendlyName -eq 'Enhanced Key Usage'}; $ekus = $eku.EnhancedKeyUsages; ($EkuOids |? {$ekus.Oid -contains $_}).Count -gt 0 } }
-    if (-not $filterApplied) { Write-Warning "[$NodeName] Check-CERT_EXPIRY: Фильтры не заданы, обрабатываются все сертификаты." }
-    Write-Verbose "[$NodeName] Check-CERT_EXPIRY: Сертификатов после фильтрации: $($filteredCertificates.Count)."
-
-    # --- 4. Формирование $details.certificates ---
-    $currentTime = Get-Date
-    if ($filteredCertificates.Count -eq 0) { $details.message = "Сертификаты" + ($filterApplied ? ", соотв. фильтрам," : "") + " не найдены." }
-    else {
-        foreach ($cert in $filteredCertificates) {
-            $daysLeft = [math]::Floor((New-TimeSpan -Start $currentTime -End $cert.NotAfter).TotalDays)
-            $certInfo = [ordered]@{ thumbprint=$cert.Thumbprint; subject=$cert.Subject; issuer=$cert.Issuer; not_before=$cert.NotBefore.ToUniversalTime().ToString("o"); not_after=$cert.NotAfter.ToUniversalTime().ToString("o"); days_left=$daysLeft; has_private_key=$cert.HasPrivateKey; status="OK"; status_details=""; store_path=$cert.PSParentPath }
-            if ($currentTime -gt $cert.NotAfter) { $certInfo.status="Expired"; $certInfo.status_details="Истек $($cert.NotAfter.ToLocalTime())" }
-            elseif ($daysLeft -le $minDaysWarning) { $certInfo.status="Expiring (Warn)"; $certInfo.status_details="Истекает через $daysLeft дней (<= $minDaysWarning)" }
-            $details.certificates.Add($certInfo)
+    $filteredCerts = $allFoundCertificatesList # Начинаем с полного списка
+    
+    if (-not [string]::IsNullOrWhiteSpace($pThumbprint)) {
+        $details.filter_applied = $true
+        $normalizedThumbprint = $pThumbprint.Trim().ToUpper() # Отпечатки обычно в верхнем регистре и без пробелов
+        $filteredCerts = $filteredCerts | Where-Object { $_.Thumbprint -eq $normalizedThumbprint }
+        Write-Verbose "[$NodeName] После фильтра по отпечатку ('$normalizedThumbprint'): $($filteredCerts.Count) серт."
+    } else {
+        # Фильтры по Subject и Issuer применяются, только если Thumbprint не указан
+        if (-not [string]::IsNullOrWhiteSpace($pSubjectLike)) {
+            $details.filter_applied = $true
+            $filteredCerts = $filteredCerts | Where-Object { $_.Subject -like $pSubjectLike }
+            Write-Verbose "[$NodeName] После фильтра по Subject ('$pSubjectLike'): $($filteredCerts.Count) серт."
+        }
+        if (-not [string]::IsNullOrWhiteSpace($pIssuerLike)) {
+            $details.filter_applied = $true
+            $filteredCerts = $filteredCerts | Where-Object { $_.Issuer -like $pIssuerLike }
+            Write-Verbose "[$NodeName] После фильтра по Issuer ('$pIssuerLike'): $($filteredCerts.Count) серт."
         }
     }
+
+    if ($pRequirePK) {
+        $details.filter_applied = $true
+        $filteredCerts = $filteredCerts | Where-Object { $_.HasPrivateKey }
+        Write-Verbose "[$NodeName] После фильтра 'require_private_key=$true': $($filteredCerts.Count) серт."
+    }
+
+    if ($pEkuOids -is [array] -and $pEkuOids.Count -gt 0) {
+        $details.filter_applied = $true
+        $filteredCerts = $filteredCerts | Where-Object {
+            $certToTestEku = $_
+            $ekuExtension = $certToTestEku.Extensions | Where-Object { $_.Oid -and $_.Oid.FriendlyName -eq 'Enhanced Key Usage' }
+            if ($ekuExtension -and $ekuExtension.EnhancedKeyUsages) {
+                # Проверяем, содержит ли сертификат ХОТЯ БЫ ОДИН из указанных EKU OID
+                foreach ($requiredOid in $pEkuOids) {
+                    if ($ekuExtension.EnhancedKeyUsages.Oid -contains $requiredOid) {
+                        return $true # Нашли совпадение
+                    }
+                }
+            }
+            return $false # Совпадений не найдено или нет EKU
+        }
+        Write-Verbose "[$NodeName] После фильтра по EKU OIDs ('$($pEkuOids -join ',')'): $($filteredCerts.Count) серт."
+    }
+
+    if (-not $details.filter_applied -and $allFoundCertificatesList.Count -gt 0) {
+        Write-Verbose "[$NodeName] Фильтры не применялись. Обрабатываются все $($allFoundCertificatesList.Count) найденных сертификатов."
+    } elseif ($details.filter_applied -and $filteredCerts.Count -eq 0 -and $allFoundCertificatesList.Count -gt 0) {
+         Write-Verbose "[$NodeName] После применения фильтров не осталось сертификатов (было: $($allFoundCertificatesList.Count))."
+    }
+
+    # --- 4. Формирование $details.certificates из отфильтрованного списка ---
+    $currentTimeUtc = (Get-Date).ToUniversalTime() # Получаем один раз для консистентности
+    if ($filteredCerts.Count -eq 0) {
+        $message = "Сертификаты"
+        if ($details.filter_applied) { $message += ", соответствующие заданным фильтрам," }
+        $message += " не найдены"
+        if ($allFoundCertificatesList.Count -gt 0 -and $details.filter_applied) {
+            $message += " (всего до фильтрации было $($allFoundCertificatesList.Count) в проверенных хранилищах)."
+        } elseif ($allFoundCertificatesList.Count -eq 0) {
+            $message += " (в проверенных хранилищах сертификатов не обнаружено)."
+        }
+        $details.message = $message
+    } else {
+        foreach ($certToProcess in $filteredCerts) {
+            $daysLeftValue = -9999 # Значение по умолчанию при ошибке
+            try { 
+                # NotAfter это DateTime, Start тоже DateTime
+                $timeSpanToExpire = New-TimeSpan -Start $currentTimeUtc -End $certToProcess.NotAfter.ToUniversalTime()
+                $daysLeftValue = [math]::Floor($timeSpanToExpire.TotalDays) 
+            } catch { 
+                Write-Warning "[$NodeName] Не удалось рассчитать days_left для сертификата $($certToProcess.Thumbprint): $($_.Exception.Message)"
+            }
+
+            $certCurrentStatus = "OK"
+            $certCurrentStatusDetails = ""
+
+            if ($currentTimeUtc -gt $certToProcess.NotAfter.ToUniversalTime()) {
+                $certCurrentStatus = "Expired"
+                $certCurrentStatusDetails = "Сертификат истек $($certToProcess.NotAfter.ToLocalTime().ToString('yyyy-MM-dd HH:mm:ss')) ($daysLeftValue дней назад)."
+            } elseif ($daysLeftValue -le $pMinDaysWarn) { 
+                $certCurrentStatus = "ExpiringSoon"
+                $certCurrentStatusDetails = "Сертификат истекает через $daysLeftValue дней (порог предупреждения: $pMinDaysWarn дней или менее)."
+            }
+            
+            $certInfoObject = @{ 
+                thumbprint        = $certToProcess.Thumbprint
+                subject           = $certToProcess.Subject
+                issuer            = $certToProcess.Issuer
+                not_before_utc    = $certToProcess.NotBefore.ToUniversalTime().ToString("o")
+                not_after_utc     = $certToProcess.NotAfter.ToUniversalTime().ToString("o")
+                days_left         = $daysLeftValue
+                has_private_key   = $certToProcess.HasPrivateKey
+                status            = $certCurrentStatus
+                status_details    = $certCurrentStatusDetails
+                store_path        = $certToProcess.PSParentPath 
+            }
+            $details.certificates.Add([PSCustomObject]$certInfoObject) 
+        }
+        $details.certificates = $details.certificates | Sort-Object days_left # Сортируем по оставшимся дням
+    }
+    # Копируем использованные параметры в детали, чтобы они были видны
+    $details.parameters_used = $details.parameters_used 
 
     # --- 5. Проверка критериев успеха ---
-    $failReason = $null
     if ($isAvailable -eq $true) {
-        if ($SuccessCriteria -ne $null -and $SuccessCriteria.PSObject.Properties.Count -gt 0) {
+        if ($SuccessCriteria -ne $null -and $SuccessCriteria.Keys.Count -gt 0) {
             Write-Verbose "[$NodeName] Check-CERT_EXPIRY: Вызов Test-SuccessCriteria..."
-            $criteriaResult = Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria
-            $checkSuccess = $criteriaResult.Passed
-            $failReason = $criteriaResult.FailReason
-            # <<< ИСПРАВЛЕНО: Устанавливаем errorMessage ТОЛЬКО если критерий не пройден/ошибка >>>
+            $criteriaProcessingResult = Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria -Path '$details'
+            
+            $checkSuccess = $criteriaProcessingResult.Passed
+            $failReasonFromCriteria = $criteriaProcessingResult.FailReason
+
             if ($checkSuccess -ne $true) {
-                $errorMessage = $failReason | Get-OrElse "Критерии успеха для сертификатов не пройдены."
-                Write-Verbose "[$NodeName] ... SuccessCriteria НЕ пройдены/ошибка: $errorMessage"
+                if (-not [string]::IsNullOrEmpty($failReasonFromCriteria)) {
+                    $errorMessage = $failReasonFromCriteria
+                } else {
+                    $errorMessage = "Критерии успеха для сертификатов не пройдены (CheckSuccess: $($checkSuccess | ForEach-Object {if ($_ -eq $null) {'[null]'} else {$_}}))."
+                }
+                Write-Verbose "[$NodeName] Check-CERT_EXPIRY: SuccessCriteria НЕ пройдены или ошибка оценки. ErrorMessage: $errorMessage"
             } else {
-                # Критерии пройдены, errorMessage должен быть null (если не было ошибки доступа к хранилищу)
-                if ($null -eq $details.access_errors) { $errorMessage = $null }
-                else { $errorMessage = "Были ошибки доступа к некоторым хранилищам, но критерии пройдены для найденных сертификатов." } # Или не сбрасываем? Зависит от требований. Пока оставим null. $errorMessage = $null
-                Write-Verbose "[$NodeName] ... SuccessCriteria пройдены."
+                $errorMessage = $null 
+                Write-Verbose "[$NodeName] Check-CERT_EXPIRY: SuccessCriteria пройдены."
             }
-            # <<< КОНЕЦ ИСПРАВЛЕНИЯ >>>
         } else {
-            $checkSuccess = $true; # По умолчанию успех, если нет критериев
-            # Оставляем $errorMessage, если были ошибки доступа к хранилищам
-            if ($details.access_errors) { $errorMessage = "Критерии не заданы, но были ошибки доступа к хранилищам."} else { $errorMessage = $null }
-            Write-Verbose "[$NodeName] Check-CERT_EXPIRY: SuccessCriteria не заданы, CheckSuccess=true."
+            # Критерии не заданы. По умолчанию считаем успешным, если isAvailable.
+            # Однако, если были ошибки доступа к хранилищам, это может быть неполный успех.
+            $checkSuccess = $true 
+            $errorMessage = $null
+            Write-Verbose "[$NodeName] Check-CERT_EXPIRY: SuccessCriteria не заданы, CheckSuccess установлен в true (т.к. IsAvailable=true)."
         }
-    } else {
-        $checkSuccess = $null
-        if ([string]::IsNullOrEmpty($errorMessage)) { $errorMessage = "Ошибка проверки сертификатов (IsAvailable=false)." }
+        
+        # Добавляем информацию об ошибках доступа к хранилищам в ErrorMessage, если проверка в остальном успешна
+        if ($details.store_access_errors.Count -gt 0 -and $checkSuccess -eq $true) {
+            $accessErrorString = "При проверке сертификатов были ошибки доступа к некоторым хранилищам: $($details.store_access_errors -join '; ')"
+            $errorMessage = if ([string]::IsNullOrEmpty($errorMessage)) { $accessErrorString } else { "$errorMessage; $accessErrorString" }
+            # Можно решить, должен ли $checkSuccess стать $null или $false в этом случае.
+            # Например, если полный доступ ко всем хранилищам критичен:
+            # $checkSuccess = $false 
+            Write-Warning "[$NodeName] $accessErrorString. CheckSuccess остается $checkSuccess."
+        }
+
+    } else { 
+        $checkSuccess = $null 
+        if ([string]::IsNullOrEmpty($errorMessage)) { 
+            $errorMessage = "Ошибка проверки сертификатов (IsAvailable=false), критерии не проверялись."
+        }
     }
 
-    # --- 6. Формирование результата ---
+    # --- 6. Формирование итогового результата ---
     $finalResult = New-CheckResultObject -IsAvailable $isAvailable `
                                          -CheckSuccess $checkSuccess `
                                          -Details $details `
                                          -ErrorMessage $errorMessage
 
-} catch { # <<< ОСНОВНОЙ CATCH >>>
-    $isAvailable = $false; $checkSuccess = $null
-    $critErrorMessage = "Критическая ошибка Check-CERT_EXPIRY: $($_.Exception.Message)"
-    $detailsError = @{ error = $critErrorMessage; ErrorRecord = $_.ToString() }
-    if($details.stores_checked.Count -gt 0) { $detailsError.stores_checked = $details.stores_checked } # Сохраняем, что успели проверить
-    $finalResult = @{ IsAvailable=$isAvailable; CheckSuccess=$checkSuccess; Timestamp=(Get-Date).ToUniversalTime().ToString("o"); Details=$detailsError; ErrorMessage=$critErrorMessage }
-    Write-Error "[$NodeName] Check-CERT_EXPIRY: Критическая ошибка: $critErrorMessage"
+} catch { # <<< ОСНОВНОЙ CATCH для критических ошибок скрипта >>>
+    $isAvailable = $false 
+    $checkSuccess = $null   
+    
+    $critErrorMessageFromCatch = "Критическая ошибка в Check-CERT_EXPIRY: $($_.Exception.Message)"
+    Write-Error "[$NodeName] Check-CERT_EXPIRY: $critErrorMessageFromCatch ScriptStackTrace: $($_.ScriptStackTrace)"
+    
+    # Заполняем детали информацией об ошибке
+    if ($null -eq $details) { $details = @{ certificates = [System.Collections.Generic.List[object]]::new() } } # Гарантируем, что $details - хэш
+    $details.error = $critErrorMessageFromCatch
+    $details.ErrorRecord = $_.ToString()
+    if ($Parameters -and $Parameters.Count -gt 0) { $details.parameters_used_on_error = $Parameters }
+    
+    $finalResult = New-CheckResultObject -IsAvailable $isAvailable `
+                                         -CheckSuccess $checkSuccess `
+                                         -Details $details `
+                                         -ErrorMessage $critErrorMessageFromCatch
 } # <<< КОНЕЦ ОСНОВНОГО CATCH >>>
 
+# --- Отладка перед возвратом ---
+Write-Host "DEBUG (Check-CERT_EXPIRY): --- Начало отладки finalResult.Details ---" -ForegroundColor Green
+# ... (ваш отладочный блок) ...
+if ($finalResult -and $finalResult.Details) {
+    Write-Host "DEBUG (Check-CERT_EXPIRY): Тип finalResult.Details: $($finalResult.Details.GetType().FullName)" -ForegroundColor Green
+    if ($finalResult.Details -is [hashtable]) {
+        Write-Host "DEBUG (Check-CERT_EXPIRY): Ключи в finalResult.Details: $($finalResult.Details.Keys -join ', ')" -ForegroundColor Green
+        if ($finalResult.Details.ContainsKey('certificates')) {
+             Write-Host "DEBUG (Check-CERT_EXPIRY): Количество сертификатов в Details: $($finalResult.Details.certificates.Count)" -ForegroundColor Green
+        }
+        if ($finalResult.Details.ContainsKey('parameters_used')) {
+             Write-Host "DEBUG (Check-CERT_EXPIRY): Параметры использованные: $($finalResult.Details.parameters_used | ConvertTo-Json -Compress -Depth 2)" -ForegroundColor Green
+        }
+    }
+} elseif ($finalResult) { Write-Host "DEBUG (Check-CERT_EXPIRY): finalResult.Details является $null или отсутствует." -ForegroundColor Yellow }
+else { Write-Host "DEBUG (Check-CERT_EXPIRY): finalResult сам по себе $null." -ForegroundColor Red }
+Write-Host "DEBUG (Check-CERT_EXPIRY): --- Конец отладки finalResult.Details ---" -ForegroundColor Green
+
 # --- Возврат результата ---
-$isAvailableStr = if ($finalResult) { $finalResult.IsAvailable } else { '[result is null]' }
-$checkSuccessStr = if ($finalResult) { $finalResult.CheckSuccess } else { '[result is null]' }
-Write-Verbose "[$NodeName] Check-CERT_EXPIRY (v2.0.3): Завершение. IsAvailable=$isAvailableStr, CheckSuccess=$checkSuccessStr"
+$isAvailableStrForLog = if ($finalResult) { $finalResult.IsAvailable } else { '[finalResult is null]' }
+$checkSuccessStrForLog = if ($finalResult) { if ($null -eq $finalResult.CheckSuccess) {'[null]'} else {$finalResult.CheckSuccess} } else { '[finalResult is null]' }
+Write-Verbose "[$NodeName] Check-CERT_EXPIRY (v2.1.0): Завершение. IsAvailable=$isAvailableStrForLog, CheckSuccess=$checkSuccessStrForLog"
 
 return $finalResult
