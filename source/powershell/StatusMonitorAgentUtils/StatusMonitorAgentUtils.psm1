@@ -1,24 +1,21 @@
 ﻿# F:\status\source\powershell\StatusMonitorAgentUtils\StatusMonitorAgentUtils.psm1
-# --- Версия 2.1.0 --- (внутренне это скорее 2.0.4 для Test-SuccessCriteria)
-# Включает все исправления для Check-PING и Check-PROCESS_LIST
+# --- Версия 2.1.2 --- (внутренне Test-SuccessCriteria ~v2.0.6, Handle-ArrayCriteriaProcessing ~v1.0.3)
+# Улучшена логика FailReason для all/any и в Test-SuccessCriteria
 
 #--------------------------------------------------------------------------
 # Приватные функции (не экспортируются модулем)
 #--------------------------------------------------------------------------
 
-#region Функция Compare-Values (v1.1.2 - Убраны атрибуты Parameter у $Value)
-# Вспомогательная функция для сравнения значений с операторами
-# Возвращает: @{ Passed = $true/$false/$null; Reason = "..."/$null }
-# ($null для Passed означает ошибку сравнения/типа)
+#region Функция Compare-Values (v1.1.2 - Без изменений от предыдущего полного листинга)
 function Compare-Values {
     param(
-        $Value,         # Фактическое значение из Details. Может быть $null.
-        $Operator,      # Оператор сравнения (строка: '>', 'contains', 'matches'...)
-        $Threshold      # Пороговое значение из Criteria
+        $Value,
+        $Operator,
+        $Threshold
     )
     Write-Debug "Compare-Values: Value=`"$($Value | Out-String -Width 100 | ForEach-Object {$_.Trim()})`", Operator=`"$Operator`", Threshold=`"$($Threshold | Out-String -Width 100 | ForEach-Object {$_.Trim()})`""
     $result = @{ Passed = $true; Reason = '' }
-    $opLower = $Operator.ToString().ToLower() # Убедимся, что оператор - строка
+    $opLower = $Operator.ToString().ToLower() 
 
     try {
         if ($opLower -eq 'exists') {
@@ -33,7 +30,7 @@ function Compare-Values {
         if ($Value -eq $null -and $opLower -ne '==' -and $opLower -ne '!=') {
              $result.Passed = $false
              $result.Reason = "Невозможно применить оператор '$Operator' к значению `$null (если только оператор не '==' или '!=' для сравнения с `$null)."
-             if ($opLower -in @('>', '>=', '<', '<=')) { $result.Passed = $null } # Ошибка типа для числовых операторов
+             if ($opLower -in @('>', '>=', '<', '<=')) { $result.Passed = $null } 
              return $result
         }
 
@@ -104,7 +101,7 @@ function Compare-Values {
 }
 #endregion
 
-#region Вспомогательная функция Test-IsOperatorBlock (v1.0.1)
+#region Вспомогательная функция Test-IsOperatorBlock (v1.0.1 - Без изменений)
 function Test-IsOperatorBlock {
     param (
         [Parameter(Mandatory=$true)] $CriteriaObject 
@@ -118,23 +115,19 @@ function Test-IsOperatorBlock {
         $keysInCriteria = $CriteriaObject.Keys
     } elseif ($CriteriaObject -is [System.Management.Automation.PSCustomObject]) {
         $keysInCriteria = @($CriteriaObject.PSObject.Properties.Name)
-    } else {
-        return $false 
-    }
+    } else { return $false }
     if ($keysInCriteria.Count -eq 0) { return $false }
     foreach ($key in $keysInCriteria) {
-        if ($validOperators -notcontains $key.ToString().ToLower()) {
-            return $false 
-        }
+        if ($validOperators -notcontains $key.ToString().ToLower()) { return $false }
     }
     return $true 
 }
 #endregion
 
-#region Вспомогательная функция Handle-OperatorBlockProcessing (v1.0.1 - Удален AllowNull для PS 5.1)
+#region Вспомогательная функция Handle-OperatorBlockProcessing (v1.0.1 - Без изменений)
 function Handle-OperatorBlockProcessing {
     param(
-        [Parameter(Mandatory=$true)] # Убрали AllowNull=$true; $DetailsValue МОЖЕТ быть $null
+        [Parameter(Mandatory=$true)] 
         $DetailsValue,    
         [Parameter(Mandatory=$true)]
         $OperatorBlock,   
@@ -156,28 +149,24 @@ function Handle-OperatorBlockProcessing {
 }
 #endregion
 
-#region Вспомогательная функция Handle-ArrayCriteriaProcessing (v1.0.2 - Исправлена конкатенация для Path, улучшено логирование)
-# Обрабатывает критерии для массива (_condition_, _where_, _criteria_, _count_)
+#region Вспомогательная функция Handle-ArrayCriteriaProcessing (v1.0.3 - Улучшен FailReason и логика all/any)
 function Handle-ArrayCriteriaProcessing {
     param(
         [Parameter(Mandatory=$true)]
-        $DetailsArray,    # Массив данных из Details, к которому применяются критерии (ожидается System.Array)
+        $DetailsArray,    
         [Parameter(Mandatory=$true)]
-        [hashtable]$ArrayCriteria, # Критерий для массива (содержит _condition_, etc.)
+        [hashtable]$ArrayCriteria, 
         [Parameter(Mandatory=$true)]
-        [string]$PathPrefix # Текущий путь в структуре Details до этого массива (например, '$details.processes')
+        [string]$PathPrefix 
     )
-    # Логирование входа
     Write-Debug ("Handle-ArrayCriteriaProcessing: Начало обработки для пути `"{0}`". Условие: `"{1}`". Критерии массива: {2}" -f `
         $PathPrefix, $ArrayCriteria._condition_, ($ArrayCriteria | ConvertTo-Json -Depth 2 -Compress -WarningAction SilentlyContinue))
 
-    $result = @{ Passed = $null; FailReason = $null } # Инициализация результата
-
-    # 1. Извлечение и валидация управляющих ключей из ArrayCriteria
+    $result = @{ Passed = $null; FailReason = $null } 
     $condition = $ArrayCriteria._condition_
-    $whereClause = $ArrayCriteria._where_          # Может быть $null (Hashtable)
-    $criteriaForItems = $ArrayCriteria._criteria_  # Может быть $null (Hashtable)
-    $countCriteria = $ArrayCriteria._count_       # Может быть $null (Hashtable - операторный блок)
+    $whereClause = $ArrayCriteria._where_          
+    $criteriaForItems = $ArrayCriteria._criteria_  
+    $countCriteria = $ArrayCriteria._count_       
 
     if (-not $condition -or $condition.ToString().ToLower() -notin @('all', 'any', 'none', 'count')) {
         $result.Passed = $null
@@ -187,7 +176,6 @@ function Handle-ArrayCriteriaProcessing {
     }
     $conditionLower = $condition.ToString().ToLower()
 
-    # Дополнительная валидация для специфичных условий
     if ($conditionLower -in @('all', 'any') -and ($null -eq $criteriaForItems -or ($criteriaForItems -is [hashtable] -and $criteriaForItems.Count -eq 0))) {
         $result.Passed = $null
         $result.FailReason = "Для _condition_ '$condition' в критерии массива по пути '$PathPrefix' требуется непустой ключ '_criteria_' (Hashtable)."
@@ -201,19 +189,15 @@ function Handle-ArrayCriteriaProcessing {
         return $result
     }
 
-    # 2. Фильтрация массива $DetailsArray с использованием _where_ (если он есть)
-    $filteredArray = $DetailsArray # По умолчанию работаем со всем массивом (который уже должен быть System.Array)
+    $filteredArray = $DetailsArray
     if ($null -ne $whereClause) {
         Write-Verbose "[$PathPrefix] Фильтрация массива (исходный размер: $($DetailsArray.Count)) с использованием _where_..."
-        $tempFiltered = [System.Collections.Generic.List[object]]::new() # Используем List для удобного Add
+        $tempFiltered = [System.Collections.Generic.List[object]]::new() 
         $itemIndex = -1
         foreach ($item in $DetailsArray) {
             $itemIndex++
-            # Формируем путь к элементу для логирования внутри Test-SuccessCriteria
             $itemPathForWhere = "$PathPrefix" + "[$itemIndex_where]" 
-            
             $filterCheckResult = Test-SuccessCriteria -DetailsObject $item -CriteriaObject $whereClause -Path $itemPathForWhere
-            
             if ($filterCheckResult.Passed -eq $true) {
                 $tempFiltered.Add($item)
             } elseif ($filterCheckResult.Passed -eq $null) {
@@ -223,85 +207,98 @@ function Handle-ArrayCriteriaProcessing {
                 return $result
             }
         }
-        $filteredArray = $tempFiltered.ToArray() # Преобразуем обратно в System.Array для единообразия
+        $filteredArray = $tempFiltered.ToArray() 
         Write-Verbose "[$PathPrefix] Массив отфильтрован. Размер после _where_: $($filteredArray.Count)."
     }
 
-    # 3. Применение основного условия (_condition_) к (отфильтрованному) массиву
+    # 3. Применение основного условия
     $finalPassedStatus = $null 
+    Write-Host "DEBUG (HAProc): Перед switch, conditionLower = $conditionLower"
 
     switch ($conditionLower) {
         'all' {
-            # 'all' означает, что ВСЕ элементы в $filteredArray должны соответствовать $criteriaForItems.
-            # Если $filteredArray пуст (например, после _where_), 'all' считается выполненным.
+            Write-Host "DEBUG (HAProc): Внутри 'all'. filteredArray.Count = $($filteredArray.Count)"
             if ($filteredArray.Count -eq 0) {
                 $finalPassedStatus = $true
-                Write-Debug "[$PathPrefix] Условие 'all': отфильтрованный массив пуст, результат = true."
             } else {
                  $allPassedFlag = $true 
-                 $itemIndex = -1
+                 $firstFailReason = $null 
+                 $encounteredNullPassed = $false # Флаг, что встретили ошибку оценки
                  foreach ($item in $filteredArray) {
-                     $itemIndex++
-                     # --- ИСПРАВЛЕНО: Конкатенация строки с использованием $() для if ---
-                     $itemPathForCriteria = "$PathPrefix" + $(if ($null -ne $whereClause) { "[filtered:$itemIndex]" } else { "[$itemIndex]" })
-                     # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+                     # ... $itemPathForCriteria ...
                      $itemProcessingResult = Test-SuccessCriteria -DetailsObject $item -CriteriaObject $criteriaForItems -Path $itemPathForCriteria
-                     if ($itemProcessingResult.Passed -ne $true) {
-                         $allPassedFlag = $itemProcessingResult.Passed 
-                         $result.FailReason = "Условие 'all' не выполнено для элемента по пути '$itemPathForCriteria'. Причина: $($itemProcessingResult.FailReason)"
+                     # ... Write-Host ...
+                     if ($itemProcessingResult.Passed -eq $null) { # Явная проверка на $null
+                         $allPassedFlag = $null # Если ошибка, 'all' не может быть true или false
+                         $encounteredNullPassed = $true
+                         $firstFailReason = "Условие 'all': Ошибка оценки для элемента по пути '$itemPathForCriteria'. Причина: $($itemProcessingResult.FailReason)"
+                         break 
+                     } elseif ($itemProcessingResult.Passed -eq $false) { # Явная проверка на $false
+                         $allPassedFlag = $false 
+                         $firstFailReason = "Условие 'all' не выполнено для элемента по пути '$itemPathForCriteria'. Причина: $($itemProcessingResult.FailReason)"
                          break 
                      }
+                     # Если $itemProcessingResult.Passed -eq $true, ничего не делаем, $allPassedFlag остается true
                  }
                  $finalPassedStatus = $allPassedFlag
-                 Write-Debug "[$PathPrefix] Условие 'all': результат для элементов = $finalPassedStatus. Причина (если fail/null): $($result.FailReason)"
+                 if ($finalPassedStatus -ne $true) { $result.FailReason = $firstFailReason }
             }
+            Write-Host "DEBUG (HAProc 'all'): Итоговый finalPassedStatus = $finalPassedStatus, FailReason = $($result.FailReason)"
         } 
         'any' {
-             # 'any' означает, что ХОТЯ БЫ ОДИН элемент в $filteredArray должен соответствовать $criteriaForItems.
+             Write-Host "DEBUG (HAProc): Внутри 'any'. filteredArray.Count = $($filteredArray.Count)"
              $anyPassedFlag = $false 
+             $firstErrorReasonForAny = $null # Причина первой ошибки
+             $firstSuccessReasonForAny = $null # Для отладки
+             $foundTrue = $false
+
              if ($filteredArray.Count -gt 0) {
-                 $itemIndex = -1
                  foreach ($item in $filteredArray) {
-                     $itemIndex++
-                     # --- ИСПРАВЛЕНО: Конкатенация строки с использованием $() для if ---
-                     $itemPathForCriteria = "$PathPrefix" + $(if ($null -ne $whereClause) { "[filtered:$itemIndex]" } else { "[$itemIndex]" })
-                     # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
+                     # ... $itemPathForCriteria ...
                      $itemProcessingResult = Test-SuccessCriteria -DetailsObject $item -CriteriaObject $criteriaForItems -Path $itemPathForCriteria
+                     # ... Write-Host ...
                      if ($itemProcessingResult.Passed -eq $true) {
                          $anyPassedFlag = $true
-                         $result.FailReason = $null 
+                         $firstSuccessReasonForAny = "Условие 'any' выполнено для элемента: $itemPathForCriteria"
+                         $foundTrue = $true
                          break 
                      } elseif ($itemProcessingResult.Passed -eq $null) {
+                         # Если встретили ошибку, 'any' не может быть true. Он становится $null.
                          $anyPassedFlag = $null 
-                         $result.FailReason = "Ошибка проверки элемента по пути '$itemPathForCriteria' для условия 'any': $($itemProcessingResult.FailReason)"
+                         $firstErrorReasonForAny = "Условие 'any': Ошибка оценки для элемента по пути '$itemPathForCriteria'. Причина: $($itemProcessingResult.FailReason)"
                          break 
+                     }
+                     # Если Passed -eq $false, просто запоминаем причину на случай, если true так и не найдется
+                     # Этот FailReason будет использован, только если в итоге $anyPassedFlag останется $false
+                     if (-not $foundTrue) { # Обновляем причину, только если еще не нашли true
+                        $result.FailReason = "Условие 'any': Элемент '$itemPathForCriteria' не соответствует. Причина: $($itemProcessingResult.FailReason)"
                      }
                  }
              }
-             if ($anyPassedFlag -eq $false -and $result.FailReason -eq $null) { # Если не нашли и не было ошибки
-                 $result.FailReason = "Условие 'any': ни один элемент в (отфильтрованном) массиве по пути '$PathPrefix' не соответствует указанным _criteria_."
+             
+             if ($anyPassedFlag -eq $true) {
+                 $result.FailReason = $null # Успех, причина не нужна
+             } elseif ($anyPassedFlag -eq $null) { # Была ошибка оценки
+                 $result.FailReason = $firstErrorReasonForAny
+             } else { # $anyPassedFlag -eq $false, ни один не подошел, и не было ошибок
+                 if ([string]::IsNullOrEmpty($result.FailReason)) { # Если FailReason не был установлен от последнего элемента
+                    $result.FailReason = "Условие 'any': ни один элемент в (отфильтрованном) массиве по пути '$PathPrefix' не соответствует указанным _criteria_."
+                 }
              }
              $finalPassedStatus = $anyPassedFlag
-             Write-Debug "[$PathPrefix] Условие 'any': результат = $finalPassedStatus. Причина (если fail/null): $($result.FailReason)"
+             Write-Host "DEBUG (HAProc 'any'): Итоговый finalPassedStatus = $finalPassedStatus, FailReason = $($result.FailReason)"
         } 
         'none' {
-             # 'none' означает, что НИ ОДИН элемент в $filteredArray не должен соответствовать $criteriaForItems.
-             # Если $criteriaForItems не указан (это было бы ошибкой валидации выше), то 'none' означает, что $filteredArray должен быть пустым.
              $nonePassedFlag = $true 
              if ($filteredArray.Count -gt 0) {
-                 # Если $criteriaForItems $null, то само наличие элементов в $filteredArray после _where_ означает провал 'none'.
-                 # Однако, валидация выше должна гарантировать, что $criteriaForItems не $null, если $conditionLower не 'count' или 'none' без _where_.
-                 # Для 'none' _criteria_ может быть, а может и не быть. Если его нет, то $filteredArray должен быть пуст.
-                 if ($null -eq $criteriaForItems) {
-                     $nonePassedFlag = $false # Так как $filteredArray.Count -gt 0
-                     $result.FailReason = "Условие 'none' (без _criteria_): в (отфильтрованном) массиве по пути '$PathPrefix' есть элементы ($($filteredArray.Count) шт.), а ожидалось 0."
+                 if ($null -eq $criteriaForItems) { 
+                      $nonePassedFlag = $false
+                      $result.FailReason = "Условие 'none' (без _criteria_): в (отфильтрованном) массиве по пути '$PathPrefix' есть элементы ($($filteredArray.Count) шт.), а ожидалось 0."
                  } else {
                      $itemIndex = -1
                      foreach ($item in $filteredArray) {
                          $itemIndex++
-                         # --- ИСПРАВЛЕНО: Конкатенация строки с использованием $() для if ---
                          $itemPathForCriteria = "$PathPrefix" + $(if ($null -ne $whereClause) { "[filtered:$itemIndex]" } else { "[$itemIndex]" })
-                         # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                          $itemProcessingResult = Test-SuccessCriteria -DetailsObject $item -CriteriaObject $criteriaForItems -Path $itemPathForCriteria
                          if ($itemProcessingResult.Passed -eq $true) { 
                              $nonePassedFlag = $false
@@ -315,14 +312,13 @@ function Handle-ArrayCriteriaProcessing {
                      }
                  }
              }
-             # Если $filteredArray пуст, то 'none' всегда выполняется.
              $finalPassedStatus = $nonePassedFlag
              Write-Debug "[$PathPrefix] Условие 'none': результат = $finalPassedStatus. Причина (если fail/null): $($result.FailReason)"
         } 
         'count' {
             $actualItemCount = $filteredArray.Count
             Write-Verbose "[$PathPrefix] Проверка количества элементов ($actualItemCount) для условия '_count_..."
-            $countCheckResult = Handle-OperatorBlockProcessing -DetailsValue $actualItemCount -OperatorBlock $countCriteria -KeyName "_count_" -BasePath $PathPrefix # BasePath здесь для контекста логов
+            $countCheckResult = Handle-OperatorBlockProcessing -DetailsValue $actualItemCount -OperatorBlock $countCriteria -KeyName "_count_" -BasePath $PathPrefix 
             $finalPassedStatus = $countCheckResult.Passed
             if ($finalPassedStatus -ne $true) {
                 $result.FailReason = "Критерий количества ('count') элементов по пути '$PathPrefix' не пройден. $($countCheckResult.Reason)"
@@ -337,7 +333,7 @@ function Handle-ArrayCriteriaProcessing {
 }
 #endregion
 
-#region Основная рефакторенная функция Test-SuccessCriteria (v2.0.4 - Исправлена проверка ключа _condition_ и типа массива)
+#region Основная функция Test-SuccessCriteria (v2.0.6 - Улучшено определение типа критерия для массивов и FailReason)
 function Test-SuccessCriteria {
     [CmdletBinding()] 
     param(
@@ -391,7 +387,6 @@ function Test-SuccessCriteria {
             Write-Debug "  [Ошибка доступа к свойству TSC] Path=`"$Path`", Key=`"$criterionKey`", Error=`"$propertyAccessError`""
             return @{ Passed = $null; FailReason = $propertyAccessError }
         }
-        
         Write-Debug "    DetailsValue для '$criterionKey' (существует: $keyExistsInDetails): `"$($detailsValue | Out-String -Width 100 | ForEach-Object {$_.Trim()})`""
 
         $comparisonResult = $null 
@@ -402,14 +397,13 @@ function Test-SuccessCriteria {
             $criterionValueContainsCondition = $false
             if ($criterionValue -is [hashtable]) {
                 $criterionValueContainsCondition = $criterionValue.ContainsKey('_condition_')
-            } elseif ($criterionValue -is [System.Management.Automation.PSCustomObject]) { # Должно быть $criterionValue.PSObject
+            } elseif ($criterionValue -is [System.Management.Automation.PSCustomObject]) {
                 $criterionValueContainsCondition = $criterionValue.PSObject.Properties.Name -contains '_condition_'
             }
 
             if ($criterionValueContainsCondition) {
                  $condVal = $null
                  if ($criterionValue -is [hashtable]) {$condVal = $criterionValue['_condition_']} else {$condVal = $criterionValue._condition_}
-
                  if ($condVal -and $condVal.ToString().ToLower() -in @('all', 'any', 'none', 'count')) {
                     $isCriterionForArray = $true
                  } else {
@@ -417,7 +411,7 @@ function Test-SuccessCriteria {
                  }
             }
             
-            if ($null -eq $comparisonResult) { # Продолжаем, только если не было ошибки с _condition_
+            if ($null -eq $comparisonResult) { 
                 if ($isCriterionForArray) {
                     Write-Debug "    Тип критерия для '$criterionKey': Массив (_condition_ найден и валиден)"
                     $isDetailsValueACollection = $false
@@ -437,26 +431,35 @@ function Test-SuccessCriteria {
                     }
                 } elseif (Test-IsOperatorBlock -CriteriaObject $criterionValue) {
                     Write-Debug "    Тип критерия для '$criterionKey': Операторный блок"
-                    if (-not $keyExistsInDetails -and -not ($criterionValue.Keys -contains 'exists' -and $criterionValue.exists -eq $false)) {
-                        $comparisonResult = @{ Passed = $false; Reason = "Ключ '$criterionKey' отсутствует в данных ('$Path') для применения операторного блока." }
+                    if (-not $keyExistsInDetails -and -not ($criterionValue.PSObject.Properties.Name -contains 'exists' -and $criterionValue.exists -eq $false)) { # Проверка для Hashtable/PSCustomObject
+                         # Для Hashtable $criterionValue.Keys -contains 'exists'
+                         $isExistsFalseCheck = $false
+                         if ($criterionValue -is [hashtable]) { $isExistsFalseCheck = ($criterionValue.ContainsKey('exists') -and $criterionValue['exists'] -eq $false) }
+                         else { $isExistsFalseCheck = ($criterionValue.PSObject.Properties.Name -contains 'exists' -and $criterionValue.exists -eq $false) }
+
+                        if (-not $isExistsFalseCheck) {
+                            $comparisonResult = @{ Passed = $false; Reason = "Ключ '$criterionKey' отсутствует в данных ('$Path') для применения операторного блока (и это не проверка на exists=false)." }
+                        } else { # Это проверка exists=false и ключ отсутствует - это успех для exists=false, будет обработано в Compare-Values
+                             $comparisonResult = Handle-OperatorBlockProcessing -DetailsValue $detailsValue -OperatorBlock $criterionValue -KeyName $criterionKey -BasePath $Path
+                        }
                     } else {
                         $comparisonResult = Handle-OperatorBlockProcessing -DetailsValue $detailsValue -OperatorBlock $criterionValue -KeyName $criterionKey -BasePath $Path
                     }
-                } else {
-                    Write-Debug "    Тип критерия для '$criterionKey': Вложенный объект (рекурсия)"
+                } else { # $criterionValue - это сложный объект, но не критерий для массива и не операторный блок
+                    Write-Debug "    Тип критерия для '$criterionKey': Вложенный объект или Ошибка формата"
                     if (-not $keyExistsInDetails) {
                         $comparisonResult = @{ Passed = $false; Reason = "Ключ '$criterionKey' из вложенного критерия отсутствует в данных по пути '$Path'."}
-                    } elseif ($null -eq $detailsValue -and ($criterionValue.PSObject.Properties.Count -gt 0)) {
+                    } elseif ($null -eq $detailsValue -and ($criterionValue.PSObject.Properties.Count -gt 0)) { 
                          $comparisonResult = @{ Passed = $false; Reason = "Данные для '$currentEvaluationPath' равны `$null, но вложенный критерий ожидает объект."}
                     } elseif (($detailsValue -is [hashtable] -or $detailsValue -is [System.Management.Automation.PSCustomObject]) -or `
                               ($null -eq $detailsValue -and $criterionValue.PSObject.Properties.Count -eq 0) ) {
                         $comparisonResult = Test-SuccessCriteria -DetailsObject $detailsValue -CriteriaObject $criterionValue -Path $currentEvaluationPath
                     } else {
-                        $comparisonResult = @{ Passed = $false; Reason = "Для вложенного критерия по пути '$currentEvaluationPath' ожидался объект (Hashtable/PSCustomObject) в данных, но получен '$($detailsValue.GetType().FullName)'."}
+                        $comparisonResult = @{ Passed = $null; Reason = "Некорректный формат критерия для ключа '$criterionKey' по пути '$Path'. Ожидалось простое значение или операторный блок, но получен сложный объект: '$($criterionValue | ConvertTo-Json -Depth 1 -Compress -WarningAction SilentlyContinue)'." }
                     }
                 }
             } 
-        } else {
+        } else { # $isCriterionValueComplex -eq $false (критерий - простое значение)
             Write-Debug "    Тип критерия для '$criterionKey': Простое значение (сравнение '==')"
             if (-not $keyExistsInDetails) {
                 $comparisonResult = @{ Passed = $false; Reason = "Ключ '$criterionKey' из критерия отсутствует в данных для простого сравнения по пути '$Path'."}
@@ -466,7 +469,12 @@ function Test-SuccessCriteria {
         }
 
         if ($null -ne $comparisonResult -and $comparisonResult.Passed -ne $true) {
-            $finalFailReasonDetail = if (-not [string]::IsNullOrEmpty($comparisonResult.Reason)) { $comparisonResult.Reason } else { "Неизвестная причина." }
+            $finalFailReasonDetail = $comparisonResult.Reason 
+            if ([string]::IsNullOrEmpty($finalFailReasonDetail)) { # Если Reason пуст, даем запасной вариант
+                if ($comparisonResult.Passed -eq $false) { $finalFailReasonDetail = "Условие не выполнено (без дополнительной причины от обработчика)." }
+                elseif ($comparisonResult.Passed -eq $null) { $finalFailReasonDetail = "Ошибка оценки условия (без дополнительной причины от обработчика)." }
+                else { $finalFailReasonDetail = "Неизвестная причина провала (обработчик не вернул Reason)." }
+            }
             $finalFailReason = "Критерий для '$criterionKey' по пути '$Path' не пройден. Причина: $finalFailReasonDetail"
             Write-Debug "  [Провал TSC] Key=`"$criterionKey`", Path=`"$Path`", CriterionValue=`"$($criterionValue | Out-String -Width 100 | ForEach-Object {$_.Trim()})`", ComparisonPassed=`"$($comparisonResult.Passed)`", Reason=`"$finalFailReason`""
             return @{ Passed = $comparisonResult.Passed; FailReason = $finalFailReason }
@@ -521,8 +529,7 @@ function New-CheckResultObject {
         }
     }
     
-    # Возвращаем обычную Hashtable
-    $result = @{
+    $result = @{ # Возвращаем обычную Hashtable
         IsAvailable  = $IsAvailable
         CheckSuccess = $finalCheckSuccess
         Timestamp    = (Get-Date).ToUniversalTime().ToString("o")
@@ -535,7 +542,7 @@ function New-CheckResultObject {
 }
 #endregion
 
-#region Функция Invoke-StatusMonitorCheck (Экспортируемая, v1.2.3 - Улучшенная обработка Details)
+#region Функция Invoke-StatusMonitorCheck (Экспортируемая, v1.2.4 - Совместимость с PS 5.1)
 function Invoke-StatusMonitorCheck {
     [CmdletBinding(SupportsShouldProcess = $false)]
     param(
@@ -543,7 +550,6 @@ function Invoke-StatusMonitorCheck {
         [PSObject]$Assignment 
     )
 
-    # --- 1. Валидация входного объекта ---
     if ($null -eq $Assignment -or `
         -not ($Assignment -is [System.Management.Automation.PSCustomObject]) -or `
         -not $Assignment.PSObject.Properties.Name.Contains('assignment_id') -or `
@@ -552,32 +558,27 @@ function Invoke-StatusMonitorCheck {
         return New-CheckResultObject -IsAvailable $false -ErrorMessage "Некорректный объект задания передан в Invoke-StatusMonitorCheck."
     }
 
-    # --- 2. Извлечение данных из Задания (PS 5.1 compatible) ---
     $assignmentId = $Assignment.assignment_id
     $methodName = $Assignment.method_name
     
-    # --- ИСПРАВЛЕНО: Безопасное извлечение для PS 5.1 ---
     $targetIP = $null
     if ($Assignment.PSObject.Properties.Name -contains 'ip_address') {
         $targetIP = $Assignment.ip_address
     }
 
-    $nodeName = "Задание ID $assignmentId" # Значение по умолчанию
+    $nodeName = "Задание ID $assignmentId" 
     if ($Assignment.PSObject.Properties.Name -contains 'node_name') {
         $tempNodeName = $Assignment.node_name
         if (-not [string]::IsNullOrWhiteSpace($tempNodeName)) {
             $nodeName = $tempNodeName
         }
     }
-    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-
+    
     $parameters = @{}
-    # --- ИСПРАВЛЕНО: Безопасное извлечение для PS 5.1 ---
     $assignmentParameters = $null
     if ($Assignment.PSObject.Properties.Name -contains 'parameters') {
         $assignmentParameters = $Assignment.parameters
     }
-    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     if ($null -ne $assignmentParameters) {
         if ($assignmentParameters -is [hashtable]) { $parameters = $assignmentParameters }
         elseif ($assignmentParameters -is [System.Management.Automation.PSCustomObject]) {
@@ -587,12 +588,10 @@ function Invoke-StatusMonitorCheck {
     }
 
     $successCriteria = $null 
-    # --- ИСПРАВЛЕНО: Безопасное извлечение для PS 5.1 ---
     $assignmentSuccessCriteria = $null
     if ($Assignment.PSObject.Properties.Name -contains 'success_criteria') {
         $assignmentSuccessCriteria = $Assignment.success_criteria
     }
-    # --- КОНЕЦ ИСПРАВЛЕНИЯ ---
     if ($null -ne $assignmentSuccessCriteria) {
         if ($assignmentSuccessCriteria -is [hashtable]) { $successCriteria = $assignmentSuccessCriteria }
         elseif ($assignmentSuccessCriteria -is [System.Management.Automation.PSCustomObject]) {
@@ -623,7 +622,7 @@ function Invoke-StatusMonitorCheck {
         }
         
         $paramsForCheckScript = @{
-            TargetIP        = $targetIP         # Может быть $null, если не Mandatory в Check-*.ps1
+            TargetIP        = $targetIP         
             Parameters      = $parameters       
             SuccessCriteria = $successCriteria  
             NodeName        = $nodeName
@@ -665,14 +664,23 @@ function Invoke-StatusMonitorCheck {
 
     if ($null -eq $detailsFromCheck -or -not ($detailsFromCheck -is [hashtable])) {
         Write-Host "DEBUG (Invoke-Check): Инициализация resultFromCheckScript['Details'] новой пустой Hashtable (т.к. он был $null или не Hashtable)." -ForegroundColor Yellow
-        $resultFromCheckScript['Details'] = @{} 
+        if ($resultFromCheckScript -is [hashtable]) { # Убедимся, что сам $resultFromCheckScript - это Hashtable
+            $resultFromCheckScript['Details'] = @{} 
+        } else {
+            # Это не должно происходить, если New-CheckResultObject всегда возвращает Hashtable
+            Write-Warning "Invoke-StatusMonitorCheck: resultFromCheckScript не является Hashtable, не могу установить Details."
+        }
     } 
     
-    $resultFromCheckScript['Details']['execution_target'] = $env:COMPUTERNAME
-    $resultFromCheckScript['Details']['execution_mode'] = 'local_agent'
-    $resultFromCheckScript['Details']['check_target_ip'] = $targetIP 
-
-    Write-Host "DEBUG (Invoke-Check): Содержимое resultFromCheckScript['Details'] ПОСЛЕ дополнения (JSON): $($resultFromCheckScript['Details'] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue)" -ForegroundColor DarkCyan
+    # Добавляем стандартные поля, только если 'Details' существует и является Hashtable
+    if ($resultFromCheckScript -is [hashtable] -and $resultFromCheckScript.ContainsKey('Details') -and $resultFromCheckScript['Details'] -is [hashtable]) {
+        $resultFromCheckScript['Details']['execution_target'] = $env:COMPUTERNAME
+        $resultFromCheckScript['Details']['execution_mode'] = 'local_agent'
+        $resultFromCheckScript['Details']['check_target_ip'] = $targetIP 
+        Write-Host "DEBUG (Invoke-Check): Содержимое resultFromCheckScript['Details'] ПОСЛЕ дополнения (JSON): $($resultFromCheckScript['Details'] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue)" -ForegroundColor DarkCyan
+    } else {
+        Write-Warning "Invoke-StatusMonitorCheck: Не удалось дополнить Details стандартной информацией, так как Details не является Hashtable."
+    }
     Write-Host "DEBUG (Invoke-Check): --- Конец отладки Details в Invoke-StatusMonitorCheck (после дополнения) ---" -ForegroundColor Cyan
 
     $isAvailableStr = $resultFromCheckScript['IsAvailable']
