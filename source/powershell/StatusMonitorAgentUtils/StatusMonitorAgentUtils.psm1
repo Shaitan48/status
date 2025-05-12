@@ -64,7 +64,7 @@ function Compare-Values {
                 $thresholdIsNumber = [double]::TryParse($Threshold, [System.Globalization.NumberStyles]::Any, $culture, [ref]$numThreshold)
             }
 
-            Write-Host "DEBUG (Compare-Values NUM): Op='$opLower'. Value='$Value' -> ParsedValue($valueIsNumber):$numValue. Threshold='$Threshold' -> ParsedThreshold($thresholdIsNumber):$numThreshold" -ForegroundColor Cyan
+            #Write-Host "DEBUG (Compare-Values NUM): Op='$opLower'. Value='$Value' -> ParsedValue($valueIsNumber):$numValue. Threshold='$Threshold' -> ParsedThreshold($thresholdIsNumber):$numThreshold" -ForegroundColor Cyan
 
             if (-not $valueIsNumber -or -not $thresholdIsNumber) {
                 $result.Passed = $null 
@@ -215,11 +215,11 @@ function Handle-ArrayCriteriaProcessing {
 
     # 3. Применение основного условия
     $finalPassedStatus = $null 
-    Write-Host "DEBUG (HAProc): Перед switch, conditionLower = $conditionLower"
+    #Write-Host "DEBUG (HAProc): Перед switch, conditionLower = $conditionLower"
 
     switch ($conditionLower) {
         'all' {
-            Write-Host "DEBUG (HAProc): Внутри 'all'. filteredArray.Count = $($filteredArray.Count)"
+            #Write-Host "DEBUG (HAProc): Внутри 'all'. filteredArray.Count = $($filteredArray.Count)"
             if ($filteredArray.Count -eq 0) {
                 $finalPassedStatus = $true
             } else {
@@ -245,10 +245,10 @@ function Handle-ArrayCriteriaProcessing {
                  $finalPassedStatus = $allPassedFlag
                  if ($finalPassedStatus -ne $true) { $result.FailReason = $firstFailReason }
             }
-            Write-Host "DEBUG (HAProc 'all'): Итоговый finalPassedStatus = $finalPassedStatus, FailReason = $($result.FailReason)"
+            #Write-Host "DEBUG (HAProc 'all'): Итоговый finalPassedStatus = $finalPassedStatus, FailReason = $($result.FailReason)"
         } 
         'any' {
-             Write-Host "DEBUG (HAProc): Внутри 'any'. filteredArray.Count = $($filteredArray.Count)"
+             #Write-Host "DEBUG (HAProc): Внутри 'any'. filteredArray.Count = $($filteredArray.Count)"
              $anyPassedFlag = $false 
              $firstErrorReasonForAny = $null # Причина первой ошибки
              $firstSuccessReasonForAny = $null # Для отладки
@@ -288,7 +288,7 @@ function Handle-ArrayCriteriaProcessing {
                  }
              }
              $finalPassedStatus = $anyPassedFlag
-             Write-Host "DEBUG (HAProc 'any'): Итоговый finalPassedStatus = $finalPassedStatus, FailReason = $($result.FailReason)"
+             #Write-Host "DEBUG (HAProc 'any'): Итоговый finalPassedStatus = $finalPassedStatus, FailReason = $($result.FailReason)"
         } 
         'none' {
              $nonePassedFlag = $true 
@@ -649,23 +649,23 @@ function Invoke-StatusMonitorCheck {
         $resultFromCheckScript = New-CheckResultObject -IsAvailable $false -ErrorMessage $critErrMsg -Details $errorDetails
     }
     
-    Write-Host "DEBUG (Invoke-Check): --- Начало отладки Details в Invoke-StatusMonitorCheck (перед дополнением) ---" -ForegroundColor Cyan
+    #Write-Host "DEBUG (Invoke-Check): --- Начало отладки Details в Invoke-StatusMonitorCheck (перед дополнением) ---" -ForegroundColor Cyan
     $detailsFromCheck = $null
     if ($resultFromCheckScript -is [hashtable] -and $resultFromCheckScript.ContainsKey('Details')) {
         $detailsFromCheck = $resultFromCheckScript['Details']
-        Write-Host "DEBUG (Invoke-Check): Получен Details из скрипта проверки. Тип: $($detailsFromCheck.GetType().FullName)" -ForegroundColor Cyan
+        #Write-Host "DEBUG (Invoke-Check): Получен Details из скрипта проверки. Тип: $($detailsFromCheck.GetType().FullName)" -ForegroundColor Cyan
         if ($detailsFromCheck -is [hashtable]) {
-            Write-Host "DEBUG (Invoke-Check): Ключи в Details от скрипта: $($detailsFromCheck.Keys -join ', ')" -ForegroundColor Cyan
-            Write-Host "DEBUG (Invoke-Check): Содержимое Details от скрипта (JSON): $($detailsFromCheck | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue)" -ForegroundColor DarkCyan
+            #Write-Host "DEBUG (Invoke-Check): Ключи в Details от скрипта: $($detailsFromCheck.Keys -join ', ')" -ForegroundColor Cyan
+            #Write-Host "DEBUG (Invoke-Check): Содержимое Details от скрипта (JSON): $($detailsFromCheck | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue)" -ForegroundColor DarkCyan
         } else {
-            Write-Host "DEBUG (Invoke-Check): Details от скрипта проверки НЕ является Hashtable (это НЕ ожидалось, т.к. New-CheckResultObject v1.3.2+ возвращает Hashtable)." -ForegroundColor Yellow
+            #Write-Host "DEBUG (Invoke-Check): Details от скрипта проверки НЕ является Hashtable (это НЕ ожидалось, т.к. New-CheckResultObject v1.3.2+ возвращает Hashtable)." -ForegroundColor Yellow
         }
     } else {
-        Write-Host "DEBUG (Invoke-Check): Ключ 'Details' в результате от скрипта проверки НЕ НАЙДЕН или результат не Hashtable (ЭТО ОШИБКА ЛОГИКИ в New-CheckResultObject или выше)." -ForegroundColor Red
+        #Write-Host "DEBUG (Invoke-Check): Ключ 'Details' в результате от скрипта проверки НЕ НАЙДЕН или результат не Hashtable (ЭТО ОШИБКА ЛОГИКИ в New-CheckResultObject или выше)." -ForegroundColor Red
     }
 
     if ($null -eq $detailsFromCheck -or -not ($detailsFromCheck -is [hashtable])) {
-        Write-Host "DEBUG (Invoke-Check): Инициализация resultFromCheckScript['Details'] новой пустой Hashtable (т.к. он был $null или не Hashtable)." -ForegroundColor Yellow
+        #Write-Host "DEBUG (Invoke-Check): Инициализация resultFromCheckScript['Details'] новой пустой Hashtable (т.к. он был $null или не Hashtable)." -ForegroundColor Yellow
         if ($resultFromCheckScript -is [hashtable]) { # Убедимся, что сам $resultFromCheckScript - это Hashtable
             $resultFromCheckScript['Details'] = @{} 
         } else {
@@ -679,11 +679,11 @@ function Invoke-StatusMonitorCheck {
         $resultFromCheckScript['Details']['execution_target'] = $env:COMPUTERNAME
         $resultFromCheckScript['Details']['execution_mode'] = 'local_agent'
         $resultFromCheckScript['Details']['check_target_ip'] = $targetIP 
-        Write-Host "DEBUG (Invoke-Check): Содержимое resultFromCheckScript['Details'] ПОСЛЕ дополнения (JSON): $($resultFromCheckScript['Details'] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue)" -ForegroundColor DarkCyan
+        #Write-Host "DEBUG (Invoke-Check): Содержимое resultFromCheckScript['Details'] ПОСЛЕ дополнения (JSON): $($resultFromCheckScript['Details'] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue)" -ForegroundColor DarkCyan
     } else {
         Write-Warning "Invoke-StatusMonitorCheck: Не удалось дополнить Details стандартной информацией, так как Details не является Hashtable."
     }
-    Write-Host "DEBUG (Invoke-Check): --- Конец отладки Details в Invoke-StatusMonitorCheck (после дополнения) ---" -ForegroundColor Cyan
+    #Write-Host "DEBUG (Invoke-Check): --- Конец отладки Details в Invoke-StatusMonitorCheck (после дополнения) ---" -ForegroundColor Cyan
 
     $isAvailableStr = $resultFromCheckScript['IsAvailable']
     $checkSuccessStrForLog = if ($null -eq $resultFromCheckScript['CheckSuccess']) { '[null]' } else { $resultFromCheckScript['CheckSuccess'] }

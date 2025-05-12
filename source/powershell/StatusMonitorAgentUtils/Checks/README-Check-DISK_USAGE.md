@@ -1,10 +1,9 @@
 
 ---
-
-**3. `powershell/StatusMonitorAgentUtils/Checks/README-Check-DISK_USAGE.md`**
-
+**3. `Checks\README-Check-DISK_USAGE.md` (Обновленный)**
+---
 ```markdown
-# Check-DISK_USAGE.ps1
+# Check-DISK_USAGE.ps1 (v2.1.0+)
 
 **Назначение:**
 
@@ -12,103 +11,107 @@
 
 **Принцип работы:**
 
-1.  Получает параметры (`TargetIP`, `Parameters`, `SuccessCriteria`, `NodeName`) от диспетчера. `$TargetIP` напрямую не используется, так как скрипт выполняется локально на целевой машине (через `Invoke-Command`, если нужно).
-2.  Вызывает `Get-Volume` для получения информации обо всех томах. Если команда не выполняется, устанавливает `IsAvailable = $false`.
+1.  Получает параметры (`TargetIP`, `Parameters`, `SuccessCriteria`, `NodeName`) от диспетчера. `$TargetIP` используется только для логирования.
+2.  Вызывает `Get-Volume` для получения информации обо всех томах локально. Если команда не выполняется, устанавливает `IsAvailable = $false`.
 3.  Фильтрует полученные тома:
     *   Оставляет только диски с `DriveType = 'Fixed'`.
     *   Оставляет только диски, имеющие букву (`DriveLetter`).
-    *   Если в `$Parameters.drives` передан массив букв, оставляет только диски из этого списка (регистр не важен).
-4.  Если после фильтрации дисков не осталось, проверка считается успешной (`CheckSuccess = $true`), в `$Details` добавляется соответствующее сообщение.
-5.  Для каждого отфильтрованного диска:
+    *   Если в `$Parameters.drives` передан массив букв, оставляет только диски из этого списка.
+4.  Для каждого отфильтрованного диска:
     *   Рассчитывает общий размер, свободное/занятое место в байтах и ГБ, процент свободного/занятого места.
-    *   Ищет применимый критерий успеха в `$SuccessCriteria`: сначала по букве диска (в верхнем регистре), затем по ключу `_default_`.
-    *   Если найден критерий `min_percent_free`:
-        *   Сравнивает рассчитанный процент свободного места с критерием.
-        *   Устанавливает `criteria_passed = $true/$false` и `criteria_failed_reason`.
-        *   Если критерий не пройден, устанавливает общий флаг `$overallCheckSuccess = $false` и добавляет сообщение в `$errorMessages`.
-        *   Если значение `min_percent_free` некорректно, также считает критерий не пройденным.
-    *   Добавляет собранную информацию о диске (включая результаты проверки критерия) в массив `$resultData.Details.disks`.
-6.  Устанавливает итоговый `CheckSuccess` равным `$overallCheckSuccess`.
-7.  Если были ошибки по критериям, объединяет сообщения из `$errorMessages` и записывает в `ErrorMessage`.
-8.  Возвращает стандартизированный объект результата с помощью `New-CheckResultObject`.
+    *   Собирает информацию в хэш-таблицу.
+    *   Добавляет эту хэш-таблицу в массив `$details.disks`.
+5.  Если после фильтрации дисков не осталось, добавляет сообщение в `$details.message`.
+6.  Если `$isAvailable` равен `$true` и `$SuccessCriteria` предоставлены, вызывает `Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria`.
+    *   Критерии обычно применяются к массиву `$details.disks` с использованием `_condition_`, `_where_`, `_criteria_`.
+7.  Устанавливает `CheckSuccess` в `$true`, `$false` или `$null` (при ошибке критерия).
+8.  Формирует `ErrorMessage`, если `$isAvailable` или `$checkSuccess` равны `$false`, или если `$checkSuccess` равен `$null` при `$IsAvailable = $true`.
+9.  Возвращает стандартизированный объект результата с помощью `New-CheckResultObject`.
 
 **Параметры скрипта:**
 
-*   `$TargetIP` ([string], Обязательный): IP-адрес или имя хоста (используется диспетчером).
+*   `$TargetIP` ([string], Необязательный): IP-адрес или имя хоста (для логирования).
 *   `$Parameters` ([hashtable], Необязательный): Хэш-таблица с параметрами.
 *   `$SuccessCriteria` ([hashtable], Необязательный): Хэш-таблица с критериями успеха.
 *   `$NodeName` ([string], Необязательный): Имя узла для логирования.
 
 **Параметры задания (`$Parameters`)**:
 
-*   `drives` ([string[]], Необязательный): Массив строк с буквами дисков, которые нужно проверить (например, `@('C', 'D')`). Регистр не важен. Если не указан или пуст, проверяются все локальные диски типа 'Fixed'.
+*   `drives` ([string[]], Необязательный): Массив строк с буквами дисков для проверки (например, `@('C', 'D')`). Регистр не важен. Если не указан, проверяются все локальные Fixed-диски.
 
 **Критерии успеха (`$SuccessCriteria`)**:
 
-*   Ожидается хэш-таблица, где ключи - **большие** буквы дисков ('C', 'D', ...) или специальный ключ `_default_`.
-*   Значения - хэш-таблицы, содержащие критерии.
-*   Поддерживаемый критерий:
-    *   `min_percent_free` ([int], Необязательный): Минимально допустимый процент свободного места на диске. Если фактический процент меньше этого значения, `CheckSuccess` будет `$false`.
+*   Применяются к объекту `$details`. Основное поле для проверки - массив `disks`.
+*   **Структура для проверки массива `disks`:**
+    ```json
+    {
+      "disks": {
+        "_condition_": "all" / "any" / "none" / "count",
+        "_where_": { <поле_диска>: <простой_критерий_или_операторный_блок> }, // Опционально
+        "_criteria_": { <поле_диска>: <простой_критерий_или_операторный_блок> }, // Обязательно для all/any/none с элементами
+        "_count_": { <оператор>: <число> } // Обязательно для count
+      }
+    }
+    ```
+*   **Поля диска для проверки (`<поле_диска>`):** `drive_letter`, `label`, `filesystem`, `size_bytes`, `free_bytes`, `used_bytes`, `size_gb`, `free_gb`, `used_gb`, `percent_free`, `percent_used`.
+*   **Примеры:**
+    *   Все диски > 10% свободного места: `@{ disks = @{ _condition_='all'; _criteria_=@{percent_free=@{'>'=10.0}}} }`
+    *   Хотя бы один диск с буквой C или D имеет < 5% свободного места: `@{ disks = @{ _condition_='any'; _where_=@{drive_letter=@{'matches'}='^(C|D)$'}}; _criteria_=@{percent_free=@{'<'=5.0}}} }`
+    *   Количество дисков с размером > 1 ТБ (в байтах) ровно 1: `@{ disks = @{ _condition_='count'; _where_=@{size_bytes=@{'>'=(1TB)}}; _count_=@{'=='=1}} }`
 
-**Возвращаемый результат:**
+**Возвращаемый результат (`$Details`)**:
 
-*   Стандартный объект (`IsAvailable`, `CheckSuccess`, `Timestamp`, `Details`, `ErrorMessage`).
-*   `$Details` содержит:
-    *   `disks` (List<object>): Массив хэш-таблиц, по одной для каждого проверенного диска. Каждая хэш-таблица содержит:
-        *   `drive_letter` (string)
-        *   `label` (string)
-        *   `filesystem` (string)
-        *   `size_bytes` (long), `free_bytes` (long), `used_bytes` (long)
-        *   `size_gb` (double), `free_gb` (double), `used_gb` (double)
-        *   `percent_free` (double), `percent_used` (double)
-        *   `criteria_applied` (hashtable/null): Примененный критерий.
-        *   `criteria_passed` (bool/null): Результат проверки критерия.
-        *   `criteria_failed_reason` (string/null): Причина провала критерия.
-    *   `message` (string): (Опционально) Сообщение, если диски не найдены.
-    *   `error` (string): (Опционально) Сообщение об ошибке, если `IsAvailable = $false`.
+*   `disks` (object[]): Массив хэш-таблиц, по одной для каждого проверенного диска. Каждая содержит:
+    *   `drive_letter` (string)
+    *   `label` (string)
+    *   `filesystem` (string)
+    *   `size_bytes` (long), `free_bytes` (long), `used_bytes` (long)
+    *   `size_gb` (double), `free_gb` (double), `used_gb` (double)
+    *   `percent_free` (double), `percent_used` (double)
+*   `message` (string, опционально): Сообщение, если диски не найдены.
+*   `error` (string, опционально): Сообщение об ошибке `Get-Volume`.
+*   `ErrorRecord` (string, опционально): Полная информация об исключении.
 
 **Пример конфигурации Задания (Assignment):**
 
 ```json
-// Пример 1: Проверить все локальные Fixed диски, нужно > 10% свободно на каждом
+// Проверить диск C (>15%) и все остальные (>5%)
 {
   "node_id": 10,
   "method_id": 5, // ID для DISK_USAGE
   "is_enabled": true,
   "parameters": null, // Проверяем все диски
   "success_criteria": {
-    "_default_": { "min_percent_free": 10 }
+    "disks": [ // Можно передать массив критериев, которые будут проверяться ПО ОЧЕРЕДИ
+        // Критерий 1: Диск C должен иметь >= 15%
+        { "_condition_": "all", "_where_": {"drive_letter": "C"}, "_criteria_": { "percent_free": { ">=": 15 } } },
+        // Критерий 2: Все ОСТАЛЬНЫЕ диски (не C) должны иметь > 5%
+        { "_condition_": "all", "_where_": {"drive_letter": {"!=":"C"}}, "_criteria_": { "percent_free": { ">": 5 } } }
+    ]
+    // АЛЬТЕРНАТИВНО (если Test-SuccessCriteria поддерживает массив критериев для одного ключа):
+    // "disks": { 
+    //     "_condition_": "all", // Применяется к обоим критериям ниже? Или как? УТОЧНИТЬ работу TSC с массивом критериев. 
+    //                            // Вероятно, лучше передавать один сложный объект criteria.
+    //     "_criteria_": [
+    //        {"_where_": {"drive_letter": "C"}, "_check_": {"percent_free": {">=":15}}}, 
+    //        {"_where_": {"drive_letter": {"!=":"C"}}, "_check_": {"percent_free": {">":5}}}
+    //      ]
+    // }
+    // ПОКА ЧТО Test-SuccessCriteria НЕ поддерживает массив критериев. Используйте отдельные проверки или более сложные _where_.
   },
-  "description": "Проверка свободного места (>10%) на всех дисках"
+  "description": "Проверка места: C>=15%, остальные >5%"
 }
 
-// Пример 2: Проверить диск C (>15%) и диск D (>20%)
-{
-  "node_id": 10,
-  "method_id": 5, // ID для DISK_USAGE
-  "is_enabled": true,
-  "parameters": {
-    "drives": ["C", "D"] // Проверяем только C и D
-  },
-  "success_criteria": {
-    "C": { "min_percent_free": 15 },
-    "D": { "min_percent_free": 20 }
-  },
-  "description": "Проверка места: C>15%, D>20%"
-}
-
-GNORE_WHEN_COPYING_END
+Примечание по массиву критериев: Текущая реализация Test-SuccessCriteria не поддерживает массив критериев для одного ключа. Если нужны сложные условия "И" для разных подмножеств массива, их нужно либо объединять в один критерий с более сложным _where_ (если возможно), либо создавать отдельные Задания мониторинга.
 
 Возможные ошибки и замечания:
 
-    Версия ОС: Командлет Get-Volume доступен начиная с Windows 8 / Windows Server 2012. На более старых системах проверка не сработает.
+    Версия ОС: Требуется Windows 8 / Windows Server 2012+.
 
-    Права доступа: Обычно не требует повышенных прав для локального выполнения.
-
-    Сетевые/Съемные диски: Скрипт по умолчанию проверяет только диски с DriveType = 'Fixed'. Другие типы (Network, Removable, CD-ROM) игнорируются.
+    Права доступа: Обычно не требует повышенных прав.
 
 Зависимости:
 
-    Функция New-CheckResultObject из StatusMonitorAgentUtils.psm1.
+    Функции New-CheckResultObject, Test-SuccessCriteria из модуля StatusMonitorAgentUtils.psm1.
 
-    ОС Windows 8 / Server 2012 или новее.
+    Командлет Get-Volume (модуль Storage).

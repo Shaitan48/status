@@ -1,10 +1,9 @@
 
 ---
-
-**6. `powershell/StatusMonitorAgentUtils/Checks/README-Check-SQL_XML_QUERY.md`**
-
+**7. `Checks\README-Check-SQL_XML_QUERY.md` (Обновленный)**
+---
 ```markdown
-# Check-SQL_XML_QUERY.ps1
+# Check-SQL_XML_QUERY.ps1 (v2.1.1+)
 
 **Назначение:**
 
@@ -12,99 +11,111 @@
 
 **Принцип работы:**
 
-1.  Получает параметры (`TargetIP`, `Parameters`, `SuccessCriteria`, `NodeName`) от диспетчера. `$TargetIP` используется как имя SQL Server instance.
+1.  Получает параметры (`TargetIP` как имя SQL Server Instance, `Parameters`, `SuccessCriteria`, `NodeName`).
 2.  Извлекает и валидирует обязательные параметры из `$Parameters`: `sql_database`, `sql_query`, `xml_column_name`, `keys_to_extract`.
-3.  Извлекает опциональные параметры для SQL-аутентификации (`sql_username`, `sql_password`) и таймаут запроса (`query_timeout_sec`).
-4.  Проверяет наличие модуля `SqlServer` на машине выполнения. Если модуль отсутствует, генерирует ошибку (`IsAvailable = $false`).
-5.  Формирует параметры для `Invoke-Sqlcmd`, включая учетные данные (Windows Auth по умолчанию или SQL Auth, если переданы `sql_username`/`sql_password`).
-6.  Выполняет SQL-запрос с помощью `Invoke-Sqlcmd`. Если произошла ошибка подключения или выполнения запроса, устанавливает `IsAvailable = $false` и записывает ошибку.
-7.  Если запрос выполнен успешно:
-    *   Устанавливает `IsAvailable = $true`.
-    *   Проверяет результат:
-        *   Если результат пустой (0 строк), устанавливает `CheckSuccess = $true` и добавляет сообщение в `Details.message`.
-        *   Если строки есть, берет первую строку.
-        *   Проверяет наличие столбца `$xml_column_name` в первой строке. Если столбца нет или он `NULL`, устанавливает `CheckSuccess = $false` и записывает `ErrorMessage`.
-        *   Если столбец найден и содержит данные, пытается преобразовать его содержимое в XML (`[xml]$xmlString`).
-        *   Если парсинг XML неудачен, устанавливает `CheckSuccess = $false` и записывает `ErrorMessage` с деталями ошибки и примером XML.
+3.  Извлекает опциональные параметры: `sql_username`, `sql_password`, `query_timeout_sec`.
+4.  Проверяет наличие и импортирует модуль `SqlServer`.
+5.  Формирует параметры для `Invoke-Sqlcmd`.
+6.  Выполняет SQL-запрос. Ошибки подключения/выполнения устанавливают `IsAvailable = $false`.
+7.  Если SQL-запрос успешен (`$isAvailable = $true`):
+    *   Проверяет результат: наличие строк, наличие столбца `xml_column_name`, непустое ли значение в нем. Если данные для XML не найдены или некорректны, устанавливает `$errorMessage`, но `$isAvailable` может остаться `$true`.
+    *   Если XML-строка получена:
+        *   Пытается распарсить XML (удаляя BOM).
+        *   Если парсинг неудачен, устанавливает `$isAvailable = $false` и `$errorMessage`.
         *   Если XML распарсен успешно:
-            *   Итерирует по списку `$keys_to_extract`.
-            *   Для каждого ключа пытается найти соответствующий дочерний элемент у корневого элемента XML.
-            *   Извлекает текстовое содержимое найденного элемента (или `$null`, если элемент не найден).
-            *   Записывает найденные пары ключ-значение в `$resultData.Details.extracted_data`.
-            *   Устанавливает `CheckSuccess = $true` (пока нет реализованных критериев для данных).
-8.  Возвращает стандартизированный объект результата с помощью `New-CheckResultObject`.
+            *   Итерирует по `$keys_to_extract`.
+            *   Извлекает текстовое содержимое элементов (используя `SelectSingleNode` и `local-name()` для игнорирования namespace).
+            *   Записывает извлеченные пары ключ-значение в `$details.extracted_data`.
+8.  Если `$isAvailable` равен `$true` и `$SuccessCriteria` предоставлены, вызывает `Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria`.
+    *   Критерии обычно применяются к хэш-таблице `$details.extracted_data`.
+9.  Устанавливает `CheckSuccess` в `$true`, `$false` или `$null`.
+10. Формирует `ErrorMessage`.
+11. Возвращает стандартизированный объект результата с помощью `New-CheckResultObject`.
 
 **Параметры скрипта:**
 
-*   `$TargetIP` ([string], Обязательный): Имя или IP-адрес SQL Server instance (например, `SERVER\SQLEXPRESS` или `192.168.1.100`).
-*   `$Parameters` ([hashtable], Обязательный): Хэш-таблица с параметрами.
-*   `$SuccessCriteria` ([hashtable], Необязательный): Хэш-таблица с критериями успеха (пока не используется).
-*   `$NodeName` ([string], Необязательный): Имя узла для логирования.
+*   `$TargetIP` ([string], **Обязательный**): Имя SQL Server instance.
+*   `$Parameters` ([hashtable], Обязательный): Параметры SQL и XML.
+*   `$SuccessCriteria` ([hashtable], Необязательный): Критерии успеха.
+*   `$NodeName` ([string], Необязательный): Имя узла.
 
 **Параметры задания (`$Parameters`)**:
 
-*   `sql_database` ([string], **Обязательный**): Имя базы данных для подключения.
-*   `sql_query` ([string], **Обязательный**): SQL-запрос, который необходимо выполнить. Запрос должен возвращать как минимум одну строку со столбцом, указанным в `xml_column_name`.
-*   `xml_column_name` ([string], **Обязательный**): Имя столбца в результате запроса, который содержит XML-данные для парсинга.
-*   `keys_to_extract` ([string[]], **Обязательный**): Массив строк, содержащий имена XML-элементов (ключей), значения которых нужно извлечь. Предполагается, что эти элементы являются прямыми потомками корневого элемента XML.
-*   `sql_username` ([string], Необязательный): Имя пользователя для SQL Server аутентификации. Если не указано, используется Windows-аутентификация учетной записи, от имени которой запущен скрипт.
-*   `sql_password` ([string], Необязательный): Пароль для SQL Server аутентификации. **Использовать с большой осторожностью! Хранение паролей в параметрах небезопасно.** Рекомендуется использовать Windows-аутентификацию.
-*   `query_timeout_sec` ([int], Необязательный, по умолч. 30): Таймаут ожидания выполнения SQL-запроса в секундах.
+*   `sql_database` ([string], **Обязательный**): Имя базы данных.
+*   `sql_query` ([string], **Обязательный**): SQL-запрос, возвращающий XML.
+*   `xml_column_name` ([string], **Обязательный**): Имя столбца с XML.
+*   `keys_to_extract` ([string[]], **Обязательный**): Массив имен XML-элементов для извлечения (прямые потомки корневого элемента).
+*   `sql_username` ([string], Необязательный): Имя пользователя SQL Auth.
+*   `sql_password` ([string], Необязательный): Пароль SQL Auth. **Небезопасно.**
+*   `query_timeout_sec` ([int], Необязательный, по умолч. 30): Таймаут SQL.
 
 **Критерии успеха (`$SuccessCriteria`)**:
 
-*   **Пока не реализованы.** Можно будет добавить проверку значений извлеченных ключей (например, `$SuccessCriteria = @{ expected_VersionStat = '20230101' }`).
+*   Применяются к объекту `$details`. Чаще всего используется для проверки `$details.extracted_data`:
+    ```json
+    {
+      "extracted_data": {
+        "KeyName1": "ExpectedValue", // Простое равенство
+        "KeyName2": { ">": 100 },     // С оператором
+        "OptionalKey": { "exists": false } // Проверка отсутствия
+      }
+    }
+    ```
 
-**Возвращаемый результат:**
+**Возвращаемый результат (`$Details`)**:
 
-*   Стандартный объект (`IsAvailable`, `CheckSuccess`, `Timestamp`, `Details`, `ErrorMessage`).
-*   `$Details` содержит:
-    *   `server_instance` (string): Имя SQL Server instance.
-    *   `database_name` (string): Имя базы данных.
-    *   `query_executed` (string): Выполненный SQL-запрос.
-    *   `xml_source_column` (string): Имя столбца, из которого брался XML.
-    *   `rows_returned` (int): Количество строк, возвращенных запросом.
-    *   `extracted_data` (hashtable): Хэш-таблица с извлеченными данными (ключ - имя элемента, значение - его текстовое содержимое или `$null`, если не найден).
-    *   `message` (string): (Опционально) Сообщение, если запрос не вернул строк.
-    *   `error` (string): (Опционально) Сообщение об ошибке, если `IsAvailable = $false` или `CheckSuccess = $false`.
-    *   `xml_content_sample` (string): (Опционально) Начало XML-строки, если произошла ошибка парсинга.
+*   `server_instance` (string)
+*   `database_name` (string)
+*   `query_executed` (string)
+*   `xml_source_column` (string)
+*   `rows_returned` (int)
+*   `extracted_data` (hashtable): Извлеченные данные {ключ=значение}. Значение `$null`, если ключ не найден.
+*   `xml_content_sample` (string, опционально): Начало XML при ошибке парсинга.
+*   `message` (string, опционально): Сообщение (например, если нет строк).
+*   `error` (string, опционально): Сообщение об ошибке SQL, поиска столбца или парсинга XML.
+*   `ErrorRecord` (string, опционально): Полная информация об исключении.
 
 **Пример конфигурации Задания (Assignment):**
 
 ```json
-// Пример: Получить VersionStat и TS_Version из столбца Revise
+// Получить статус и версию из XML в таблице Config
 {
-  "node_id": 60, // ID узла, представляющего SQL сервер или приложение
+  "node_id": 65, 
   "method_id": 8, // ID для SQL_XML_QUERY
   "is_enabled": true,
   "parameters": {
-    "sql_database": "ApplicationDB",
-    "sql_query": "SELECT TOP 1 Revise FROM Reports ORDER BY CreationDate DESC",
-    "xml_column_name": "Revise",
-    "keys_to_extract": ["VersionStat", "TS_Version"],
-    "query_timeout_sec": 15
-    // Используется Windows аутентификация
+    "sql_database": "Configuration",
+    "sql_query": "SELECT ConfigXml FROM dbo.SystemConfig WHERE ConfigKey = 'Processing'",
+    "xml_column_name": "ConfigXml",
+    "keys_to_extract": ["IsEnabled", "Version", "LastCheckUTC"]
   },
-  "success_criteria": null, // Критериев пока нет
-  "description": "Получение версии ТС и статуса из последнего отчета SQL"
+  "success_criteria": {
+    "extracted_data": { 
+        "IsEnabled": "true", // Сравнение строк
+        "Version": { "matches": "^\\d+\\.\\d+$" } // Проверка формата версии regex
+    }
+  },
+  "description": "Проверка конфигурации обработки из XML"
 }
+
+IGNORE_WHEN_COPYING_END
 
 Возможные ошибки и замечания:
 
-    Модуль SqlServer: Необходимо установить модуль SqlServer на машине, где выполняется скрипт (Install-Module SqlServer).
+    Модуль SqlServer: Требуется.
 
-    Права доступа к SQL: Учетная запись, от имени которой запускается скрипт (или указанный SQL-пользователь), должна иметь права на подключение к SQL Server, доступ к указанной базе данных и права на выполнение переданного sql_query.
+    Права доступа к SQL: Необходимы.
 
-    Безопасность пароля: КАТЕГОРИЧЕСКИ НЕ РЕКОМЕНДУЕТСЯ хранить пароли SQL в параметрах задания. Используйте Windows-аутентификацию или другие безопасные методы управления учетными данными.
+    Безопасность пароля: Используйте Windows Auth.
 
-    Структура XML: Скрипт предполагает, что искомые ключи (keys_to_extract) являются прямыми дочерними элементами корневого элемента XML. Для более сложных XML-структур потребуется доработка логики извлечения.
+    Структура XML: Скрипт ожидает плоскую структуру (ключи - прямые потомки корня).
 
-    Производительность: Сложные SQL-запросы или запросы, возвращающие большие XML, могут выполняться долго. Настройте query_timeout_sec соответственно.
-
-    Обработка результата: Скрипт обрабатывает только первую строку результата SQL-запроса.
+    Пространства имен XML: Игнорируются благодаря local-name().
 
 Зависимости:
 
-    Функция New-CheckResultObject из StatusMonitorAgentUtils.psm1.
+    Функции New-CheckResultObject, Test-SuccessCriteria из модуля StatusMonitorAgentUtils.psm1.
+
     Модуль PowerShell SqlServer.
+
     Доступ к MS SQL Server.

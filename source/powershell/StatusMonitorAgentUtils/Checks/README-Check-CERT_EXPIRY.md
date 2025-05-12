@@ -1,10 +1,9 @@
 
 ---
-
-**5. `powershell/StatusMonitorAgentUtils/Checks/README-Check-CERT_EXPIRY.md`**
-
+**5. `Checks\README-Check-CERT_EXPIRY.md` (Обновленный)**
+---
 ```markdown
-# Check-CERT_EXPIRY.ps1
+# Check-CERT_EXPIRY.ps1 (v2.1.0+)
 
 **Назначение:**
 
@@ -12,113 +11,121 @@
 
 **Принцип работы:**
 
-1.  Получает параметры (`TargetIP`, `Parameters`, `SuccessCriteria`, `NodeName`) от диспетчера. `$TargetIP` используется только для логирования, так как скрипт выполняется локально на целевой машине.
-2.  Определяет список стандартных хранилищ для поиска: `Cert:\LocalMachine\My`, `Cert:\LocalMachine\WebHosting`, `Cert:\CurrentUser\My`.
-3.  Извлекает параметры **фильтрации** из `$Parameters`: `subject_like`, `issuer_like`, `thumbprint`, `require_private_key`, `eku_oid`.
-4.  Извлекает **обязательный** критерий успеха `min_days_left` из `$SuccessCriteria`.
-5.  Извлекает опциональный параметр `min_days_warning` из `$Parameters`.
-6.  Итерирует по списку хранилищ:
-    *   Выполняет `Get-ChildItem` для текущего хранилища (`ErrorAction = SilentlyContinue`).
-    *   Добавляет найденные сертификаты в общий список `$allFoundCertificates`.
-    *   Если при доступе к хранилищу возникла ошибка, записывает ее в `$storeAccessErrors`.
-7.  Если были ошибки доступа к хранилищам, устанавливает `IsAvailable = $true` (т.к. часть работы могла быть выполнена), но запоминает ошибки для `ErrorMessage`.
-8.  Применяет фильтры к общему списку `$allFoundCertificates`:
-    *   Приоритет отдается фильтру по `thumbprint`.
-    *   Если отпечаток не указан, применяются фильтры `subject_like` и `issuer_like`.
-    *   Применяются фильтры `require_private_key` и `eku_oid`, если они заданы.
-9.  Если после фильтрации сертификатов не осталось, проверка считается успешной (`CheckSuccess = $true`).
-10. Для каждого отфильтрованного сертификата:
+1.  Получает параметры (`TargetIP`, `Parameters`, `SuccessCriteria`, `NodeName`) от диспетчера. `$TargetIP` используется только для логирования.
+2.  Извлекает параметры из `$Parameters`: `store_location`, `store_name`, `subject_like`, `issuer_like`, `thumbprint`, `require_private_key`, `eku_oid`, `min_days_warning`. Устанавливает значения по умолчанию, если параметры не переданы.
+3.  Определяет список хранилищ для поиска: либо указанное в параметрах, либо стандартный список (`LocalMachine\My`, `LocalMachine\WebHosting`, `CurrentUser\My`).
+4.  Итерирует по списку хранилищ:
+    *   Проверяет доступность хранилища через `Test-Path`.
+    *   Вызывает `Get-ChildItem` для получения сертификатов. Обрабатывает ошибки доступа.
+    *   Собирает все найденные сертификаты в список.
+5.  Устанавливает `IsAvailable = $true`, если удалось проверить хотя бы одно хранилище. Если нет - `$IsAvailable = $false`. Ошибки доступа к отдельным хранилищам записываются в `Details.store_access_errors`.
+6.  Фильтрует собранный список сертификатов согласно параметрам (`Thumbprint` имеет приоритет над `SubjectLike`/`IssuerLike`, затем применяются `RequirePrivateKey` и `EkuOids`). Устанавливает флаг `Details.filter_applied`.
+7.  Для каждого отфильтрованного сертификата:
     *   Рассчитывает количество дней до истечения (`days_left`).
-    *   Определяет статус сертификата: `OK`, `Expired` (истек), `Expiring (Fail)` (осталось <= `min_days_left`), `Expiring (Warn)` (осталось <= `min_days_warning`), `Error` (ошибка расчета).
-    *   Если статус `Expired` или `Expiring (Fail)`, устанавливает общий флаг `$overallCheckSuccess = $false` и добавляет сообщение в `$errorMessages`.
-    *   Собирает информацию о сертификате (включая статус) в хэш-таблицу и добавляет ее в `$resultData.Details.certificates`.
-11. Устанавливает итоговый `CheckSuccess` равным `$overallCheckSuccess`.
-12. Если были ошибки (по критериям или ошибки доступа к хранилищам), формирует `ErrorMessage`.
+    *   Определяет статус сертификата (`OK`, `Expired`, `ExpiringSoon`) на основе `days_left` и `min_days_warning`.
+    *   Собирает информацию (`thumbprint`, `subject`, `issuer`, даты, `days_left`, `has_private_key`, `status`, `status_details`, `store_path`) в хэш-таблицу.
+    *   Добавляет хэш-таблицу в массив `$details.certificates`.
+8.  Сортирует `$details.certificates` по `days_left`.
+9.  Если после фильтрации сертификатов не осталось, добавляет сообщение в `$details.message`.
+10. Если `$isAvailable` равен `$true` и `$SuccessCriteria` предоставлены, вызывает `Test-SuccessCriteria -DetailsObject $details -CriteriaObject $SuccessCriteria`.
+    *   Критерии обычно применяются к массиву `$details.certificates`.
+11. Устанавливает `CheckSuccess` в `$true`, `$false` или `$null`.
+12. Формирует `ErrorMessage`, учитывая результат критериев и ошибки доступа к хранилищам.
 13. Возвращает стандартизированный объект результата с помощью `New-CheckResultObject`.
 
 **Параметры скрипта:**
 
-*   `$TargetIP` ([string], Обязательный): IP-адрес или имя хоста (используется диспетчером).
-*   `$Parameters` ([hashtable], Обязательный): Хэш-таблица с параметрами фильтрации.
-*   `$SuccessCriteria` ([hashtable], Обязательный): Хэш-таблица с критериями успеха.
+*   `$TargetIP` ([string], Необязательный): IP/Имя хоста (для логирования).
+*   `$Parameters` ([hashtable], Необязательный): Параметры поиска и фильтрации.
+*   `$SuccessCriteria` ([hashtable], Необязательный): Критерии успеха.
 *   `$NodeName` ([string], Необязательный): Имя узла для логирования.
 
 **Параметры задания (`$Parameters`)**:
 
-*   `subject_like` ([string], Необязательный): Фильтр по имени субъекта (Common Name, CN). Можно использовать wildcard `*`. Пример: `"*.example.com"`.
-*   `issuer_like` ([string], Необязательный): Фильтр по имени издателя сертификата. Можно использовать wildcard `*`. Пример: `"*My Internal CA*"`.
-*   `thumbprint` ([string], Необязательный): Точный отпечаток (Thumbprint) сертификата для поиска. Если указан, фильтры `subject_like` и `issuer_like` игнорируются.
-*   `require_private_key` ([bool], Необязательный, по умолч. `$false`): Искать только сертификаты, у которых есть соответствующий закрытый ключ в хранилище.
-*   `eku_oid` ([string[]], Необязательный): Массив строк с идентификаторами объектов (OID) расширенного использования ключа (Extended Key Usage). Сертификат будет отобран, если он содержит *хотя бы один* из указанных OID. Примеры:
-    *   `'1.3.6.1.5.5.7.3.1'` - Проверка подлинности сервера (Server Authentication - для SSL/TLS)
-    *   `'1.3.6.1.5.5.7.3.2'` - Проверка подлинности клиента (Client Authentication)
-    *   `'1.3.6.1.5.5.7.3.8'` - Временная метка (Time Stamping)
-*   `min_days_warning` ([int], Необязательный, по умолч. 30): Количество дней до истечения, при котором статус сертификата в `$Details` будет помечен как "Expiring (Warn)". Не влияет на `CheckSuccess`.
+*   `store_location` ([string], Необязательный): 'LocalMachine' или 'CurrentUser'. Если указан вместе с `store_name`, ищет только там.
+*   `store_name` ([string], Необязательный): Имя хранилища ('My', 'WebHosting', etc.). Если указан вместе с `store_location`, ищет только там.
+*   `subject_like` ([string], Необязательный): Фильтр по Subject (CN). Wildcard `*`.
+*   `issuer_like` ([string], Необязательный): Фильтр по Issuer. Wildcard `*`.
+*   `thumbprint` ([string], Необязательный): Точный отпечаток (приоритетный фильтр).
+*   `require_private_key` ([bool], Необязательный, по умолч. `$false`): Искать только с приватным ключом.
+*   `eku_oid` ([string[]], Необязательный): Массив OID'ов Enhanced Key Usage. Сертификат должен содержать хотя бы один из них.
+*   `min_days_warning` ([int], Необязательный, по умолч. 30): Порог в днях для статуса 'ExpiringSoon' (не влияет на CheckSuccess).
 
 **Критерии успеха (`$SuccessCriteria`)**:
 
-*   `min_days_left` ([int], **Обязательный**): Минимальное количество полных дней, которое должно оставаться до истечения срока действия *каждого* найденного по фильтрам сертификата. Если хотя бы у одного сертификата осталось дней меньше или равно этому значению (или он уже истек), `CheckSuccess` будет `$false`.
+*   Применяются к объекту `$details`. Основное поле для проверки - массив `certificates`.
+*   **Структура для проверки массива `certificates`:**
+    ```json
+    {
+      "certificates": {
+        "_condition_": "all" / "any" / "none" / "count",
+        "_where_": { <поле_сертификата>: <критерий> }, // Опционально
+        "_criteria_": { <поле_сертификата>: <критерий> }, // Для all/any/none
+        "_count_": { <оператор>: <число> } // Для count
+      }
+    }
+    ```
+*   **Поля сертификата для проверки (`<поле_сертификата>`):** `thumbprint`, `subject`, `issuer`, `days_left`, `has_private_key`, `status`.
+*   **Примеры:**
+    *   Все найденные сертификаты должны иметь `days_left > 30`: `@{ certificates = @{ _condition_='all'; _criteria_=@{days_left=@{'>'=30}}} }`
+    *   Ни один сертификат не должен быть 'Expired': `@{ certificates = @{ _condition_='none'; _where_=@{status='Expired'}} }`
+    *   Хотя бы один SSL-сертификат истекает менее чем через 15 дней: `@{ certificates = @{ _condition_='any'; _where_=@{eku_oid=@{'contains'='1.3.6.1.5.5.7.3.1'}}; _criteria_=@{days_left=@{'<'=15}}} }` (Примечание: EKU проверяется при фильтрации в `$Parameters`, а не через `_where_` здесь). Условие для ANY будет проще: `@{ certificates = @{ _condition_='any'; _criteria_=@{days_left=@{'<'=15}}} }` (применится ко всем отфильтрованным сертификатам).
 
-**Возвращаемый результат:**
+**Возвращаемый результат (`$Details`)**:
 
-*   Стандартный объект (`IsAvailable`, `CheckSuccess`, `Timestamp`, `Details`, `ErrorMessage`).
-*   `$Details` содержит:
-    *   `certificates` (List<object>): Массив хэш-таблиц для каждого найденного и отфильтрованного сертификата. Каждая содержит:
-        *   `thumbprint` (string): Отпечаток.
-        *   `subject` (string): Имя субъекта.
-        *   `issuer` (string): Имя издателя.
-        *   `not_before` (string): Дата начала действия (UTC ISO 8601).
-        *   `not_after` (string): Дата окончания действия (UTC ISO 8601).
-        *   `days_left` (int): Количество полных оставшихся дней.
-        *   `has_private_key` (bool): Наличие закрытого ключа.
-        *   `status` (string): Рассчитанный статус (`OK`, `Expired`, `Expiring (Fail)`, `Expiring (Warn)`, `Error`).
-        *   `status_details` (string): Пояснение к статусу.
-        *   `store_path` (string): Путь к хранилищу, где найден сертификат.
-    *   `stores_checked` (string[]): Список путей к хранилищам, в которых производился поиск.
-    *   `message` (string): (Опционально) Сообщение, если сертификаты не найдены.
-    *   `error` (string): (Опционально) Сообщение об ошибке, если `IsAvailable = $false`.
+*   `certificates` (object[]): Массив хэш-таблиц для каждого найденного и отфильтрованного сертификата. Каждая содержит:
+    *   `thumbprint`, `subject`, `issuer` (string)
+    *   `not_before_utc`, `not_after_utc` (string ISO 8601)
+    *   `days_left` (int)
+    *   `has_private_key` (bool)
+    *   `status` (string): 'OK', 'Expired', 'ExpiringSoon'
+    *   `status_details` (string)
+    *   `store_path` (string)
+*   `stores_checked` (string[]): Список проверенных хранилищ.
+*   `parameters_used` (hashtable): Параметры, фактически использованные для поиска/фильтрации.
+*   `filter_applied` (bool): Применялись ли фильтры?
+*   `message` (string, опционально): Сообщение, если сертификаты не найдены.
+*   `store_access_errors` (string[], опционально): Список ошибок доступа к хранилищам.
+*   `error` (string, опционально): Сообщение об основной ошибке проверки.
+*   `ErrorRecord` (string, опционально): Полная информация об исключении.
 
 **Пример конфигурации Задания (Assignment):**
 
 ```json
-// Пример 1: Проверить все SSL-сертификаты сервера (>30 дней)
+// Проверить все сертификаты в LocalMachine\My, 
+// у которых есть приватный ключ, 
+// и убедиться, что все они действительны еще > 30 дней
 {
   "node_id": 50,
   "method_id": 7, // ID для CERT_EXPIRY
   "is_enabled": true,
   "parameters": {
-    "eku_oid": ["1.3.6.1.5.5.7.3.1"], // Server Auth
+    "store_location": "LocalMachine",
+    "store_name": "My",
     "require_private_key": true,
-    "min_days_warning": 60 // Предупреждать за 60 дней
+    "min_days_warning": 60 
   },
   "success_criteria": {
-    "min_days_left": 30 // Должно оставаться больше 30 дней
+    "certificates": { 
+        "_condition_": "all",
+        "_criteria_": { "days_left": { ">": 30 } }
+    }
   },
-  "description": "Проверка SSL сертификатов сервера (>30 дней)"
+  "description": "Проверка сертификатов в LM\\My (>30 дней, с ключом)"
 }
 
-// Пример 2: Проверить конкретный сертификат по отпечатку (>90 дней)
-{
-  "node_id": 51,
-  "method_id": 7,
-  "is_enabled": true,
-  "parameters": {
-    "thumbprint": "ВАШ_ОТПЕЧАТОК_СЕРТИФИКАТА_ЗДЕСЬ"
-  },
-  "success_criteria": {
-    "min_days_left": 90
-  },
-  "description": "Проверка конкретного сертификата по отпечатку (>90 дней)"
-}
+IGNORE_WHEN_COPYING_END
 
 Возможные ошибки и замечания:
 
-    Права доступа: Для доступа к хранилищу LocalMachine требуются права администратора. Доступ к CurrentUser обычно есть у пользователя, от имени которого запущен агент.
+    Права доступа: Доступ к LocalMachine требует прав администратора.
 
-    Доступность хранилищ: Если какое-то из стандартных хранилищ отсутствует или недоступно, скрипт запишет ошибку, но продолжит проверку остальных.
+    Отсутствие хранилищ: Скрипт обрабатывает отсутствие стандартных хранилищ (например, WebHosting).
 
-    Фильтрация: Убедитесь, что параметры фильтрации (subject_like, thumbprint и т.д.) заданы корректно для поиска нужных сертификатов. Если фильтры не заданы, будут проверяться все сертификаты в стандартных хранилищах.
+    EKU Фильтрация: Проверяет наличие хотя бы одного из указанных OID в расширении EKU сертификата.
 
 Зависимости:
 
-    Функция New-CheckResultObject из StatusMonitorAgentUtils.psm1.
+    Функции New-CheckResultObject, Test-SuccessCriteria из модуля StatusMonitorAgentUtils.psm1.
+
+    Доступ к хранилищам сертификатов Windows.
