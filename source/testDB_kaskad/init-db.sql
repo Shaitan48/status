@@ -1,7 +1,4 @@
--- F:\status\source\testDB_kaskad\init-db.sql (Упрощенный)
--- Создает БД и таблицу для тестов Kaskad
-
--- Создаем базу данных, если она еще не существует
+-- F:\status\source\testDB_kaskad\init-db.sql
 IF DB_ID('kaskad') IS NULL
 BEGIN
     CREATE DATABASE kaskad;
@@ -16,13 +13,12 @@ GO
 USE kaskad;
 GO
 
--- Создаем таблицу, если она еще не существует
 IF OBJECT_ID('dbo.ReviseData', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.ReviseData (
         id INT PRIMARY KEY,
         CreationDate DATETIME,
-        Revise NVARCHAR(MAX), -- Используем NVARCHAR(MAX) для XML
+        Revise NVARCHAR(MAX),
         UTCTime DATETIME
     );
     PRINT 'Table "dbo.ReviseData" created.';

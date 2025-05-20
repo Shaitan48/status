@@ -1,0 +1,11 @@
+{
+    "mode": "Offline",
+    "object_id": 9999, 
+    "log_file": "/opt/agent_logs/hybrid_agent_offline_e2e.log",
+    "log_level": "Debug",
+    "agent_script_version": "hybrid_e2e_offline_v1",
+    "assignments_file_path_pattern": "/opt/agent_configs/assignments_for_9999/*.json.status.*", 
+    "output_path": "/opt/agent_results/from_9999", 
+    "output_name_template": "{ddMMyy_HHmmss}_{object_id}_HybridOffline_E2E.zrpu",
+    "offline_cycle_interval_seconds": 0 
+}

@@ -53,7 +53,10 @@ def app():
     # ... (код без изменений) ...
     log.info("Создание тестового экземпляра Flask приложения (scope=session)...")
     os.environ['FLASK_ENV'] = 'testing'
-    test_db_url = os.getenv('TEST_DATABASE_URL', 'postgresql://pu_user:pu_password@localhost:48036/pu_db')
+    
+    test_db_url = os.getenv('TEST_DATABASE_URL', 'postgresql://pu_user:pu_password@localhost:48037/pu_db_test')
+    #test_db_url = os.getenv('TEST_DATABASE_URL', 'postgresql://pu_user:pu_password@localhost:48036/pu_db')
+    
     log.warning(f"Тесты будут выполняться на БД: {test_db_url}")
     os.environ['DATABASE_URL'] = test_db_url
     os.environ['SECRET_KEY'] = 'pytest-secret-key-test'

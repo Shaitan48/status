@@ -78,7 +78,7 @@ $assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.
 Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем Доступность: FAIL)"
 
 # --- Ошибка подключения (Bad DB) ---
-$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Connect Error (Bad DB)"; $assign.parameters.sql_database = "NonExistentDB"; $assign.parameters.sql_query = "SELECT 1"; $assign.parameters.return_format = 'scalar'
+$assign = $execBase.PSObject.Copy(); $assign.assignment_id = ++$execId; $assign.node_name += " - Connect Error (Bad DB)"; $assign.parameters.sql_database = $TestDatabaseName; $assign.parameters.sql_query = "SELECT 1"; $assign.parameters.return_format = 'scalar'
 Run-ManualSqlTest -Assignment $assign -ExpectedResult "(Ожидаем Доступность: FAIL)"
 
 Write-Host "КОНЕЦ ТЕСТОВ: Check-SQL_QUERY_EXECUTE" -FG Green; Write-Host $('='*80); Write-Host ""

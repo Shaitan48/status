@@ -1,15 +1,18 @@
 {
     "mode": "Online",
-    "object_id": 1516,
-    "log_file": "C:/StatusMonitor/Logs/hybrid-agent.log",
+    "object_id": 1060,
+    "log_file": "F:/status/builds/logs/hybrid-agent.log",
     "log_level": "Info",
     "agent_script_version": "hybrid_agent_v7.0",
     "api_base_url": "http://localhost:48030/api",
-    "api_key": "ЗАМЕНИТЕ_НА_ВАШ_AGENT_КЛЮЧ",
+    "api_key": "Ufv0vpIrgAdBcoF_D2FFu6dydCh-M19UvvNSICw6xio",
     "api_poll_interval_seconds": 60,
     "default_check_interval_seconds": 300,
-    "assignments_file_path_pattern": "C:/StatusMonitor/OfflineConfig/*.json.status.*",
-    "output_path": "C:/StatusMonitor/OfflineResults",
+    "max_api_retries": 2,
+    "retry_delay_seconds": 5,
+    "api_timeout_sec": 15,
+    "assignments_file_path_pattern": "F:/status/builds/delivery_conf/TSP/*assignments.json.status.*",
+    "output_path": "F:/status/builds/results_offline",
     "output_name_template": "{ddMMyy_HHmmss}_{object_id}_HybridOffline.zrpu",
-    "offline_cycle_interval_seconds": 0
+    "offline_cycle_interval_seconds": 60 
 }

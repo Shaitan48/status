@@ -1,100 +1,160 @@
 # F:\status\source\testDB_kaskad\docker-compose.yml
-# --- Версия 2.0 ---
-# Добавлен тестовый экземпляр PostgreSQL для интеграционных тестов Flask.
-# Оба сервиса подключены к сети pu_share для доступа извне (тестов).
-# Инициализация MS SQL упрощена.
-# Инициализация PostgreSQL использует СКРИПТЫ СХЕМЫ из основного проекта.
+# --- Версия 2.2 с добавлением сервисов Flask для E2E ---
 version: '3.8'
 
 services:
-  sqlserver_test:
-    image: mcr.microsoft.com/mssql/server:2017-latest # Или :latest
-    container_name: sqlserver_test_kaskad
+  # --- Сервис для тестовой БД MS SQL (Kaskad) ---
+  sqlserver_test_kaskad: # Изменил имя сервиса для ясности
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    container_name: sqlserver_test_kaskad_instance # Имя контейнера
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: "escort123"
+      SA_PASSWORD: "escort123" # Тот же пароль, что и в init-db.sql
       MSSQL_PID: "Developer"
       TZ: Europe/Moscow
     ports:
-      - "48010:1433"
+      - "48010:1433" # Проброс порта для доступа с хоста
     networks:
-      - test_db_net
-      - pu_share
+      - test_db_net # Внутренняя сеть для этого стека
+      - pu_share    # Общая сеть для связи с другими сервисами (например, Flask)
     restart: unless-stopped
     volumes:
-      - sqlserver_test_data:/var/opt/mssql
-      # --- СКРИПТЫ ДЛЯ АВТО-ИНИЦИАЛИЗАЦИИ MS SQL ---
-      # Скрипты в этой папке выполняются в алфавитном порядке при первом запуске
-      - ./init-db.sql:/docker-entrypoint-initdb.d/01_init_schema.sql
-      - ./insert_revised_data.sql:/docker-entrypoint-initdb.d/02_insert_data.sql
-    healthcheck: # Оставляем healthcheck для надежности
+      - sqlserver_test_kaskad_data:/var/opt/mssql # Том для данных MS SQL
+      # Скрипты инициализации для MS SQL
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01_init_schema.sql:ro
+      - ./insert_revised_data.sql:/docker-entrypoint-initdb.d/02_insert_data.sql:ro
+    healthcheck:
         test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "escort123", "-Q", "SELECT 1"]
         interval: 10s
         timeout: 5s
         retries: 5
 
-  # --- PostgreSQL для интеграционных тестов Flask API ---
-  postgres_test:
+  # --- Сервис для тестовой БД PostgreSQL (StatusMonitor) ---
+  postgres_test_statusmonitor: # Изменил имя сервиса
     image: postgres:14
-    container_name: postgres_test_statusmonitor # Уникальное имя
+    container_name: postgres_test_statusmonitor_instance
     environment:
-      POSTGRES_USER: pu_user          # Те же или другие credentials
+      POSTGRES_USER: pu_user
       POSTGRES_PASSWORD: pu_password
-      POSTGRES_DB: pu_db_test         # <<< ОТДЕЛЬНОЕ ИМЯ БД ДЛЯ ТЕСТОВ >>>
+      POSTGRES_DB: pu_db_test # Используем отдельную тестовую БД
       TZ: Europe/Moscow
     ports:
-      - "48037:5432" # <<< ОТДЕЛЬНЫЙ ПОРТ НА ХОСТЕ >>>
+      - "48037:5432" # Другой порт, чтобы не конфликтовать с основной БД
     networks:
       - test_db_net
       - pu_share
     restart: unless-stopped
-    # --- ИНИЦИАЛИЗАЦИЯ СХЕМЫ ---
-    # Монтируем скрипты СХЕМЫ и БАЗОВЫХ ДАННЫХ из основного проекта
-    # Это гарантирует, что тестовая БД имеет ту же структуру, что и основная
-    # НЕ монтируем seed_data, тесты должны сами подготавливать нужные данные
     volumes:
-      # --- DB Schema (из основного проекта) ---
+      # Монтируем скрипты схемы и начальных данных из основного проекта
       - ../postgres/db_schema/001_create_tables.sql:/docker-entrypoint-initdb.d/01_001_create_tables.sql:ro
       - ../postgres/db_schema/002_create_indexes.sql:/docker-entrypoint-initdb.d/01_002_create_indexes.sql:ro
       - ../postgres/db_schema/003_create_functions_procedures.sql:/docker-entrypoint-initdb.d/01_003_create_functions_procedures.sql:ro
       - ../postgres/db_schema/004_create_views.sql:/docker-entrypoint-initdb.d/01_004_create_views.sql:ro
       - ../postgres/db_schema/005_add_foreign_keys.sql:/docker-entrypoint-initdb.d/01_005_add_foreign_keys.sql:ro
-      # --- DB Core Data (из основного проекта) ---
       - ../postgres/db_core_data/001_settings.sql:/docker-entrypoint-initdb.d/02_001_settings.sql:ro
       - ../postgres/db_core_data/002_check_methods.sql:/docker-entrypoint-initdb.d/02_002_check_methods.sql:ro
       - ../postgres/db_core_data/003_node_property_types.sql:/docker-entrypoint-initdb.d/02_003_node_property_types.sql:ro
       - ../postgres/db_core_data/004_node_types.sql:/docker-entrypoint-initdb.d/02_004_node_types.sql:ro
       - ../postgres/db_core_data/005_node_properties_base.sql:/docker-entrypoint-initdb.d/02_005_node_properties_base.sql:ro
-      # --- ДАННЫЕ ТЕСТОВОЙ БД БУДУТ ЭФЕМЕРНЫМИ (нет монтирования /var/lib/postgresql/data) ---
+      # Скрипт для создания тестовых узлов и заданий для PowerShell агента
+      - ../postgres/db_seed_data/test_nodes_and_assignments/001_windows_test_node_setup.sql:/docker-entrypoint-initdb.d/04_001_test_node_setup.sql:ro
+      # (Опционально) Скрипт для создания тестовых API ключей
+      - ./05_test_api_keys.sql:/docker-entrypoint-initdb.d/05_test_api_keys.sql:ro # Предполагается, что вы создадите этот файл
 
-  # --- pgAdmin для ТЕСТОВОЙ БД PostgreSQL (опционально) ---
-  pgadmin_test:
-    image: dpage/pgadmin4:latest # Можно использовать последнюю версию
-    container_name: pgadmin_test_statusmonitor # Уникальное имя
+  # --- Сервис pgAdmin для тестовой БД PostgreSQL ---
+  pgadmin_test_statusmonitor: # Изменил имя сервиса
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_test_statusmonitor_instance
     environment:
       PGADMIN_DEFAULT_EMAIL: testadmin@test.com
       PGADMIN_DEFAULT_PASSWORD: testadmin
       TZ: Europe/Moscow
     ports:
-      - "48038:80" # <<< ОТДЕЛЬНЫЙ ПОРТ НА ХОСТЕ >>>
+      - "48038:80" # Другой порт
     depends_on:
-      - postgres_test
+      postgres_test_statusmonitor:
+        condition: service_started # Ждем запуска postgres
     networks:
       - test_db_net
       - pu_share
     volumes:
-      - pgadmin_test_data:/var/lib/pgadmin # Сохраняем настройки pgAdmin для тестов
+      - pgadmin_test_statusmonitor_data:/var/lib/pgadmin
     restart: unless-stopped
 
-# --- Сети ---
+  # --- Сервис с Linux и PowerShell Core для тестов агентов ---
+  powershell_test_node:
+    image: mcr.microsoft.com/powershell:latest
+    container_name: powershell_test_node_instance
+    hostname: ps-test-node
+    environment:
+      TZ: Europe/Moscow
+    command: ["sleep", "infinity"] # Команда, чтобы контейнер не завершался
+    networks:
+      - test_db_net
+      - pu_share
+    restart: unless-stopped
+    volumes:
+      # Монтируем всю папку powershell из основного проекта (read-only)
+      - ../powershell:/opt/status_monitor_ps:ro
+      # Монтируем папку для тестовых конфигурационных файлов агентов (read-write)
+      - ./agent_configs_test:/opt/agent_configs
+      # (Опционально) Монтируем папку для логов агентов, если они пишутся в контейнере
+      - ./agent_logs_test:/opt/agent_logs
+      # (Опционально) Монтируем папку для результатов *.zrpu оффлайн-агента
+      - ./agent_results_test:/opt/agent_results
+
+  # --- Сервис Flask-приложения для E2E тестов ---
+  status_web_e2e_test: # Новое имя
+    build:
+      context: ../status # Путь к Dockerfile Flask-приложения
+      dockerfile: Dockerfile
+    container_name: status_web_e2e_test_instance
+    environment:
+      # Указываем на тестовую БД PostgreSQL в этой же сети
+      DATABASE_URL: postgresql://pu_user:pu_password@postgres_test_statusmonitor:5432/pu_db_test
+      FLASK_ENV: testing # Используем режим testing
+      TZ: Europe/Moscow
+      # SECRET_KEY должен быть задан, можно через отдельный .env.test или здесь
+      SECRET_KEY: 'your-e2e-super-secret-key-change-me'
+    expose:
+      - "5000" # Внутренний порт Flask
+    networks:
+      - test_db_net # Для доступа к postgres_test_statusmonitor
+      - pu_share    # Для доступа от nginx_e2e_test
+    restart: unless-stopped
+    depends_on:
+      postgres_test_statusmonitor: # Ждем запуска БД
+        condition: service_started # Можно использовать service_healthy, если у postgres есть healthcheck
+
+  # --- Сервис Nginx для Flask-приложения в E2E тестах ---
+  status_nginx_e2e_test:
+    image: nginx:1.25
+    container_name: status_nginx_e2e_test_instance
+    environment:
+      TZ: Europe/Moscow
+    volumes:
+      # Монтируем основной nginx.conf, он должен быть настроен на проксирование к status_web_e2e_test:5000
+      - ../status/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Монтируем статику Flask-приложения
+      - ../status/app/static:/app/static:ro
+    ports:
+      - "48031:80" # Другой порт, чтобы не конфликтовать с основным Nginx (48030)
+    depends_on:
+      - status_web_e2e_test # Ждем запуска Flask-приложения
+    networks:
+      - test_db_net # Чтобы видеть status_web_e2e_test
+      - pu_share
+    restart: unless-stopped
+
 networks:
-  test_db_net: # Внутренняя сеть этого стека
+  test_db_net: # Внутренняя сеть для этого docker-compose
     driver: bridge
-  pu_share:    # Внешняя сеть, созданная вручную (`docker network create pu_share`)
+  pu_share:    # Внешняя сеть, которую нужно создать командой: docker network create pu_share
     external: true
 
-# --- Тома ---
 volumes:
-  sqlserver_test_data: # Данные для MS SQL (можно удалить, если не нужно сохранять)
-  pgadmin_test_data:   # Настройки pgAdmin для тестов
-  # postgres_test_data: {} # Раскомментируйте, если нужно сохранять данные тестового Postgres
+  sqlserver_test_kaskad_data:
+  pgadmin_test_statusmonitor_data:
+  # Для postgres_test_statusmonitor том не объявляем здесь, если хотим, чтобы данные
+  # сбрасывались при `docker-compose down -v`. Если нужно сохранять, добавьте:
+  # postgres_test_statusmonitor_data:

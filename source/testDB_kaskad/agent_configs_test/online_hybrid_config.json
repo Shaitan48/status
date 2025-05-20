@@ -1,0 +1,14 @@
+{
+    "mode": "Online",
+    "object_id": 9999,
+    "log_file": "/opt/agent_logs/hybrid_agent_online_e2e.log",
+    "log_level": "Debug",
+    "agent_script_version": "hybrid_e2e_online_v1",
+    "api_base_url": "http://status_nginx_e2e_test:80/api", 
+    "api_key": "ЗДЕСЬ_КЛЮЧ_АГЕНТА_ДЛЯ_OID_9999",
+    "api_poll_interval_seconds": 10,
+    "default_check_interval_seconds": 20,
+    "max_api_retries": 1,
+    "retry_delay_seconds": 2,
+    "api_timeout_sec": 15
+}
