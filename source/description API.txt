@@ -1,3 +1,38 @@
+      
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!                                                                       !!!
+!!!                          ВНИМАНИЕ! УСТАРЕЛО!                          !!!
+!!!                                                                       !!!
+!!! ЭТО ОПИСАНИЕ ОТНОСИТСЯ К АРХИТЕКТУРЕ ПРОЕКТА ВЕРСИИ 4.x, КОТОРАЯ      !!!
+!!! ИСПОЛЬЗОВАЛА РАЗДЕЛЬНЫЕ ОНЛАЙН И ОФФЛАЙН АГЕНТЫ.                       !!!
+!!!                                                                       !!!
+!!! ПРОЕКТ ПЕРЕШЕЛ НА ВЕРСИЮ 5.x (И ВЫШЕ) С ИСПОЛЬЗОВАНИЕМ                !!!
+!!! ЕДИНОГО ГИБРИДНОГО АГЕНТА (Hybrid-Agent) И PIPELINE-ЗАДАНИЙ.          !!!
+!!!                                                                       !!!
+!!! АКТУАЛЬНУЮ ИНФОРМАЦИЮ СМОТРИТЕ В СЛЕДУЮЩИХ ФАЙЛАХ:                    !!!
+!!!   - README.md (в корневой папке проекта F:\status\source\)            !!!
+!!!   - postgres\readme.txt (описание актуальной схемы БД v5.x)           !!!
+!!!   - powershell\README.md (описание PowerShell компонентов v5.x)       !!!
+!!!   - status\app\readme.txt (описание бэкенд-приложения Flask v5.x)     !!!
+!!!                                                                       !!!
+!!! НЕ ИСПОЛЬЗУЙТЕ ДАННЫЙ ФАЙЛ КАК РУКОВОДСТВО К ТЕКУЩЕЙ ВЕРСИИ ПРОЕКТА!   !!!
+!!!                                                                       !!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!! ВНИМАНИЕ: ЭТО ОПИСАНИЕ ОТНОСИТСЯ К УСТАРЕВШЕЙ ВЕРСИИ ПРОЕКТА (v4.x)   !!!
+!!! Актуальная архитектура (v5.x и выше) основана на ГИБРИДНОМ АГЕНТЕ     !!!
+!!! и PIPELINE-ЗАДАНИЯХ.                                                  !!!
+!!!                                                                       !!!
+!!! Актуальное описание архитектуры см. в файлах:                         !!!
+!!!   - README.md (в корне проекта)                                       !!!
+!!!   - postgres\README.md (описание схемы БД v5.x)                       !!!
+!!!   - powershell\README.md (описание PowerShell компонентов v5.x)       !!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+--- Status Monitor (v4.x): Подробное Техническое Описание [УСТАРЕВШЕЕ] ---
+
+Это описание предоставляет глубокий взгляд на архитектуру, компоненты, потоки данных и конфигурацию системы мониторинга Status Monitor версии 4.x, которая использовала раздельные онлайн и оффлайн агенты.
+
 Хорошо, давай составим максимально подробное описание твоего проекта Status Monitor, включая компоненты, потоки данных, ключевые точки конфигурации и API.
 
 ---
@@ -98,261 +133,458 @@ graph TD
     style DB fill:#fc9,stroke:#333,stroke-width:2px
     style FS1 fill:#ccc,stroke:#333,stroke-width:1px,stroke-dasharray: 2 2
     style FS2 fill:#ccc,stroke:#333,stroke-width:1px,stroke-dasharray: 2 2
-```
 
-**Описание архитектуры:**
+    
 
-*   **Веб-сервер (Nginx):** Принимает все входящие HTTP-запросы. Отдает статические файлы (CSS, JS, иконки) напрямую. Проксирует динамические запросы (к API и страницам UI) на бэкенд-приложение Flask.
-*   **Бэкенд (Flask/Gunicorn):** Основное приложение.
-    *   Обрабатывает API-запросы от агентов, скриптов и веб-интерфейса.
-    *   Взаимодействует с базой данных для чтения и записи данных (через слой репозиториев).
-    *   Реализует бизнес-логику (например, расчет статуса узла).
-    *   Рендерит HTML-страницы для веб-интерфейса.
-    *   Управляет аутентификацией пользователей (UI) и API-ключей.
-*   **База данных (PostgreSQL):** Центральное хранилище всей конфигурации и истории. Содержит таблицы для сущностей (подразделения, узлы, типы), заданий, результатов проверок, событий, пользователей, API-ключей. Использует хранимые процедуры для некоторых операций.
-*   **Модуль PowerShell Utils (`StatusMonitorAgentUtils`):** Находится на машинах с агентами. Содержит:
-    *   **Диспетчер (`Invoke-StatusMonitorCheck`):** Единая точка входа для выполнения проверки. Принимает объект задания, находит нужный скрипт проверки в папке `Checks/` и запускает его локально.
-    *   **Скрипты проверок (`Checks/Check-*.ps1`):** Реализуют логику конкретных методов мониторинга (PING, SERVICE_STATUS и т.д.). Возвращают результат в стандартизированном формате.
-    *   **Вспомогательные функции** (например, `New-CheckResultObject`).
-*   **Онлайн-агент (`online-agent.ps1`):** Устанавливается на узлы с доступом к API. Периодически запрашивает задания у API, выполняет их с помощью `Invoke-StatusMonitorCheck` и немедленно отправляет результаты обратно в API.
-*   **Оффлайн-агент (`offline-agent.ps1`):** Устанавливается на узлы в изолированных сетях. Читает задания из локального файла (`*.json.status.*`), выполняет их с помощью `Invoke-StatusMonitorCheck`, собирает результаты и сохраняет их в файл (`*.zrpu`).
-*   **Конфигуратор (`generate_and_deliver_config.ps1`):** Вспомогательный скрипт (запускается администратором или по расписанию). Запрашивает у API конфигурацию для оффлайн-агентов и создает файлы `.json.status.*`, которые затем доставляются на машины с оффлайн-агентами.
-*   **Загрузчик (`result_loader.ps1`):** Вспомогательный скрипт (запускается регулярно). Сканирует папку с файлами `.zrpu`, читает их, отправляет каждый результат проверки в API и затем отправляет событие об обработке файла. Перемещает обработанные файлы.
+IGNORE_WHEN_COPYING_START
+Use code with caution. Text
+IGNORE_WHEN_COPYING_END
 
-### 3. Модель Данных и Хранение (База Данных PostgreSQL)
+Описание архитектуры:
 
-*   **Расположение:** `postgres/`
-*   **Хранит:**
-    *   **Конфигурация:**
-        *   `subdivisions`: Иерархия подразделений (ID, ObjectID, Name, Parent, Code...).
-        *   `nodes`: Узлы мониторинга (ID, Name, IP, SubdivisionID, TypeID...).
-        *   `node_types`: Иерархия типов узлов (ID, Name, Parent, Icon...).
-        *   `node_property_types`, `node_properties`: Свойства для типов узлов.
-        *   `check_methods`: Справочник методов проверки (ID, MethodName).
-        *   `node_check_assignments`: Задания на проверку (ID, NodeID, MethodID, Params, Interval...).
-        *   `users`: Пользователи UI (ID, Username, PasswordHash...).
-        *   `api_keys`: API-ключи (ID, KeyHash, Role, ObjectID...).
-        *   `offline_config_versions`: Версии файлов конфигурации для оффлайн-агентов.
-        *   `settings`: Глобальные настройки ключ-значение.
-    *   **История:**
-        *   `node_checks`: Результаты выполненных проверок (ID, AssignmentID, NodeID, IsAvailable, CheckSuccess, Timestamp...).
-        *   `node_check_details`: Детализированные результаты в JSONB (CheckID, Type, Data).
-        *   `system_events`: Системные события (ID, Timestamp, Type, Severity, Message...).
-*   **Ключевые Процедуры/Функции:**
-    *   `record_check_result()`: Записывает результат проверки, обновляет статус задания.
-    *   `generate_offline_config()`: Формирует JSON конфигурации для оффлайн-агента.
-    *   `get_active_assignments_for_object()`: Возвращает активные задания для онлайн-агента.
-    *   `get_node_base_info()`, `get_node_ping_status()`: Функции для получения агрегированных данных узлов.
+    Веб-сервер (Nginx): Принимает все входящие HTTP-запросы. Отдает статические файлы (CSS, JS, иконки) напрямую. Проксирует динамические запросы (к API и страницам UI) на бэкенд-приложение Flask.
 
-### 4. Компоненты: Детализация
+    Бэкенд (Flask/Gunicorn): Основное приложение.
 
-#### 4.1. PostgreSQL (`postgres/`)
+        Обрабатывает API-запросы от агентов, скриптов и веб-интерфейса.
 
-*   **Назначение:** Хранение данных.
-*   **Ключевые файлы:** `docker-compose.yaml` (настройка сервиса, портов, монтирования скриптов), `db_schema/`, `db_core_data/`, `db_seed_data/` (SQL скрипты для инициализации).
-*   **Конфигурация:** Переменные `POSTGRES_*` в `docker-compose.yaml`. **Важно:** `volume` для `postgres_data` для сохранения данных.
-*   **Взаимодействие:** Принимает SQL-запросы от Flask бэкенда.
+        Взаимодействует с базой данных для чтения и записи данных (через слой репозиториев).
 
-#### 4.2. Flask Бэкенд (`status/`)
+        Реализует бизнес-логику (например, расчет статуса узла).
 
-*   **Назначение:** API сервер, Веб-интерфейс, Бизнес-логика, Аутентификация.
-*   **Ключевые файлы/папки:**
-    *   `app/app.py`: Фабрика `create_app`.
-    *   `wsgi.py`: Точка входа Gunicorn.
-    *   `.env`: Файл с переменными окружения.
-    *   `requirements.txt`: Зависимости Python.
-    *   `app/routes/`: Blueprints с обработчиками HTTP-запросов (API и UI).
-    *   `app/repositories/`: Модули для взаимодействия с БД (SQL).
-    *   `app/services/`: Модули бизнес-логики (например, `node_service.py`).
-    *   `app/models/`: Модели данных (например, `User` для Flask-Login).
-    *   `app/templates/`: HTML шаблоны Jinja2.
-    *   `app/static/`: Статические файлы (CSS, JS, иконки).
-    *   `app/auth_utils.py`: Декоратор `@api_key_required`.
-    *   `app/commands.py`: Команды `flask ...`.
-    *   `app/db_connection.py`: Управление пулом соединений.
-*   **Конфигурация:**
-    *   `status/.env`:
-        *   `DATABASE_URL`: Строка подключения к БД.
-        *   `SECRET_KEY`: **Обязательный** секретный ключ для Flask сессий.
-        *   `FLASK_ENV`: `production` или `development`.
-*   **Взаимодействие:**
-    *   Принимает запросы от Nginx.
-    *   Общается с PostgreSQL через `psycopg2`.
-    *   Отдает JSON ответы для API.
-    *   Рендерит HTML для UI.
+        Рендерит HTML-страницы для веб-интерфейса.
 
-#### 4.3. Nginx (`status/nginx/`)
+        Управляет аутентификацией пользователей (UI) и API-ключей.
 
-*   **Назначение:** Обратный прокси, раздача статики, (опционально) терминирование SSL.
-*   **Ключевые файлы:** `nginx.conf` (конфигурация Nginx), `docker-compose.yaml` (в `status/`, настройка сервиса Nginx).
-*   **Конфигурация:**
-    *   `status/nginx/nginx.conf`: Настройки `server`, `location`, `proxy_pass`.
-    *   `status/docker-compose.yaml`: Порт (`48030:80`), монтирование конфига и статики.
-*   **Взаимодействие:**
-    *   Принимает внешние запросы на порт 48030.
-    *   Отдает файлы из `/app/static/` (смонтировано из `status/app/static/`).
-    *   Проксирует остальные запросы на сервис `web:5000`.
+    База данных (PostgreSQL): Центральное хранилище всей конфигурации и истории. Содержит таблицы для сущностей (подразделения, узлы, типы), заданий, результатов проверок, событий, пользователей, API-ключей. Использует хранимые процедуры для некоторых операций.
 
-#### 4.4. Модуль PowerShell Utils (`powershell/StatusMonitorAgentUtils/`)
+    Модуль PowerShell Utils (StatusMonitorAgentUtils): Находится на машинах с агентами. Содержит:
 
-*   **Назначение:** Централизованная логика выполнения проверок.
-*   **Ключевые файлы:**
-    *   `StatusMonitorAgentUtils.psm1`: Содержит `Invoke-StatusMonitorCheck`, `New-CheckResultObject`.
-    *   `StatusMonitorAgentUtils.psd1`: Манифест модуля.
-    *   `Checks/Check-*.ps1`: Скрипты для конкретных методов проверки.
-*   **Конфигурация:** Не имеет своей конфигурации, использует параметры, переданные от агента.
-*   **Взаимодействие:**
-    *   Импортируется агентами (`online-agent`, `offline-agent`).
-    *   `Invoke-StatusMonitorCheck` вызывается агентом.
-    *   `Invoke-StatusMonitorCheck` вызывает нужный скрипт `Checks/Check-*.ps1`.
-    *   Скрипты `Checks/Check-*.ps1` выполняют реальные действия (ping, Get-Service, Get-Volume и т.д.) на локальной машине или к целевому IP.
+        Диспетчер (Invoke-StatusMonitorCheck): Единая точка входа для выполнения проверки. Принимает объект задания, находит нужный скрипт проверки в папке Checks/ и запускает его локально.
 
-#### 4.5. Онлайн-Агент (`powershell/online-agent/`)
+        Скрипты проверок (Checks/Check-*.ps1): Реализуют логику конкретных методов мониторинга (PING, SERVICE_STATUS и т.д.). Возвращают результат в стандартизированном формате.
 
-*   **Назначение:** Мониторинг узлов с доступом к API.
-*   **Ключевые файлы:** `online-agent.ps1`, `config.json`.
-*   **Конфигурация (`config.json`):**
-    *   `object_id`: ID подразделения, к которому относится агент.
-    *   `apiBaseUrl`: URL API сервера (например, `http://localhost:48030/api`).
-    *   `api_key`: Ключ с ролью `agent`.
-    *   `api_poll_interval_seconds`: Как часто запрашивать задания.
-    *   `default_check_interval_seconds`: Интервал по умолчанию для выполнения проверок.
-    *   `logFile`, `LogLevel`.
-*   **Взаимодействие:**
-    *   `GET /api/v1/assignments`: Получение заданий (передает `object_id`, `X-API-Key`).
-    *   `Invoke-StatusMonitorCheck`: Вызов локального модуля для выполнения проверки.
-    *   `POST /api/v1/checks`: Отправка результата проверки (передает `assignment_id`, результат, `X-API-Key`).
+        Вспомогательные функции (например, New-CheckResultObject).
 
-#### 4.6. Оффлайн-Агент (`powershell/offline-agent/`)
+    Онлайн-агент (online-agent.ps1): Устанавливается на узлы с доступом к API. Периодически запрашивает задания у API, выполняет их с помощью Invoke-StatusMonitorCheck и немедленно отправляет результаты обратно в API.
 
-*   **Назначение:** Мониторинг узлов в изолированных сетях.
-*   **Ключевые файлы:** `offline-agent.ps1`, `config.json`.
-*   **Конфигурация (`config.json`):**
-    *   `object_id`: ID подразделения.
-    *   `check_interval_seconds`: Интервал выполнения *всех* проверок и генерации `.zrpu`.
-    *   `output_path`: Папка для сохранения файлов `.zrpu`.
-    *   `output_name_template`: Шаблон имени файла `.zrpu`.
-    *   `assignments_file_path`: **Папка**, где искать файл конфигурации заданий (`*.json.status.*`).
-    *   `logFile`, `LogLevel`.
-*   **Взаимодействие:**
-    *   Чтение файла `*.json.status.*` из `assignments_file_path`.
-    *   `Invoke-StatusMonitorCheck`: Вызов локального модуля для выполнения проверки.
-    *   Запись файла `*.zrpu` в `output_path`.
+    Оффлайн-агент (offline-agent.ps1): Устанавливается на узлы в изолированных сетях. Читает задания из локального файла (*.json.status.*), выполняет их с помощью Invoke-StatusMonitorCheck, собирает результаты и сохраняет их в файл (*.zrpu).
 
-#### 4.7. Конфигуратор (`powershell/configurator/`)
+    Конфигуратор (generate_and_deliver_config.ps1): Вспомогательный скрипт (запускается администратором или по расписанию). Запрашивает у API конфигурацию для оффлайн-агентов и создает файлы .json.status.*, которые затем доставляются на машины с оффлайн-агентами.
 
-*   **Назначение:** Генерация файлов конфигурации для оффлайн-агентов.
-*   **Ключевые файлы:** `generate_and_deliver_config.ps1`, `config.json`.
-*   **Конфигурация (`config.json`):**
-    *   `api_base_url`, `api_key` (с ролью `configurator`).
-    *   `output_path_base`: Куда локально сохранять конфиги.
-    *   `delivery_path_base`, `delivery_subdir_template`: Куда доставлять конфиги.
-    *   `subdivision_ids_to_process`: Список ID для обработки (или пустой для всех с кодом ТС).
-    *   `output_filename_template`: Шаблон имени файла конфигурации.
-*   **Взаимодействие:**
-    *   `GET /api/v1/subdivisions` (опционально, если `subdivision_ids_to_process` пуст).
-    *   `GET /api/v1/objects/{id}/offline_config`: Получение конфигурации для конкретного `ObjectId`.
-    *   Запись файла `*.json.status.*`.
-    *   Копирование файла в папку доставки.
+    Загрузчик (result_loader.ps1): Вспомогательный скрипт (запускается регулярно). Сканирует папку с файлами .zrpu, читает их, отправляет каждый результат проверки в API и затем отправляет событие об обработке файла. Перемещает обработанные файлы.
 
-#### 4.8. Загрузчик Результатов (`powershell/result_loader/`)
+3. Модель Данных и Хранение (База Данных PostgreSQL)
 
-*   **Назначение:** Загрузка результатов оффлайн-агентов в API.
-*   **Ключевые файлы:** `result_loader.ps1`, `config.json`.
-*   **Конфигурация (`config.json`):**
-    *   `api_base_url`, `api_key` (с ролью `loader`).
-    *   `check_folder`: Папка, где лежат файлы `.zrpu`.
-    *   `logFile`, `LogLevel`, `scan_interval_seconds`, параметры ретраев API.
-*   **Взаимодействие:**
-    *   Чтение файлов `*.zrpu` из `check_folder`.
-    *   `POST /api/v1/checks`: Отправка **каждого** результата проверки из файла (передает `assignment_id`, результат, версии, `X-API-Key`).
-    *   `POST /api/v1/events`: Отправка события `FILE_PROCESSED` после обработки файла (передает статистику, `X-API-Key`).
-    *   Перемещение обработанных файлов в `Processed` или `Error`.
+    Расположение: postgres/
 
-### 5. Ключевые Потоки Данных (Workflows)
+    Хранит:
 
-*(Повторение сценариев из основного README с акцентом на данные)*
+        Конфигурация:
 
-*   **Онлайн-Агент:**
-    1.  `GET /assignments` (Auth: API Key 'agent') -> API -> DB -> API возвращает JSON (массив объектов заданий).
-    2.  Агент -> `Invoke-StatusMonitorCheck(Assignment)` -> `Check-*.ps1(Params)` -> Скрипт возвращает Hashtable (результат).
-    3.  Агент -> `POST /checks` (Auth: API Key 'agent', Body: JSON с `assignment_id`, `is_available`, `details` из результата) -> API -> DB `CALL record_check_result(...)`.
-*   **Оффлайн-Агент + Компоненты:**
-    1.  Конфигуратор -> `GET /objects/{id}/offline_config` (Auth: API Key 'configurator') -> API -> DB `CALL generate_offline_config(...)` -> API возвращает JSON (конфиг с заданиями и версией).
-    2.  Конфигуратор -> Запись файла `Version_ID_...json.status.Code`.
-    3.  Файл доставляется Агенту.
-    4.  Агент читает JSON, получает `assignments` и `assignment_config_version`.
-    5.  Агент -> `Invoke-StatusMonitorCheck(Assignment)` -> `Check-*.ps1(Params)` -> Скрипт возвращает Hashtable (результат).
-    6.  Агент **добавляет `assignment_id`** к Hashtable результата.
-    7.  Агент собирает все результаты + `agent_script_version` + `assignment_config_version` -> Запись файла `Timestamp_ID_...zrpu`.
-    8.  Файл `.zrpu` доставляется Загрузчику.
-    9.  Загрузчик читает `.zrpu`, извлекает метаданные и массив `results`.
-    10. Для каждого `result` из массива: Загрузчик -> `POST /checks` (Auth: API Key 'loader', Body: JSON с `assignment_id` из result, `is_available`, `details`, а также `agent_script_version` и `assignment_config_version` из метаданных файла) -> API -> DB `CALL record_check_result(...)`.
-    11. Загрузчик -> `POST /events` (Auth: API Key 'loader', Body: JSON события `FILE_PROCESSED`) -> API -> DB.
-    12. Загрузчик перемещает `.zrpu`.
+            subdivisions: Иерархия подразделений (ID, ObjectID, Name, Parent, Code...).
 
-### 6. Сводка API Эндпоинтов (`/api/v1/...`)
+            nodes: Узлы мониторинга (ID, Name, IP, SubdivisionID, TypeID...).
 
-*   **Взаимодействие с Агентами:**
-    *   `GET /assignments?object_id={id}`: (Online-Агент, Key: `agent`) Получить активные задания для объекта.
-    *   `GET /objects/{id}/offline_config`: (Конфигуратор, Key: `configurator`) Получить JSON конфигурации для оффлайн-агента.
-    *   `POST /checks`: (Online-Агент, Загрузчик, Key: `agent` или `loader`) Принять результат одной проверки. Ожидает JSON с `assignment_id`, `is_available` и др.
-*   **Получение Данных для UI:**
-    *   `GET /dashboard`: Данные для сводки.
-    *   `GET /status_detailed`: Полные данные узлов со статусами для детальной таблицы.
-    *   `GET /events`: Список системных событий с фильтрами.
-    *   `GET /node_checks/{id}/details`: Детали конкретной проверки.
-    *   `GET /nodes/{id}/assignments_status`: Статус всех заданий для узла.
-    *   `GET /assignments/{id}/checks_history`: История проверок для задания.
-    *   `GET /nodes/{id}/checks_history`: История проверок для узла.
-    *   `GET /check_methods`: Список доступных методов проверки.
-    *   `GET /node_property_types`: Список типов свойств узлов.
-*   **Управление Сущностями (Требуют Login или API Key 'admin'):**
-    *   `GET, POST /nodes`: Список узлов (с фильтрами/пагинацией), создание узла.
-    *   `GET, PUT, DELETE /nodes/{id}`: Получение, обновление, удаление узла.
-    *   `GET, POST /subdivisions`: Список подразделений, создание.
-    *   `GET, PUT, DELETE /subdivisions/{id}`: Получение, обновление, удаление.
-    *   `GET, POST /node_types`: Список типов узлов, создание.
-    *   `GET, PUT, DELETE /node_types/{id}`: Получение, обновление, удаление.
-    *   `GET, PUT /node_types/{id}/properties`: Получение/установка свойств для типа.
-    *   `DELETE /node_types/{type_id}/properties/{prop_id}`: Удаление свойства у типа.
-    *   `GET /assignments/all`: Список всех заданий (с фильтрами/пагинацией).
-    *   `POST /assignments/bulk_create`: Массовое создание/назначение заданий.
-    *   `GET, PUT, DELETE /assignments/{id}`: Получение, обновление, удаление задания.
-    *   `GET, POST /api_keys`: Список API ключей, создание нового ключа.
-    *   `PUT, DELETE /api_keys/{id}`: Обновление, удаление ключа.
-*   **Системные:**
-    *   `GET /health`: Проверка состояния сервиса и БД.
-    *   `POST /events`: (Загрузчик, Key: `loader`) Запись системного события.
+            node_types: Иерархия типов узлов (ID, Name, Parent, Icon...).
 
-### 7. Ключевые Переменные и Конфигурация
+            node_property_types, node_properties: Свойства для типов узлов.
 
-*   **Бэкенд (`status/.env`):**
-    *   `DATABASE_URL`: Строка подключения к PostgreSQL.
-    *   `SECRET_KEY`: Секрет для подписи сессий Flask.
-    *   `FLASK_ENV`: Режим работы (`production`/`development`).
-*   **База данных (`postgres/docker-compose.yaml`):**
-    *   `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: Учетные данные и имя БД.
-    *   Монтирование `postgres_data`: Включение/выключение сохранения данных.
-*   **Online-Агент (`powershell/online-agent/config.json`):**
-    *   `object_id`: ID объекта агента.
-    *   `apiBaseUrl`: URL API сервера.
-    *   `api_key`: Ключ роли `agent`.
-    *   `api_poll_interval_seconds`, `default_check_interval_seconds`: Интервалы.
-*   **Offline-Агент (`powershell/offline-agent/config.json`):**
-    *   `object_id`: ID объекта агента.
-    *   `assignments_file_path`: Папка для поиска файла с заданиями.
-    *   `output_path`: Папка для сохранения `.zrpu`.
-    *   `check_interval_seconds`: Интервал выполнения всех проверок.
-*   **Конфигуратор (`powershell/configurator/config.json`):**
-    *   `api_base_url`, `api_key` (роль `configurator`).
-    *   `output_path_base`, `delivery_path_base`: Пути для генерации/доставки.
-    *   `subdivision_ids_to_process`: Список ID или пустой массив.
-*   **Загрузчик (`powershell/result_loader/config.json`):**
-    *   `api_base_url`, `api_key` (роль `loader`).
-    *   `check_folder`: Папка для сканирования `.zrpu`.
-    *   `scan_interval_seconds`: Интервал сканирования.
+            check_methods: Справочник методов проверки (ID, MethodName).
 
----
+            node_check_assignments: Задания на проверку (ID, NodeID, MethodID, Params, Interval...).
 
-Это описание должно дать полное представление о том, как устроен и работает твой проект Status Monitor. Оно может служить основой для дальнейшей документации или для объяснения системы другим разработчикам. Если какой-то аспект нужно раскрыть еще подробнее, дай знать!
+            users: Пользователи UI (ID, Username, PasswordHash...).
+
+            api_keys: API-ключи (ID, KeyHash, Role, ObjectID...).
+
+            offline_config_versions: Версии файлов конфигурации для оффлайн-агентов.
+
+            settings: Глобальные настройки ключ-значение.
+
+        История:
+
+            node_checks: Результаты выполненных проверок (ID, AssignmentID, NodeID, IsAvailable, CheckSuccess, Timestamp...).
+
+            node_check_details: Детализированные результаты в JSONB (CheckID, Type, Data).
+
+            system_events: Системные события (ID, Timestamp, Type, Severity, Message...).
+
+    Ключевые Процедуры/Функции:
+
+        record_check_result(): Записывает результат проверки, обновляет статус задания.
+
+        generate_offline_config(): Формирует JSON конфигурации для оффлайн-агента.
+
+        get_active_assignments_for_object(): Возвращает активные задания для онлайн-агента.
+
+        get_node_base_info(), get_node_ping_status(): Функции для получения агрегированных данных узлов.
+
+4. Компоненты: Детализация
+4.1. PostgreSQL (postgres/)
+
+    Назначение: Хранение данных.
+
+    Ключевые файлы: docker-compose.yaml (настройка сервиса, портов, монтирования скриптов), db_schema/, db_core_data/, db_seed_data/ (SQL скрипты для инициализации).
+
+    Конфигурация: Переменные POSTGRES_* в docker-compose.yaml. Важно: volume для postgres_data для сохранения данных.
+
+    Взаимодействие: Принимает SQL-запросы от Flask бэкенда.
+
+4.2. Flask Бэкенд (status/)
+
+    Назначение: API сервер, Веб-интерфейс, Бизнес-логика, Аутентификация.
+
+    Ключевые файлы/папки:
+
+        app/app.py: Фабрика create_app.
+
+        wsgi.py: Точка входа Gunicorn.
+
+        .env: Файл с переменными окружения.
+
+        requirements.txt: Зависимости Python.
+
+        app/routes/: Blueprints с обработчиками HTTP-запросов (API и UI).
+
+        app/repositories/: Модули для взаимодействия с БД (SQL).
+
+        app/services/: Модули бизнес-логики (например, node_service.py).
+
+        app/models/: Модели данных (например, User для Flask-Login).
+
+        app/templates/: HTML шаблоны Jinja2.
+
+        app/static/: Статические файлы (CSS, JS, иконки).
+
+        app/auth_utils.py: Декоратор @api_key_required.
+
+        app/commands.py: Команды flask ....
+
+        app/db_connection.py: Управление пулом соединений.
+
+    Конфигурация:
+
+        status/.env:
+
+            DATABASE_URL: Строка подключения к БД.
+
+            SECRET_KEY: Обязательный секретный ключ для Flask сессий.
+
+            FLASK_ENV: production или development.
+
+    Взаимодействие:
+
+        Принимает запросы от Nginx.
+
+        Общается с PostgreSQL через psycopg2.
+
+        Отдает JSON ответы для API.
+
+        Рендерит HTML для UI.
+
+4.3. Nginx (status/nginx/)
+
+    Назначение: Обратный прокси, раздача статики, (опционально) терминирование SSL.
+
+    Ключевые файлы: nginx.conf (конфигурация Nginx), docker-compose.yaml (в status/, настройка сервиса Nginx).
+
+    Конфигурация:
+
+        status/nginx/nginx.conf: Настройки server, location, proxy_pass.
+
+        status/docker-compose.yaml: Порт (48030:80), монтирование конфига и статики.
+
+    Взаимодействие:
+
+        Принимает внешние запросы на порт 48030.
+
+        Отдает файлы из /app/static/ (смонтировано из status/app/static/).
+
+        Проксирует остальные запросы на сервис web:5000.
+
+4.4. Модуль PowerShell Utils (powershell/StatusMonitorAgentUtils/)
+
+    Назначение: Централизованная логика выполнения проверок.
+
+    Ключевые файлы:
+
+        StatusMonitorAgentUtils.psm1: Содержит Invoke-StatusMonitorCheck, New-CheckResultObject.
+
+        StatusMonitorAgentUtils.psd1: Манифест модуля.
+
+        Checks/Check-*.ps1: Скрипты для конкретных методов проверки.
+
+    Конфигурация: Не имеет своей конфигурации, использует параметры, переданные от агента.
+
+    Взаимодействие:
+
+        Импортируется агентами (online-agent, offline-agent).
+
+        Invoke-StatusMonitorCheck вызывается агентом.
+
+        Invoke-StatusMonitorCheck вызывает нужный скрипт Checks/Check-*.ps1.
+
+        Скрипты Checks/Check-*.ps1 выполняют реальные действия (ping, Get-Service, Get-Volume и т.д.) на локальной машине или к целевому IP.
+
+4.5. Онлайн-Агент (powershell/online-agent/)
+
+    Назначение: Мониторинг узлов с доступом к API.
+
+    Ключевые файлы: online-agent.ps1, config.json.
+
+    Конфигурация (config.json):
+
+        object_id: ID подразделения, к которому относится агент.
+
+        apiBaseUrl: URL API сервера (например, http://localhost:48030/api).
+
+        api_key: Ключ с ролью agent.
+
+        api_poll_interval_seconds: Как часто запрашивать задания.
+
+        default_check_interval_seconds: Интервал по умолчанию для выполнения проверок.
+
+        logFile, LogLevel.
+
+    Взаимодействие:
+
+        GET /api/v1/assignments: Получение заданий (передает object_id, X-API-Key).
+
+        Invoke-StatusMonitorCheck: Вызов локального модуля для выполнения проверки.
+
+        POST /api/v1/checks: Отправка результата проверки (передает assignment_id, результат, X-API-Key).
+
+4.6. Оффлайн-Агент (powershell/offline-agent/)
+
+    Назначение: Мониторинг узлов в изолированных сетях.
+
+    Ключевые файлы: offline-agent.ps1, config.json.
+
+    Конфигурация (config.json):
+
+        object_id: ID подразделения.
+
+        check_interval_seconds: Интервал выполнения всех проверок и генерации .zrpu.
+
+        output_path: Папка для сохранения файлов .zrpu.
+
+        output_name_template: Шаблон имени файла .zrpu.
+
+        assignments_file_path: Папка, где искать файл конфигурации заданий (*.json.status.*).
+
+        logFile, LogLevel.
+
+    Взаимодействие:
+
+        Чтение файла *.json.status.* из assignments_file_path.
+
+        Invoke-StatusMonitorCheck: Вызов локального модуля для выполнения проверки.
+
+        Запись файла *.zrpu в output_path.
+
+4.7. Конфигуратор (powershell/configurator/)
+
+    Назначение: Генерация файлов конфигурации для оффлайн-агентов.
+
+    Ключевые файлы: generate_and_deliver_config.ps1, config.json.
+
+    Конфигурация (config.json):
+
+        api_base_url, api_key (с ролью configurator).
+
+        output_path_base: Куда локально сохранять конфиги.
+
+        delivery_path_base, delivery_subdir_template: Куда доставлять конфиги.
+
+        subdivision_ids_to_process: Список ID для обработки (или пустой для всех с кодом ТС).
+
+        output_filename_template: Шаблон имени файла конфигурации.
+
+    Взаимодействие:
+
+        GET /api/v1/subdivisions (опционально, если subdivision_ids_to_process пуст).
+
+        GET /api/v1/objects/{id}/offline_config: Получение конфигурации для конкретного ObjectId.
+
+        Запись файла *.json.status.*.
+
+        Копирование файла в папку доставки.
+
+4.8. Загрузчик Результатов (powershell/result_loader/)
+
+    Назначение: Загрузка результатов оффлайн-агентов в API.
+
+    Ключевые файлы: result_loader.ps1, config.json.
+
+    Конфигурация (config.json):
+
+        api_base_url, api_key (с ролью loader).
+
+        check_folder: Папка, где лежат файлы .zrpu.
+
+        logFile, LogLevel, scan_interval_seconds, параметры ретраев API.
+
+    Взаимодействие:
+
+        Чтение файлов *.zrpu из check_folder.
+
+        POST /api/v1/checks: Отправка каждого результата проверки из файла (передает assignment_id, результат, версии, X-API-Key).
+
+        POST /api/v1/events: Отправка события FILE_PROCESSED после обработки файла (передает статистику, X-API-Key).
+
+        Перемещение обработанных файлов в Processed или Error.
+
+5. Ключевые Потоки Данных (Workflows)
+
+(Повторение сценариев из основного README с акцентом на данные)
+
+    Онлайн-Агент:
+
+        GET /assignments (Auth: API Key 'agent') -> API -> DB -> API возвращает JSON (массив объектов заданий).
+
+        Агент -> Invoke-StatusMonitorCheck(Assignment) -> Check-*.ps1(Params) -> Скрипт возвращает Hashtable (результат).
+
+        Агент -> POST /checks (Auth: API Key 'agent', Body: JSON с assignment_id, is_available, details из результата) -> API -> DB CALL record_check_result(...).
+
+    Оффлайн-Агент + Компоненты:
+
+        Конфигуратор -> GET /objects/{id}/offline_config (Auth: API Key 'configurator') -> API -> DB CALL generate_offline_config(...) -> API возвращает JSON (конфиг с заданиями и версией).
+
+        Конфигуратор -> Запись файла Version_ID_...json.status.Code.
+
+        Файл доставляется Агенту.
+
+        Агент читает JSON, получает assignments и assignment_config_version.
+
+        Агент -> Invoke-StatusMonitorCheck(Assignment) -> Check-*.ps1(Params) -> Скрипт возвращает Hashtable (результат).
+
+        Агент добавляет assignment_id к Hashtable результата.
+
+        Агент собирает все результаты + agent_script_version + assignment_config_version -> Запись файла Timestamp_ID_...zrpu.
+
+        Файл .zrpu доставляется Загрузчику.
+
+        Загрузчик читает .zrpu, извлекает метаданные и массив results.
+
+        Для каждого result из массива: Загрузчик -> POST /checks (Auth: API Key 'loader', Body: JSON с assignment_id из result, is_available, details, а также agent_script_version и assignment_config_version из метаданных файла) -> API -> DB CALL record_check_result(...).
+
+        Загрузчик -> POST /events (Auth: API Key 'loader', Body: JSON события FILE_PROCESSED) -> API -> DB.
+
+        Загрузчик перемещает .zrpu.
+
+6. Сводка API Эндпоинтов (/api/v1/...)
+
+    Взаимодействие с Агентами:
+
+        GET /assignments?object_id={id}: (Online-Агент, Key: agent) Получить активные задания для объекта.
+
+        GET /objects/{id}/offline_config: (Конфигуратор, Key: configurator) Получить JSON конфигурации для оффлайн-агента.
+
+        POST /checks: (Online-Агент, Загрузчик, Key: agent или loader) Принять результат одной проверки. Ожидает JSON с assignment_id, is_available и др.
+
+    Получение Данных для UI:
+
+        GET /dashboard: Данные для сводки.
+
+        GET /status_detailed: Полные данные узлов со статусами для детальной таблицы.
+
+        GET /events: Список системных событий с фильтрами.
+
+        GET /node_checks/{id}/details: Детали конкретной проверки.
+
+        GET /nodes/{id}/assignments_status: Статус всех заданий для узла.
+
+        GET /assignments/{id}/checks_history: История проверок для задания.
+
+        GET /nodes/{id}/checks_history: История проверок для узла.
+
+        GET /check_methods: Список доступных методов проверки.
+
+        GET /node_property_types: Список типов свойств узлов.
+
+    Управление Сущностями (Требуют Login или API Key 'admin'):
+
+        GET, POST /nodes: Список узлов (с фильтрами/пагинацией), создание узла.
+
+        GET, PUT, DELETE /nodes/{id}: Получение, обновление, удаление узла.
+
+        GET, POST /subdivisions: Список подразделений, создание.
+
+        GET, PUT, DELETE /subdivisions/{id}: Получение, обновление, удаление.
+
+        GET, POST /node_types: Список типов узлов, создание.
+
+        GET, PUT, DELETE /node_types/{id}: Получение, обновление, удаление.
+
+        GET, PUT /node_types/{id}/properties: Получение/установка свойств для типа.
+
+        DELETE /node_types/{type_id}/properties/{prop_id}: Удаление свойства у типа.
+
+        GET /assignments/all: Список всех заданий (с фильтрами/пагинацией).
+
+        POST /assignments/bulk_create: Массовое создание/назначение заданий.
+
+        GET, PUT, DELETE /assignments/{id}: Получение, обновление, удаление задания.
+
+        GET, POST /api_keys: Список API ключей, создание нового ключа.
+
+        PUT, DELETE /api_keys/{id}: Обновление, удаление ключа.
+
+    Системные:
+
+        GET /health: Проверка состояния сервиса и БД.
+
+        POST /events: (Загрузчик, Key: loader) Запись системного события.
+
+7. Ключевые Переменные и Конфигурация
+
+    Бэкенд (status/.env):
+
+        DATABASE_URL: Строка подключения к PostgreSQL.
+
+        SECRET_KEY: Секрет для подписи сессий Flask.
+
+        FLASK_ENV: Режим работы (production/development).
+
+    База данных (postgres/docker-compose.yaml):
+
+        POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB: Учетные данные и имя БД.
+
+        Монтирование postgres_data: Включение/выключение сохранения данных.
+
+    Online-Агент (powershell/online-agent/config.json):
+
+        object_id: ID объекта агента.
+
+        apiBaseUrl: URL API сервера.
+
+        api_key: Ключ роли agent.
+
+        api_poll_interval_seconds, default_check_interval_seconds: Интервалы.
+
+    Offline-Агент (powershell/offline-agent/config.json):
+
+        object_id: ID объекта агента.
+
+        assignments_file_path: Папка для поиска файла с заданиями.
+
+        output_path: Папка для сохранения .zrpu.
+
+        check_interval_seconds: Интервал выполнения всех проверок.
+
+    Конфигуратор (powershell/configurator/config.json):
+
+        api_base_url, api_key (роль configurator).
+
+        output_path_base, delivery_path_base: Пути для генерации/доставки.
+
+        subdivision_ids_to_process: Список ID или пустой массив.
+
+    Загрузчик (powershell/result_loader/config.json):
+
+        api_base_url, api_key (роль loader).
+
+        check_folder: Папка для сканирования .zrpu.
+
+        scan_interval_seconds: Интервал сканирования.

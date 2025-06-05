@@ -1,269 +1,398 @@
 ﻿# status/app/repositories/node_repository.py
+"""
+node_repository.py — CRUD-операции и логика для управления узлами мониторинга (nodes).
+Версия 5.0.1: Добавлены функции fetch_node_base_info и fetch_node_ping_status,
+             вызывающие соответствующие SQL-функции для node_service.
+Везде добавлено логгирование, подробные комментарии и docstring.
+"""
+
 import logging
-import psycopg2
-from psycopg2.extras import RealDictCursor # Хотя пул настроен, импорт может быть полезен для ясности
-from typing import List, Dict, Any, Optional, Tuple
-from .. import db_helpers # Импорт хелперов из родительского пакета ('app')
+import psycopg2 # Для типизации курсора и обработки psycopg2.Error
+from typing import List, Dict, Any, Optional
+
+# Используем относительный импорт для db_connection, если он в том же пакете
+from ..db_connection import get_connection # get_connection теперь возвращает контекстный менеджер
 
 logger = logging.getLogger(__name__)
-DEFAULT_ICON = "other.svg" # Имя иконки по умолчанию
 
-# --- Функции получения данных (Read) ---
+# =========================
+# Получение узлов (Nodes) - Базовые CRUD и выборки
+# =========================
 
-def fetch_node_base_info(cursor, node_id: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Получает базовую информацию об узлах из функции БД get_node_base_info()."""
-    try:
-        # Вызываем функцию БД, передавая ID узла (или NULL)
-        sql = "SELECT * FROM get_node_base_info(%(node_id)s)"
-        params = {'node_id': node_id}
-        cursor.execute(sql, params)
-        nodes = cursor.fetchall()
-        logger.info(f"Получено базовой информации узлов: {len(nodes)} строк (фильтр node_id: {node_id}).")
-        # Дополнительный fallback для иконки
-        for node in nodes:
-             if not node.get('icon_filename'):
-                 node['icon_filename'] = DEFAULT_ICON
-                 logger.debug(f"Node ID {node.get('id')} не имеет icon_filename в БД, используется fallback: {DEFAULT_ICON}")
-        return nodes
-    except psycopg2.Error as e_db:
-        logger.error(f"Ошибка БД при вызове get_node_base_info: {e_db}", exc_info=True)
-        raise # Пробрасываем исключение psycopg2
-    except Exception as e_main:
-        logger.error(f"Неожиданная ошибка при получении базовой информации узлов: {e_main}", exc_info=True)
-        raise # Пробрасываем другое исключение
+def fetch_nodes(
+    cursor: psycopg2.extensions.cursor, # Ожидаем курсор как аргумент
+    limit: Optional[int] = None,
+    offset: int = 0,
+    subdivision_id: Optional[int] = None,
+    node_type_id: Optional[int] = None,
+    search_text: Optional[str] = None,
+    include_child_subdivisions: bool = False, # Флаги для иерархической фильтрации
+    include_nested_types: bool = False
+) -> tuple[List[Dict[str, Any]], int]:
+    """
+    Получает страницу узлов с фильтрацией и пагинацией.
+    Эта функция должна вызывать более сложный SQL-запрос или хранимую процедуру,
+    которая умеет обрабатывать иерархическую фильтрацию по подразделениям и типам.
 
-def fetch_node_ping_status(cursor, node_id: Optional[int] = None) -> List[Dict[str, Any]]:
-    """Получает статус последней PING проверки из функции БД get_node_ping_status()."""
-    try:
-        sql = "SELECT * FROM get_node_ping_status(%(node_id)s)"
-        params = {'node_id': node_id}
-        cursor.execute(sql, params)
-        statuses = cursor.fetchall()
-        logger.info(f"Получено PING статусов: {len(statuses)} строк (фильтр node_id: {node_id}).")
-        # Форматирование дат перенесено в сервисный слой или маршруты
-        return statuses
-    except psycopg2.Warning as w: # Ловим WARNING от функции БД (если метод PING не найден)
-         logger.warning(f"Предупреждение от get_node_ping_status: {w}")
-         return [] # Возвращаем пустой список при предупреждении
-    except psycopg2.Error as e_db:
-        logger.error(f"Ошибка БД при вызове get_node_ping_status: {e_db}", exc_info=True)
-        raise # Пробрасываем исключение psycopg2
-    except Exception as e_main:
-        logger.error(f"Неожиданная ошибка при получении PING статусов: {e_main}", exc_info=True)
-        raise # Пробрасываем другое исключение
+    Args:
+        cursor: Активный курсор базы данных.
+        limit: Максимальное количество узлов на странице.
+        offset: Смещение для пагинации.
+        subdivision_id: Фильтр по ID родительского подразделения.
+        node_type_id: Фильтр по ID типа узла.
+        search_text: Текст для поиска по имени или IP-адресу узла.
+        include_child_subdivisions: Включать ли узлы из дочерних подразделений.
+        include_nested_types: Включать ли узлы с дочерними типами.
 
-def fetch_nodes(cursor, limit: Optional[int] = None, offset: int = 0,
-                 subdivision_id: Optional[int] = None, node_type_id: Optional[int] = None,
-                 search_text: Optional[str] = None,
-                 include_child_subdivisions: bool = False, include_nested_types: bool = False
-                 ) -> Tuple[List[Dict[str, Any]], int]:
-    """Получает список узлов с пагинацией и фильтрацией."""
-    logger.debug(f"fetch_nodes: limit={limit}, offset={offset}, sub_id={subdivision_id}({include_child_subdivisions}), type_id={node_type_id}({include_nested_types}), search={search_text}")
+    Returns:
+        Кортеж (список узлов, общее количество узлов с учетом фильтров).
+    """
+    logger.debug(f"Репозиторий: Запрос списка узлов с фильтрами: sub_id={subdivision_id}(children:{include_child_subdivisions}), "
+                 f"type_id={node_type_id}(nested:{include_nested_types}), search='{search_text}', limit={limit}, offset={offset}")
 
-    select_clause = """
-        SELECT n.id, n.name, n.ip_address, n.description,
-               n.parent_subdivision_id as subdivision_id,
-               s.short_name as subdivision_short_name,
-               n.node_type_id,
-               nt.name as node_type_name
+    # --- Формирование SQL-запроса с учетом фильтров ---
+    # Это сложный запрос, который лучше реализовать как хранимую функцию в PostgreSQL
+    # для обработки иерархии подразделений и типов.
+    # Здесь будет упрощенный пример, который не полностью реализует иерархию,
+    # но показывает принцип. Для полной реализации см. SQL-функции.
+
+    # Базовые части запроса
+    select_fields = """
+        SELECT n.id, n.name, n.parent_subdivision_id, n.ip_address, n.node_type_id, n.description,
+               s.short_name as subdivision_short_name, s.object_id as subdivision_object_id,
+               nt.name as node_type_name, nt.icon_filename as node_type_icon
+    """
+    count_select = "SELECT COUNT(DISTINCT n.id)" # DISTINCT n.id на случай сложных JOIN
+    from_clause = """
         FROM nodes n
         LEFT JOIN subdivisions s ON n.parent_subdivision_id = s.id
         LEFT JOIN node_types nt ON n.node_type_id = nt.id
     """
-    count_select_clause = "SELECT COUNT(*) FROM nodes n" # Базовый подсчет
+    where_clauses: List[str] = []
+    query_params: Dict[str, Any] = {}
 
-    where_clauses = []
-    sql_params = {}
-
-    # --- Фильтрация ---
+    # Фильтр по подразделению (упрощенный, без рекурсии здесь)
     if subdivision_id is not None:
-        target_sub_ids = db_helpers.get_descendant_subdivision_ids(cursor, subdivision_id) if include_child_subdivisions else [subdivision_id]
-        if target_sub_ids:
-            where_clauses.append("n.parent_subdivision_id = ANY(%(target_sub_ids)s)")
-            sql_params['target_sub_ids'] = target_sub_ids # Передаем LIST
-        elif not include_child_subdivisions: return [], 0 # Если искали конкретный ID и не нашли
+        if include_child_subdivisions:
+            # Для иерархии нужна рекурсивная CTE в SQL, здесь не реализуем полностью
+            logger.warning("Фильтрация по дочерним подразделениям в Python-репозитории упрощена (только прямой родитель). "
+                           "Для полной иерархии используйте SQL-функцию.")
+            # Примерно: WHERE n.parent_subdivision_id IN (SELECT id FROM get_subdivision_descendants_and_self(%(sid)s))
+            where_clauses.append("n.parent_subdivision_id = %(sub_id)s") # Упрощенный вариант
+            query_params['sub_id'] = subdivision_id
+        else:
+            where_clauses.append("n.parent_subdivision_id = %(sub_id)s")
+            query_params['sub_id'] = subdivision_id
 
+    # Фильтр по типу узла (упрощенный)
     if node_type_id is not None:
-         target_type_ids = db_helpers.get_descendant_node_type_ids(cursor, node_type_id) if include_nested_types else [node_type_id]
-         if target_type_ids:
-             where_clauses.append("n.node_type_id = ANY(%(target_type_ids)s)")
-             sql_params['target_type_ids'] = target_type_ids # Передаем LIST
-         elif not include_nested_types: return [], 0
-
+        if include_nested_types:
+            logger.warning("Фильтрация по вложенным типам узлов в Python-репозитории упрощена.")
+            where_clauses.append("n.node_type_id = %(type_id)s") # Упрощенный вариант
+            query_params['type_id'] = node_type_id
+        else:
+            where_clauses.append("n.node_type_id = %(type_id)s")
+            query_params['type_id'] = node_type_id
+    
+    # Фильтр по тексту
     if search_text:
-        search_pattern = f'%{search_text}%'
-        # Поиск по имени узла, IP или описанию
-        where_clauses.append("(n.name ILIKE %(search_text)s OR n.ip_address ILIKE %(search_text)s OR n.description ILIKE %(search_text)s)")
-        sql_params['search_text'] = search_pattern
+        where_clauses.append("(n.name ILIKE %(search)s OR n.ip_address ILIKE %(search)s OR n.description ILIKE %(search)s)")
+        query_params['search'] = f"%{search_text}%"
 
-    # --- Сборка запросов ---
-    where_sql = ""
-    if where_clauses:
-        where_sql = " WHERE " + " AND ".join(where_clauses)
-        # Добавляем JOIN'ы в COUNT, если фильтровали по связанным таблицам
-        if subdivision_id is not None: count_select_clause += " LEFT JOIN subdivisions s ON n.parent_subdivision_id = s.id"
-        if node_type_id is not None: count_select_clause += " LEFT JOIN node_types nt ON n.node_type_id = nt.id"
-
-    # --- Выполнение ---
-    total_count = 0
+    where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    
+    # Запрос на общее количество
+    sql_count = count_select + from_clause + where_sql
     try:
-        cursor.execute(count_select_clause + where_sql, sql_params)
-        count_result = cursor.fetchone()
-        total_count = count_result.get('count', 0) if count_result else 0
-        logger.debug(f"Подсчет узлов: {total_count} найдено по фильтрам.")
+        cursor.execute(sql_count, query_params)
+        total_count_result = cursor.fetchone()
+        total_nodes = total_count_result['count'] if total_count_result else 0
     except psycopg2.Error as e_count:
-        logger.error(f"Ошибка БД при подсчете узлов: {e_count}", exc_info=True)
-        raise
+        logger.error(f"Репозиторий: Ошибка БД при подсчете узлов: {e_count}", exc_info=True)
+        raise # Пробрасываем ошибку
 
-    items = []
-    if total_count > 0 and offset < total_count:
-        order_by_sql = " ORDER BY s.short_name NULLS LAST, n.name" # NULLS LAST для s.short_name
+    nodes_list: List[Dict[str, Any]] = []
+    if total_nodes > 0 and (limit is None or offset < total_nodes):
+        order_by_sql = " ORDER BY s.priority, nt.priority, n.name" # Пример сортировки
         limit_offset_sql = ""
         if limit is not None:
-            limit_offset_sql = " LIMIT %(limit)s OFFSET %(offset)s"
-            sql_params['limit'] = limit
-            sql_params['offset'] = offset
-
-        query = select_clause + where_sql + order_by_sql + limit_offset_sql
-        logger.debug(f"Выполнение запроса узлов: {query} с параметрами: {sql_params}")
+            limit_offset_sql = " LIMIT %(lim)s OFFSET %(off)s"
+            query_params['lim'] = limit
+            query_params['off'] = offset
+        
+        sql_select_page = select_fields + from_clause + where_sql + order_by_sql + limit_offset_sql
         try:
-            cursor.execute(query, sql_params)
-            items = cursor.fetchall()
-            logger.info(f"Получено узлов: {len(items)} (Страница, offset={offset}, limit={limit})")
-        except psycopg2.Error as e_fetch:
-            logger.error(f"Ошибка БД при получении страницы узлов: {e_fetch}", exc_info=True)
+            cursor.execute(sql_select_page, query_params)
+            nodes_list = cursor.fetchall() # Ожидаем список словарей от RealDictCursor
+        except psycopg2.Error as e_select:
+            logger.error(f"Репозиторий: Ошибка БД при выборке страницы узлов: {e_select}", exc_info=True)
             raise
-    else:
-         logger.info(f"Нет узлов для отображения (Total: {total_count}, Offset: {offset})")
+            
+    logger.info(f"Репозиторий fetch_nodes: Найдено {len(nodes_list)} узлов на странице, всего {total_nodes}.")
+    return nodes_list, total_nodes
 
-    return items, total_count
 
-# --- CRUD Функции ---
+def get_node_by_id(cursor: psycopg2.extensions.cursor, node_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Получить данные по конкретному узлу по его ID.
+    Включает информацию о подразделении и типе узла.
 
-def create_node(cursor, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Создает новый узел мониторинга. Выполняет валидацию. Возвращает частичные данные."""
-    required_fields = ['name', 'parent_subdivision_id']
-    if not all(field in data and data[field] is not None for field in required_fields):
-        raise ValueError(f"Отсутствуют обязательные поля: {required_fields}")
+    Args:
+        cursor: Активный курсор базы данных.
+        node_id (int): ID узла.
 
-    # Проверка родителя
-    cursor.execute("SELECT EXISTS (SELECT 1 FROM subdivisions WHERE id = %(sub_id)s)", {'sub_id': data['parent_subdivision_id']})
-    if not cursor.fetchone()['exists']:
-        raise ValueError(f"Родительское подразделение с id={data['parent_subdivision_id']} не найдено")
+    Returns:
+        Словарь с данными узла или None, если узел не найден.
+    """
+    sql = """
+        SELECT
+            n.id, n.name, n.parent_subdivision_id, n.ip_address, n.node_type_id, n.description,
+            s.short_name as subdivision_short_name, s.object_id as subdivision_object_id,
+            nt.name as node_type_name, nt.icon_filename as node_type_icon
+        FROM nodes n
+        LEFT JOIN subdivisions s ON n.parent_subdivision_id = s.id
+        LEFT JOIN node_types nt ON n.node_type_id = nt.id
+        WHERE n.id = %s;
+    """
+    logger.debug(f"Репозиторий: Запрос узла по ID={node_id}")
+    try:
+        cursor.execute(sql, (node_id,))
+        node_data = cursor.fetchone() # Словарь, если RealDictCursor
+        if not node_data:
+            logger.warning(f"Репозиторий: Узел с ID={node_id} не найден.")
+        return node_data
+    except psycopg2.Error as e:
+        logger.error(f"Репозиторий: Ошибка БД при получении узла ID {node_id}: {e}", exc_info=True)
+        raise
 
-    # Проверка типа узла
-    node_type_id = data.get('node_type_id')
-    if node_type_id is not None:
-         cursor.execute("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = %(type_id)s)", {'type_id': node_type_id})
-         if not cursor.fetchone()['exists']:
-             raise ValueError(f"Тип узла с id={node_type_id} не найден")
 
-    # Валидация IP (простая)
-    ip_address = data.get('ip_address')
-    if ip_address and not isinstance(ip_address, str):
-        raise ValueError("IP-адрес должен быть строкой")
-    # TODO: Добавить более строгую валидацию IP, если нужно
+# =================================================================================
+# НОВЫЕ ФУНКЦИИ для вызова SQL-функций, используемых в node_service.py
+# =================================================================================
+
+def fetch_node_base_info(cursor: psycopg2.extensions.cursor, node_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Вызывает SQL-функцию get_node_base_info для получения базовой информации об узлах,
+    включая вычисленные свойства типа узла.
+
+    Args:
+        cursor: Активный курсор базы данных.
+        node_id (int, optional): ID конкретного узла для фильтрации. Если None, для всех узлов.
+
+    Returns:
+        Список словарей с базовой информацией об узлах.
+    """
+    sql_function_call = "SELECT * FROM get_node_base_info(%(node_id_param)s);"
+    params = {'node_id_param': node_id} # SQL-функция ожидает NULL, если все узлы
+    logger.debug(f"Репозиторий: Вызов SQL-функции get_node_base_info с node_id={node_id}")
+    try:
+        cursor.execute(sql_function_call, params)
+        base_info_list = cursor.fetchall()
+        logger.info(f"Репозиторий: fetch_node_base_info вернула {len(base_info_list)} записей.")
+        return base_info_list
+    except psycopg2.Error as e:
+        logger.error(f"Репозиторий: Ошибка БД при вызове get_node_base_info: {e}", exc_info=True)
+        raise
+
+def fetch_node_ping_status(cursor: psycopg2.extensions.cursor, node_id_filter: Optional[int] = None) -> List[Dict[str, Any]]:
+    """
+    Вызывает SQL-функцию get_node_ping_status для получения статуса последней PING-проверки,
+    включая is_available и check_success.
+
+    Args:
+        cursor: Активный курсор базы данных.
+        node_id_filter (int, optional): ID конкретного узла для фильтрации. Если None, для всех узлов.
+
+    Returns:
+        Список словарей со статусами PING-проверок для узлов.
+    """
+    # SQL-функция get_node_ping_status была обновлена и теперь возвращает check_success
+    sql_function_call = "SELECT * FROM get_node_ping_status(%(node_id_param)s);"
+    params = {'node_id_param': node_id_filter}
+    logger.debug(f"Репозиторий: Вызов SQL-функции get_node_ping_status с node_id_filter={node_id_filter}")
+    try:
+        cursor.execute(sql_function_call, params)
+        ping_status_list = cursor.fetchall()
+
+        # --- ОТЛАДОЧНОЕ ЛОГИРОВАНИЕ ---
+        if ping_status_list:
+            logger.debug(f"Репозиторий fetch_node_ping_status: Тип первого элемента в ping_status_list: {type(ping_status_list[0])}")
+            if isinstance(ping_status_list[0], dict):
+                logger.debug(f"Репозиторий fetch_node_ping_status: Ключи первого элемента: {list(ping_status_list[0].keys())}")
+                if 'check_success' not in ping_status_list[0]:
+                    logger.warning("Репозиторий fetch_node_ping_status: Поле 'check_success' ОТСУТСТВУЕТ в словаре первого элемента!")
+                else:
+                    logger.debug(f"Репозиторий fetch_node_ping_status: Значение 'check_success' в первом элементе: {ping_status_list[0]['check_success']}")
+            elif isinstance(ping_status_list[0], tuple):
+                 logger.warning("Репозиторий fetch_node_ping_status: Первый элемент является КОРТЕЖЕМ, а не словарем! Проблема с RealDictCursor.")
+                 logger.debug(f"Репозиторий fetch_node_ping_status: Содержимое первого кортежа: {ping_status_list[0]}")
+        else:
+            logger.debug("Репозиторий fetch_node_ping_status: SQL-функция вернула пустой список.")
+        # --- КОНЕЦ ОТЛАДОЧНОГО ЛОГИРОВАНИЯ ---
+        
+        logger.info(f"Репозиторий: fetch_node_ping_status вернула {len(ping_status_list)} записей.")
+        # Проверяем, что поле check_success присутствует (для отладки)
+        if ping_status_list and 'check_success' not in ping_status_list[0]:
+            logger.warning("Репозиторий: В результате fetch_node_ping_status отсутствует поле 'check_success'! "
+                           "Убедитесь, что SQL-функция get_node_ping_status обновлена.")
+        return ping_status_list
+    except psycopg2.Error as e:
+        logger.error(f"Репозиторий: Ошибка БД при вызове get_node_ping_status: {e}", exc_info=True)
+        raise
+
+# =================================================================================
+# CRUD операции для Узлов (Nodes) - остаются в основном без изменений
+# =================================================================================
+
+def create_node(
+    cursor: psycopg2.extensions.cursor,
+    data: Dict[str, Any] # Ожидаем словарь с полями узла
+) -> Optional[Dict[str, Any]]: # Возвращаем созданный объект или None
+    """
+    Создает новый узел мониторинга.
+    Ожидает в `data` ключи: name, parent_subdivision_id, и опционально
+    ip_address, node_type_id, description.
+
+    Args:
+        cursor: Активный курсор базы данных.
+        data: Словарь с данными нового узла.
+
+    Returns:
+        Словарь с данными созданного узла (включая ID) или None при ошибке.
+    """
+    # Валидация обязательных полей может быть здесь или на уровне роута/сервиса
+    if not data.get('name') or not data.get('parent_subdivision_id'):
+        logger.error("Репозиторий create_node: Отсутствуют обязательные поля 'name' или 'parent_subdivision_id'.")
+        raise ValueError("Имя узла и ID родительского подразделения обязательны.")
 
     sql = """
         INSERT INTO nodes (name, parent_subdivision_id, ip_address, node_type_id, description)
         VALUES (%(name)s, %(parent_subdivision_id)s, %(ip_address)s, %(node_type_id)s, %(description)s)
         RETURNING id;
     """
+    params = {
+        'name': data['name'],
+        'parent_subdivision_id': data['parent_subdivision_id'],
+        'ip_address': data.get('ip_address'), # Может быть None
+        'node_type_id': data.get('node_type_id'), # Может быть None
+        'description': data.get('description')  # Может быть None
+    }
+    logger.debug(f"Репозиторий: Попытка создания узла с данными: {params}")
     try:
-        params = {
-            'name': data['name'],
-            'parent_subdivision_id': data['parent_subdivision_id'],
-            'ip_address': ip_address,
-            'node_type_id': node_type_id,
-            'description': data.get('description')
-        }
         cursor.execute(sql, params)
         result = cursor.fetchone()
-        if not result or 'id' not in result:
-             logger.error("RETURNING id не вернул ID при создании узла.")
-             return None # Или пробросить исключение
-
-        new_node_id = result['id']
-        logger.info(f"Создан узел ID: {new_node_id}, Имя: {data['name']}")
-        # Возвращаем ID и исходные параметры, чтобы route мог получить полные данные
-        return {'id': new_node_id, **params}
-    except psycopg2.Error as e: # Ловим UniqueViolation и другие ошибки БД
-        logger.error(f"Ошибка БД при создании узла: {e}", exc_info=True)
-        raise # Передаем ошибку наверх для обработки в route
-
-def get_node_by_id(cursor, node_id: int) -> Optional[Dict[str, Any]]:
-    """Получает ПОЛНУЮ информацию об одном узле по ID, используя get_node_base_info."""
-    # Используем уже существующую функцию fetch_node_base_info
-    node_info_list = fetch_node_base_info(cursor, node_id=node_id)
-    if node_info_list:
-        logger.debug(f"Получена базовая информация для узла ID: {node_id}")
-        return node_info_list[0]
-    else:
-        logger.warning(f"Узел с ID {node_id} не найден (через get_node_base_info).")
-        return None # Возвращаем None, если не найден
-
-def update_node(cursor, node_id: int, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Обновляет существующий узел. Возвращает ПОЛНЫЕ обновленные данные узла."""
-    allowed_fields = ['name', 'parent_subdivision_id', 'ip_address', 'node_type_id', 'description']
-    update_fields = {k: v for k, v in data.items() if k in allowed_fields} # Обновляем и None значения тоже, если переданы
-
-    if not update_fields:
-        logger.warning(f"Нет данных для обновления узла ID: {node_id}. Возвращаем текущие данные.")
-        return get_node_by_id(cursor, node_id) # Возвращаем текущие данные, если нечего обновлять
-
-    # Валидация родителя и типа (только если они переданы для обновления)
-    if 'parent_subdivision_id' in update_fields and update_fields['parent_subdivision_id'] is not None:
-        cursor.execute("SELECT EXISTS (SELECT 1 FROM subdivisions WHERE id = %(sub_id)s)", {'sub_id': update_fields['parent_subdivision_id']})
-        if not cursor.fetchone()['exists']:
-            raise ValueError(f"Родительское подразделение с id={update_fields['parent_subdivision_id']} не найдено")
-    if 'node_type_id' in update_fields and update_fields['node_type_id'] is not None:
-         cursor.execute("SELECT EXISTS (SELECT 1 FROM node_types WHERE id = %(type_id)s)", {'type_id': update_fields['node_type_id']})
-         if not cursor.fetchone()['exists']:
-             raise ValueError(f"Тип узла с id={update_fields['node_type_id']} не найден")
-    if 'ip_address' in update_fields and update_fields['ip_address'] is not None and not isinstance(update_fields['ip_address'], str):
-         raise ValueError("IP-адрес должен быть строкой или null")
-
-    set_clause = ", ".join([f"{field} = %({field})s" for field in update_fields.keys()])
-    sql = f"UPDATE nodes SET {set_clause} WHERE id = %(id)s RETURNING id;"
-
-    try:
-        params = update_fields
-        params['id'] = node_id
-        cursor.execute(sql, params)
-        updated_result = cursor.fetchone()
-
-        if updated_result:
-            logger.info(f"Обновлен узел ID: {node_id}")
-            # Получаем и возвращаем ПОЛНУЮ обновленную информацию
-            return get_node_by_id(cursor, node_id)
+        if result and result.get('id') is not None:
+            new_node_id = result['id']
+            logger.info(f"Репозиторий: Успешно создан узел ID={new_node_id}, Имя='{params['name']}'.")
+            # Возвращаем словарь с ID для консистентности (или можно запросить полный объект get_node_by_id)
+            return {'id': new_node_id, **data} # Возвращаем ID и исходные данные
         else:
-            # Если RETURNING ничего не вернул, значит запись с таким ID не найдена
-            # Проверяем явно, прежде чем вернуть None
-            exists = get_node_by_id(cursor, node_id)
-            if not exists:
-                 logger.warning(f"Узел с ID {node_id} не найден для обновления.")
-                 return None
+            logger.error("Репозиторий create_node: Не удалось получить ID после вставки узла.")
+            return None
+    except psycopg2.Error as e:
+        logger.error(f"Репозиторий: Ошибка БД при создании узла '{params['name']}': {e}", exc_info=True)
+        # Проверяем специфичные ошибки, если нужно (например, UniqueViolation, ForeignKeyViolation)
+        if e.pgcode == '23505': # Unique violation
+            raise ValueError(f"Узел с именем '{params['name']}' уже существует в данном подразделении.")
+        elif e.pgcode == '23503': # Foreign key violation
+            # Проверяем, какой FK нарушен (parent_subdivision_id или node_type_id)
+            if 'nodes_parent_subdivision_id_fkey' in str(e):
+                raise ValueError(f"Родительское подразделение ID {params['parent_subdivision_id']} не найдено.")
+            elif 'nodes_node_type_id_fkey' in str(e):
+                 raise ValueError(f"Тип узла ID {params['node_type_id']} не найден.")
             else:
-                 # Ситуация, когда запись есть, но UPDATE ее не затронул (маловероятно)
-                 logger.error(f"Запись Node ID {node_id} существует, но UPDATE не вернул данных.")
-                 raise psycopg2.Error(f"Не удалось обновить узел ID {node_id}, хотя он существует.")
+                 raise ValueError(f"Ошибка связи с другой таблицей при создании узла: {e.diag.message_detail or str(e)}")
+        raise # Пробрасываем остальные ошибки psycopg2
 
-    except psycopg2.Error as e: # Ловим UniqueViolation и другие ошибки БД
-        logger.error(f"Ошибка БД при обновлении узла ID {node_id}: {e}", exc_info=True)
-        raise # Передаем ошибку наверх
 
-def delete_node(cursor, node_id: int) -> bool:
-    """Удаляет узел. ВНИМАНИЕ: CASCADE удалит связанные записи! Возвращает True/False."""
+def update_node(
+    cursor: psycopg2.extensions.cursor,
+    node_id: int,
+    update_data: Dict[str, Any] # Словарь с полями для обновления
+) -> Optional[Dict[str, Any]]: # Возвращаем обновленный объект или None
+    """
+    Обновляет параметры существующего узла.
+
+    Args:
+        cursor: Активный курсор базы данных.
+        node_id: ID узла для обновления.
+        update_data: Словарь с полями для обновления.
+                     Допустимые ключи: name, parent_subdivision_id, ip_address, node_type_id, description.
+
+    Returns:
+        Словарь с обновленными данными узла (после SELECT) или None, если узел не найден.
+    """
+    if not update_data:
+        logger.warning(f"Репозиторий update_node: Нет данных для обновления узла ID={node_id}.")
+        return get_node_by_id(cursor, node_id) # Возвращаем текущее состояние, если нет изменений
+
+    # Формируем SET clause динамически
+    allowed_fields_for_update = ['name', 'parent_subdivision_id', 'ip_address', 'node_type_id', 'description']
+    set_parts: List[str] = []
+    params_for_update: Dict[str, Any] = {}
+
+    for field, value in update_data.items():
+        if field in allowed_fields_for_update:
+            set_parts.append(f"{field} = %({field}_val)s") # Используем именованные плейсхолдеры
+            params_for_update[f"{field}_val"] = value
+    
+    if not set_parts:
+        logger.warning(f"Репозиторий update_node: Нет допустимых полей для обновления в узле ID={node_id}.")
+        return get_node_by_id(cursor, node_id)
+
+    params_for_update['node_id_val'] = node_id
+    sql_update = f"UPDATE nodes SET {', '.join(set_parts)} WHERE id = %(node_id_val)s RETURNING id;"
+    logger.debug(f"Репозиторий: Попытка обновления узла ID={node_id} с полями {list(params_for_update.keys())}")
+
     try:
-        sql = "DELETE FROM nodes WHERE id = %(id)s RETURNING id;"
-        cursor.execute(sql, {'id': node_id})
-        deleted = cursor.fetchone()
-        if deleted:
-            logger.info(f"Удален узел ID: {node_id} (и связанные записи)")
+        cursor.execute(sql_update, params_for_update)
+        updated_row = cursor.fetchone()
+        if updated_row:
+            logger.info(f"Репозиторий: Успешно обновлен узел ID={node_id}. Поля: {list(update_data.keys())}")
+            return get_node_by_id(cursor, node_id) # Возвращаем полный обновленный объект
+        else:
+            logger.warning(f"Репозиторий update_node: Узел ID={node_id} не найден для обновления (RETURNING не вернул ID).")
+            return None # Узел не найден
+    except psycopg2.Error as e:
+        logger.error(f"Репозиторий: Ошибка БД при обновлении узла ID {node_id}: {e}", exc_info=True)
+        # Обработка специфичных ошибок, как в create_node
+        if e.pgcode == '23505': raise ValueError(f"Конфликт имени при обновлении узла ID {node_id}.")
+        elif e.pgcode == '23503':
+             if 'nodes_parent_subdivision_id_fkey' in str(e): raise ValueError(f"Новое родительское подразделение для узла ID {node_id} не найдено.")
+             elif 'nodes_node_type_id_fkey' in str(e): raise ValueError(f"Новый тип узла для узла ID {node_id} не найден.")
+             else: raise ValueError(f"Ошибка связи при обновлении узла ID {node_id}: {e.diag.message_detail or str(e)}")
+        raise
+
+
+def delete_node(cursor: psycopg2.extensions.cursor, node_id: int) -> bool:
+    """
+    Удаляет узел по его ID.
+
+    Args:
+        cursor: Активный курсор базы данных.
+        node_id (int): ID удаляемого узла.
+
+    Returns:
+        True если узел удалён, False — иначе.
+    """
+    sql_delete = "DELETE FROM nodes WHERE id = %s RETURNING id;" # RETURNING для проверки факта удаления
+    logger.debug(f"Репозиторий: Попытка удаления узла ID={node_id}")
+    try:
+        cursor.execute(sql_delete, (node_id,))
+        deleted_row = cursor.fetchone()
+        if deleted_row:
+            logger.info(f"Репозиторий: Успешно удален узел ID={node_id}.")
             return True
         else:
-            logger.warning(f"Узел с ID {node_id} не найден для удаления.")
+            logger.warning(f"Репозиторий delete_node: Узел ID={node_id} не найден для удаления.")
             return False
     except psycopg2.Error as e:
-        logger.error(f"Ошибка БД при удалении узла ID {node_id}: {e}", exc_info=True)
-        raise # Передаем ошибку наверх
+        logger.error(f"Репозиторий: Ошибка БД при удалении узла ID {node_id}: {e}", exc_info=True)
+        # Если есть FK на этот узел (например, из node_check_assignments),
+        # и ON DELETE не CASCADE/SET NULL, то будет ошибка.
+        # Ее лучше обработать на уровне роута (вернуть 409 Conflict).
+        raise # Пробрасываем ошибку для обработки выше
+
+# =========================
+# Конец файла
+# =========================

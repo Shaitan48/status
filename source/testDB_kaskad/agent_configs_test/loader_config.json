@@ -1,6 +1,6 @@
 {
   "api_base_url": "http://status_nginx_e2e_test:80/api",
-  "api_key": "ЗДЕСЬ_КЛЮЧ_LOADER",
+  "api_key": "-K-1MMMeSihwAbdUxM1a15_PoKrpm_IUr2k7X8XVFF4",
   "check_folder": "/opt/agent_results/from_9999", 
   "processed_folder": "/opt/agent_results/processed",
   "error_folder": "/opt/agent_results/error",

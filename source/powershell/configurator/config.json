@@ -1,6 +1,6 @@
 {
   "api_base_url": "http://localhost:48030/api",
-  "api_key": "j0cnlLFHlc_wq5nN3dIC25XOF0l5GOZD0VtWQ5RkWyc",
+  "api_key": "9RPIFSm2ZuOed7DicwD1RXvAMK3YcyMQ6AqRhilC7gM",
   "output_path_base": "F:\\status\\builds\\configs\\Generated",
   "delivery_path_base": "F:\\status\\builds\\delivery_conf",
   "log_file": "F:\\status\\builds\\Logs\\configurator.log",

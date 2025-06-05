@@ -1,17 +1,15 @@
 -- testDB_kaskad/05_test_api_keys.sql
--- Хеши нужно сгенерировать заранее и вставить сюда.
--- Пример: ключ 'test_agent_key_for_9999' -> хеш '...'
--- Пример: ключ 'test_loader_key' -> хеш '...'
--- Пример: ключ 'test_configurator_key_for_9999' -> хеш '...'
+-- Тестовые API ключи для E2E тестов
+-- Хеши сгенерированы с помощью SHA256
 
 INSERT INTO api_keys (key_hash, description, role, object_id, is_active)
 VALUES
--- Замени 'HASH_AGENT_9999' на реальный SHA256 хеш от 'test_agent_key_for_9999'
-('3a9f9e1a...', 'E2E Test Agent Key for PowerShell Node (OID 9999)', 'agent', 9999, TRUE),
--- Замени 'HASH_LOADER' на реальный SHA256 хеш от 'test_loader_key'
-('b4c0d2f3...', 'E2E Test Loader Key', 'loader', NULL, TRUE),
--- Замени 'HASH_CONFIGURATOR_9999' на реальный SHA256 хеш от 'test_configurator_key_for_9999'
-('e5g6h7i8...', 'E2E Test Configurator Key for PowerShell Node (OID 9999)', 'configurator', 9999, TRUE)
+-- Хеш для 'test_agent_key_for_9999'
+('e5aea609f2e4a5aeafe91db45a14c5dd255575881a656832118941a014c214c4', 'E2E Test Agent Key for PowerShell Node (OID 9999)', 'agent', 9999, TRUE),
+-- Хеш для 'test_loader_key'
+('9913f0f573af0225427a8b82b2ce20874051dcb1f27d6e14e21242ffd1ddde09', 'E2E Test Loader Key', 'loader', NULL, TRUE),
+-- Хеш для 'test_configurator_key_for_9999'
+('f4fc7303a6cf2c4fc032ebceacf2f9bb27da859d21c40d95f9e1ad9b6a8aed8e', 'E2E Test Configurator Key for PowerShell Node (OID 9999)', 'configurator', 9999, TRUE)
 ON CONFLICT (key_hash) DO NOTHING;
 
 -- Можно добавить ключ администратора для тестов API, если нужно

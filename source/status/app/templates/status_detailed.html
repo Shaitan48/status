@@ -1,77 +1,88 @@
 <!-- status/app/templates/status_detailed.html -->
-{% extends "base.html" %}
-{% block title %}Детальный статус - Мониторинг ПТК{% endblock %}
+{% extends "base.html" %} <!-- Наследование от базового шаблона -->
+{% block title %}Детальный статус - Мониторинг ПТК{% endblock %} <!-- Заголовок страницы -->
 
 {% block head_extra %}
-<!-- Стили для модального окна и других элементов этой страницы могут быть в style.css -->
+<!-- Стили для модального окна и других элементов этой страницы определены в style.css -->
 <style>
     /* Стили для модального окна */
-    .modal { display: none; position: fixed; z-index: 1001; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.6); }
-    .modal-content { background-color: #fefefe; margin: 8% auto; padding: 20px; border: 1px solid #888; width: 90%; max-width: 1000px; /* Увеличил ширину */ border-radius: 5px; position: relative; }
-    .modal-close { color: #aaa; float: right; font-size: 28px; font-weight: bold; position: absolute; top: 5px; right: 15px; cursor: pointer; }
+    .modal { /* Скрытый по умолчанию контейнер на весь экран */
+        display: none; position: fixed; z-index: 1001; /* Выше основного контента, но ниже "липкого" навбара, если z-index навбара > 1001 */
+        left: 0; top: 0; width: 100%; height: 100%;
+        overflow: auto; /* Прокрутка, если контент не помещается */
+        background-color: rgba(0,0,0,0.6); /* Полупрозрачный черный фон */
+    }
+    .modal-content { /* Сам блок модального окна */
+        background-color: #fefefe; /* Белый фон */
+        margin: 8% auto; /* Центрирование с отступом сверху */
+        padding: 20px;
+        border: 1px solid #888; /* Рамка */
+        width: 90%; /* Ширина относительно родителя */
+        max-width: 1000px; /* Максимальная ширина */
+        border-radius: 5px; /* Скругление углов */
+        position: relative; /* Для позиционирования кнопки закрытия */
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3); /* Тень */
+    }
+    .modal-close { /* Кнопка "крестик" для закрытия */
+        color: #aaa; float: right; font-size: 28px; font-weight: bold;
+        position: absolute; top: 5px; right: 15px; cursor: pointer;
+    }
     .modal-close:hover, .modal-close:focus { color: black; text-decoration: none; }
-    .modal h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-    .assignments-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em; table-layout: fixed; /* Для лучшего контроля ширины колонок */ }
-    .assignments-table th, .assignments-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; word-wrap: break-word; /* Перенос длинных слов */ }
-    .assignments-table th { background-color: #f2f2f2; }
-    .assignments-table .params { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .assignments-table .status-ok { color: green; }
-    .assignments-table .status-error { color: red; }
-    .assignments-table .status-unknown { color: grey; }
-    .assignments-table .actions-cell button { margin-right: 5px; margin-bottom: 3px; /* Отступы для кнопок */ } /* <<< Класс для ячейки с кнопками */
-    .details-btn, .history-btn { /* <<< Общий стиль для кнопок */ padding: 2px 6px; font-size: 0.8em; cursor: pointer; }
-    .details-btn { background-color: var(--secondary-color); color: white; }
-    .details-btn:hover { background-color: #5a6268; }
-    .history-btn { background-color: var(--info-color); color: white; } /* <<< Стиль кнопки История */
-    .history-btn:hover { background-color: #138496; }
-    .details-json { background-color: #f8f9fa; border: 1px solid #e0e0e0; padding: 10px; margin-top: 10px; white-space: pre-wrap; font-family: monospace; max-height: 200px; /* <<< Уменьшил высоту */ overflow-y: auto; font-size: 0.9em; }
-    #modal-history { margin-top: 15px; display: none; } /* <<< Стили для блока истории */
+    .modal h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; } /* Заголовок модального окна */
+
+    /* Таблица заданий внутри модального окна */
+    .assignments-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em; table-layout: fixed; }
+    .assignments-table th, .assignments-table td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; word-wrap: break-word; }
+    .assignments-table th { background-color: #f2f2f2; font-weight: 600; }
+    .assignments-table .params { /* Ячейка с параметрами */
+        max-width: 250px; /* Ограничение ширины */
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; /* Показ многоточия, если не влезает */
+        cursor: help; /* Подсказка, что можно навести для полного текста (в title) */
+    }
+    /* Стили для статуса задания */
+    .assignments-table .status-ok { color: var(--success-color); }
+    .assignments-table .status-error { color: var(--danger-color); }
+    .assignments-table .status-unknown { color: var(--secondary-color); }
+    .assignments-table .actions-cell button { margin-right: 5px; margin-bottom: 3px; } /* Ячейка с кнопками "Детали", "История" */
+    .details-btn, .history-btn { padding: 3px 8px; font-size: 0.85em; cursor: pointer; border-radius: 3px; color: white; border: none; }
+    .details-btn { background-color: var(--secondary-color); }
+    .details-btn:hover { background-color: #545b62; }
+    .history-btn { background-color: var(--info-color); }
+    .history-btn:hover { background-color: #117a8b; }
+
+    /* Блок для отображения JSON-деталей проверки */
+    .details-json {
+        background-color: #f8f9fa; border: 1px solid #e0e0e0; padding: 10px; margin-top: 10px;
+        white-space: pre-wrap; /* Сохранение форматирования и переносов */
+        font-family: Consolas, Monaco, monospace; /* Моноширинный шрифт */
+        max-height: 250px; /* Ограничение высоты с прокруткой */
+        overflow-y: auto; font-size: 0.9em; border-radius: 4px;
+    }
+    /* Блок для отображения истории проверок задания */
+    #modal-history { margin-top: 15px; display: none; /* Изначально скрыт */ }
     #modal-history h4 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px; font-size: 1em; }
-    .history-list { list-style: none; padding: 0; max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 3px; }
-    .history-list li { padding: 5px 8px; border-bottom: 1px solid #eee; font-size: 0.85em; display: flex; justify-content: space-between; flex-wrap: wrap; }
+    .history-list { list-style: none; padding: 0; max-height: 280px; overflow-y: auto; border: 1px solid #ddd; border-radius: 3px; background-color: #fff; }
+    .history-list li {
+        padding: 6px 10px; border-bottom: 1px solid #eee; font-size: 0.9em;
+        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+    }
     .history-list li:last-child { border-bottom: none; }
-    .history-list .hist-time { color: #555; white-space: nowrap; margin-right: 10px; }
+    .history-list .hist-time { color: #444; white-space: nowrap; margin-right: 10px; font-size: 0.95em; }
     .history-list .hist-status { font-weight: bold; margin-right: 10px; }
-    .history-list .hist-status.ok { color: green; }
-    .history-list .hist-status.error { color: red; }
-    .history-list .hist-executor { color: #777; font-size: 0.9em; margin-right: 10px; }
-    .history-list .hist-details-link { margin-left: auto; /* Прижимаем вправо */ }
-    .loading-message { text-align: center; padding: 1em; color: var(--secondary-color); font-style: italic; }
-    .error-message { color: var(--danger-color); font-weight: bold; text-align: center; padding: 1em;}
+    .history-list .hist-status.ok { color: var(--success-color); }
+    .history-list .hist-status.error { color: var(--danger-color); }
+    .history-list .hist-executor { color: #666; font-size: 0.85em; margin-right: 10px; font-style: italic;}
+    .history-list .hist-details-link { margin-left: auto; /* Прижимаем ссылку "Детали" вправо */ }
 
-    /* Дополнительные стили для таблицы детального статуса */
-    .node-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.95em; background-color: var(--card-bg); box-shadow: var(--card-shadow); border-radius: 4px; overflow: hidden; }
-    .node-table th, .node-table td { border: 1px solid var(--border-color); padding: 8px 10px; text-align: left; vertical-align: middle; }
-    .node-table th { background-color: var(--light-grey); color: var(--dark-grey); font-weight: 600; cursor: pointer; white-space: nowrap; position: relative; }
-    .node-table th:hover { background-color: var(--medium-grey); }
-    .node-table th::after { content: ''; display: inline-block; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; margin-left: 5px; opacity: 0.3; }
-    .node-table th.sort-asc::after { border-bottom: 5px solid var(--dark-grey); opacity: 1; }
-    .node-table th.sort-desc::after { border-top: 5px solid var(--dark-grey); opacity: 1; }
-    .subdivision-row { cursor: pointer; background-color: var(--medium-grey); font-weight: bold; color: var(--dark-grey); }
-    .subdivision-row:hover > td { background-color: #dce4ec; }
-    .subdivision-row td { padding-top: 12px !important; padding-bottom: 12px !important; border-left: 4px solid var(--secondary-color); }
-    .subdivision-row td::before { content: '+ '; display: inline-block; width: 1em; transition: transform 0.2s ease; }
-    .subdivision-row.expanded td::before { content: '- '; transform: rotate(0deg); }
-    .type-header > td { background-color: var(--light-grey); font-style: italic; color: var(--secondary-color); padding-top: 8px !important; padding-bottom: 8px !important; }
-    [data-level="0"] > td { padding-left: 10px !important; }
-    [data-level="1"] > td { padding-left: 30px !important; }
-    [data-level="2"] > td { padding-left: 50px !important; }
-    [data-level="3"] > td { padding-left: 70px !important; }
-    .node-row td:first-child { display: flex; align-items: center; }
-    .node-table-icon { display: inline-block; flex-shrink: 0; width: 16px; height: 16px; margin-right: 6px; vertical-align: middle; background-color: var(--secondary-color); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; transition: background-color 0.3s ease; }
-    .node-table-icon.available { background-color: var(--success-color); }
-    .node-table-icon.warning   { background-color: var(--warning-color); }
-    .node-table-icon.unavailable{ background-color: var(--danger-color); }
-    .node-table-icon.unknown   { background-color: var(--secondary-color); }
-    .status-cell { font-weight: 500; white-space: nowrap; }
-    .status-cell.available { color: var(--success-color); }
-    .status-cell.warning   { color: var(--warning-color); }
-    .status-cell.unavailable{ color: var(--danger-color); }
-    .status-cell.unknown   { color: var(--secondary-color); }
-    .assignments-btn { padding: 3px 8px; font-size: 0.85em; background-color: var(--info-color); color: white; border: none; border-radius: 3px; cursor: pointer;}
-    .assignments-btn:hover { background-color: #138496; }
+    /* Общие сообщения загрузки/ошибки */
+    .loading-message { /* ... (как в base.html или style.css) ... */ }
+    .error-message { /* ... (как в base.html или style.css) ... */ }
+
+    /* Стили для основной таблицы детального статуса (копируем из style.css для полноты) */
+    .node-table { /* ... (как в style.css) ... */ }
+    /* ... (и остальные стили для .node-table th, .subdivision-row, .type-header, .node-table-icon, .status-cell, .assignments-btn) ... */
+    /* Они должны быть в основном style.css, здесь дублировать не обязательно, если base.html его подключает */
     .table-controls { margin-bottom: 1rem; }
-
 </style>
 {% endblock %}
 
@@ -79,615 +90,762 @@
 <h2>Детальный статус узлов</h2>
 <div class="table-controls">
     <button id="toggle-all-btn">Развернуть все</button>
-    <!-- Можно добавить фильтры или поиск сюда -->
+    <!-- Сюда можно добавить фильтры для таблицы или поле поиска, если потребуется -->
 </div>
 
 <table class="node-table">
     <thead>
         <tr>
-            <!-- Добавим атрибуты для сортировки -->
-            <th data-column="name">Подразделение / Узел</th> <!-- <<< Изменено -->
-            <th data-column="ip_address">IP-адрес</th>
-            <th data-column="status">Статус (PING)</th>
-            <th data-column="last_checked">Посл. проверка (PING)</th>
-            <th data-column="last_available">Доступен (PING)</th>
-            <th data-column="executor">Исполнитель (PING)</th>
-            <th data-column="type">Тип узла</th>
-            <th data-column="actions">Действия</th> <!-- Колонка для кнопок -->
+            <!-- Заголовки колонок с data-атрибутами для JavaScript-сортировки -->
+            <th data-column="name" title="Сортировать по имени подразделения/узла">Подразделение / Узел</th>
+            <th data-column="ip_address" title="Сортировать по IP-адресу">IP-адрес</th>
+            <th data-column="status" title="Сортировать по статусу PING">Статус (PING)</th>
+            <th data-column="last_checked" title="Сортировать по времени последней проверки">Посл. проверка (PING)</th>
+            <th data-column="last_available" title="Сортировать по времени последней доступности">Доступен (PING)</th>
+            <th data-column="executor" title="Сортировать по исполнителю">Исполнитель (PING)</th>
+            <th data-column="type" title="Сортировать по типу узла">Тип узла</th>
+            <th>Действия</th> <!-- Колонка для кнопок (например, "Задания") -->
         </tr>
     </thead>
     <tbody id="status-table-body">
-        <!-- Начальное сообщение -->
-        <tr><td colspan="8" class="loading-message">Загрузка данных...</td></tr>
+        <!-- Начальное сообщение, пока данные загружаются -->
+        <tr><td colspan="8" class="loading-message">Загрузка данных детального статуса...</td></tr>
     </tbody>
 </table>
 
-<!-- Модальное окно для отображения заданий -->
+<!-- Модальное окно для отображения заданий узла -->
 <div id="assignments-modal" class="modal">
   <div class="modal-content">
-    <span class="modal-close" onclick="closeModal()">×</span>
-    <h3 id="modal-title">Задания для узла: </h3>
+    <span class="modal-close" onclick="closeModal()" title="Закрыть окно">&times;</span>
+    <h3 id="modal-title">Задания для узла: <span>[Имя узла]</span></h3>
     <div id="modal-body">
-        <p>Загрузка заданий...</p>
+        <!-- Сюда JavaScript загрузит таблицу с заданиями -->
+        <p class="loading-message">Загрузка назначенных заданий...</p>
     </div>
-     <div id="modal-details" style="display: none;">
-        <h4>Детали последней проверки:</h4>
-        <pre class="details-json"></pre> <!-- <<< Изменил div на pre для лучшего отображения JSON -->
+     <!-- Блок для отображения деталей конкретной проверки (JSON) -->
+     <div id="modal-details" style="display: none;"> <!-- Изначально скрыт -->
+        <h4>Детали выбранной проверки:</h4>
+        <pre class="details-json"></pre> <!-- Используем <pre> для форматированного JSON -->
     </div>
-     <!-- <<< Блок для отображения истории >>> -->
-     <div id="modal-history" style="display: none;">
-        <h4>История проверок задания (<span id="history-assignment-id"></span>):</h4>
+     <!-- Блок для отображения истории проверок выбранного задания -->
+     <div id="modal-history" style="display: none;"> <!-- Изначально скрыт -->
+        <h4>История проверок для задания ID <span id="history-assignment-id-span">[ID]</span>:</h4>
         <ul class="history-list"><li class="loading-message">Загрузка истории...</li></ul>
     </div>
-     <!-- <<< Конец блока истории >>> -->
   </div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // --- Получение ссылок на DOM-элементы ---
+    let statusTableBodyElement = null; // Тело основной таблицы статусов
+    let toggleAllButtonElement = null; // Кнопка "Развернуть/Свернуть все"
+    // Элементы модального окна
+    let assignmentsModalElement = null;
+    let modalTitleElement = null;
+    let modalBodyElement = null;
+    let modalDetailsContainerElement = null;
+    let modalDetailsJsonPreElement = null; // <pre> для JSON
+    let modalHistoryContainerElement = null;
+    let modalHistoryListElement = null;
+    let historyAssignmentIdDisplaySpan = null; // Для отображения ID задания в заголовке истории
+
     // --- Переменные состояния ---
-    let tableBody = null;
-    let toggleBtn = null;
-    let assignmentsModal = null;
-    let modalTitle = null;
-    let modalBody = null;
-    let modalDetailsContainer = null;
-    let modalDetailsJson = null;
-    let modalHistoryContainer = null; // <<< История
-    let modalHistoryList = null; // <<< История
-    let historyAssignmentIdSpan = null; // <<< История
-    let expandedState = {}; // { 'subdivision-id': true/false } <<< Изменено
-    let nodeDataCache = null;
-    let sortState = { column: 'name', direction: 'asc' };
+    let hierarchialExpandedState = {}; // Состояние раскрытия групп (ключ - ID подразделения, значение - true/false)
+    let detailedNodeDataCache = null; // Кэш данных, полученных от API /status_detailed
+    let currentSortState = { columnKey: 'name', direction: 'asc' }; // Состояние текущей сортировки таблицы
 
-    // --- API URL ---
-    const ICONS_BASE_URL = "{{ url_for('static', filename='icons/') }}"; // Базовый URL для иконок
-    const DEFAULT_ICON = 'other.svg'; // Имя иконки по умолчанию
-    const API_URL_DETAILED = "{{ url_for('data.api_detailed_status') }}";
-    const API_URL_ASSIGNMENTS_TPL = "{{ url_for('nodes.api_node_assignments_status', node_id=0) }}";
-    const API_URL_DETAILS_TPL = "{{ url_for('checks.api_get_node_check_details', check_id=0) }}";
-    const API_URL_ASSIGNMENT_HISTORY_TPL = "{{ url_for('checks.api_get_assignment_checks_history', assignment_id=0) }}"; // <<< История
+    // --- URL API-эндпоинтов (генерируются Flask) ---
+    const ICONS_STATIC_BASE_URL = "{{ url_for('static', filename='icons/') }}";
+    const DEFAULT_NODE_ICON_FILENAME = 'other.svg'; // Имя файла иконки по умолчанию
+    const API_URL_DETAILED_STATUS = "{{ url_for('data.api_detailed_status') }}";
+    const API_URL_NODE_ASSIGNMENTS_TEMPLATE = "{{ url_for('nodes.api_node_assignments_status_route', node_id=0) }}"; // Шаблон URL для заданий узла
+    const API_URL_CHECK_DETAILS_TEMPLATE = "{{ url_for('checks.api_get_node_check_details', check_id=0) }}"; // Шаблон URL для деталей проверки
+    const API_URL_ASSIGNMENT_HISTORY_TEMPLATE = "{{ url_for('checks.api_get_assignment_checks_history', assignment_id=0) }}"; // Шаблон URL для истории задания
 
-    // --- Функции API ---
-    async function fetchData(url) {
-        const response = await fetch(url);
-        if (!response.ok) {
-            let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
-            try {
-                 const errorData = await response.json();
-                 if (errorData && errorData.error && errorData.error.message) {
-                     errorText += ` - ${errorData.error.message}`;
-                 } else if (errorData && errorData.error) {
-                      errorText += ` - ${JSON.stringify(errorData.error)}`;
-                 }
-            } catch (e) { /* ignore */ }
-            throw new Error(errorText);
+    // --- Функции для работы с API (fetchData - общая) ---
+    /**
+     * Асинхронно выполняет GET-запрос к указанному URL и возвращает JSON-ответ.
+     * Обрабатывает ошибки сети и некорректные ответы сервера.
+     * @param {string} url - URL для запроса.
+     * @returns {Promise<object|null>} Promise с распарсенным JSON или null при ошибке 204.
+     * @throws {Error} В случае ошибки сети или если ответ сервера не OK.
+     */
+    async function fetchData(url) { /* ... (Точная копия из dashboard.html или base.html) ... */ }
+
+    /** Загружает данные для детального статуса и вызывает рендеринг таблицы. */
+    async function fetchAndRenderDetailedStatus() {
+        if (!statusTableBodyElement) {
+            console.error("fetchAndRenderDetailedStatus: Элемент status-table-body не найден!");
+            return;
         }
-        // Обработка пустого ответа 204 No Content
-        if (response.status === 204) {
-             return null;
-        }
-        // Пытаемся распарсить JSON, если тело не пустое
-        const text = await response.text();
+        console.debug("Detailed Status: Запрос данных для детальной таблицы...");
+        statusTableBodyElement.innerHTML = `<tr><td colspan="8" class="loading-message">Загрузка данных детального статуса...</td></tr>`;
         try {
-            return text ? JSON.parse(text) : null;
-        } catch (e) {
-             console.error(`Ошибка парсинга JSON ответа с ${url}:`, e, "\nТекст ответа:", text);
-             throw new Error(`Некорректный JSON ответ от сервера (${url})`);
-        }
-    }
-
-    async function fetchDetailedStatus() {
-         if (!tableBody) return;
-        console.debug("Запрос детального статуса...");
-        tableBody.innerHTML = `<tr><td colspan="8" class="loading-message">Загрузка данных...</td></tr>`;
-        try {
-            nodeDataCache = await fetchData(API_URL_DETAILED);
-            console.debug("Детальные данные получены:", nodeDataCache);
-            renderTable();
+            detailedNodeDataCache = await fetchData(API_URL_DETAILED_STATUS); // Ожидаем {nodes: [], subdivisions: []}
+            console.debug("Detailed Status: Детальные данные успешно получены:", detailedNodeDataCache);
+            renderDetailedStatusTable(); // Вызываем рендеринг
         } catch (error) {
-            console.error("Ошибка загрузки детальных статусов:", error);
-            if (tableBody) { tableBody.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка загрузки: ${error.message}</td></tr>`; }
+            console.error("Detailed Status: Ошибка загрузки данных для детального статуса:", error);
+            if (statusTableBodyElement) {
+                statusTableBodyElement.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка загрузки данных: ${error.message}</td></tr>`;
+            }
         }
     }
 
-    async function fetchAssignments(nodeId) {
-        const url = API_URL_ASSIGNMENTS_TPL.replace('/0/', `/${nodeId}/`);
+    /** Загружает назначенные задания для указанного узла. */
+    async function fetchNodeAssignments(nodeId) {
+        if (typeof nodeId !== 'number' || nodeId <=0) {
+            console.error("fetchNodeAssignments: Передан некорректный nodeId:", nodeId);
+            return null;
+        }
+        const url = API_URL_NODE_ASSIGNMENTS_TEMPLATE.replace('/0/', `/${nodeId}/`); // Подставляем ID узла в шаблон URL
         return await fetchData(url);
     }
 
-    async function fetchCheckDetails(checkId) {
-        if (!checkId) return null;
-        const url = API_URL_DETAILS_TPL.replace('/0/', `/${checkId}/`);
+    /** Загружает детали для конкретного результата проверки. */
+    async function fetchSingleCheckDetails(checkId) {
+        if (typeof checkId !== 'number' || checkId <=0) { // ID проверки должен быть числом > 0
+            console.warn("fetchSingleCheckDetails: Передан некорректный checkId:", checkId);
+            return null;
+        }
+        const url = API_URL_CHECK_DETAILS_TEMPLATE.replace('/0/', `/${checkId}/`);
         try {
             return await fetchData(url);
         } catch (error) {
-             console.error(`Ошибка загрузки деталей для check ${checkId}:`, error);
-             return null; // Возвращаем null при ошибке
+             console.error(`Ошибка загрузки деталей для проверки ID ${checkId}:`, error);
+             return null; // Возвращаем null при ошибке, чтобы UI мог это обработать
         }
     }
 
-    async function fetchAssignmentHistory(assignmentId, limit = 15) {
-        // <<< Добавлена проверка >>>
-        if (assignmentId === undefined || assignmentId === null || isNaN(assignmentId)) {
-            console.error("fetchAssignmentHistory: Неверный assignmentId:", assignmentId);
+    /** Загружает историю проверок для конкретного задания. */
+    async function fetchSingleAssignmentHistory(assignmentId, historyLimit = 15) {
+        if (typeof assignmentId !== 'number' || assignmentId <=0) {
+            console.error("fetchSingleAssignmentHistory: Передан некорректный assignmentId:", assignmentId);
             return null;
         }
-        const url = API_URL_ASSIGNMENT_HISTORY_TPL.replace('/0/', `/${assignmentId}/`) + `?limit=${limit}`;
-        console.debug("Запрос истории задания:", url); // Лог URL
+        const url = API_URL_ASSIGNMENT_HISTORY_TEMPLATE.replace('/0/', `/${assignmentId}/`) + `?limit=${historyLimit}`;
+        console.debug("Запрос истории для задания:", url);
         try {
              return await fetchData(url);
         } catch (error) {
-             console.error(`Ошибка загрузки истории для задания ${assignmentId}:`, error);
-             return null; // Возвращаем null при ошибке
+             console.error(`Ошибка загрузки истории для задания ID ${assignmentId}:`, error);
+             return null;
         }
     }
 
-    // --- Функции Рендеринга ---
-    function renderTable() {
-        if (!tableBody || !nodeDataCache || !nodeDataCache.nodes || !nodeDataCache.subdivisions) {
-             console.error("renderTable: Отсутствуют необходимые данные или элементы DOM.");
-             if(tableBody) tableBody.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка рендеринга: нет данных.</td></tr>`;
+    // --- Функции Рендеринга Таблицы и Модальных Окон ---
+    /** Основная функция рендеринга таблицы детального статуса. */
+    function renderDetailedStatusTable() {
+        if (!statusTableBodyElement || !detailedNodeDataCache || !detailedNodeDataCache.nodes || !detailedNodeDataCache.subdivisions) {
+             console.error("renderDetailedStatusTable: Отсутствуют необходимые данные (detailedNodeDataCache) или элемент таблицы (statusTableBodyElement).");
+             if(statusTableBodyElement) statusTableBodyElement.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка рендеринга: нет данных для отображения.</td></tr>`;
              return;
         }
-        console.debug("Начало renderTable");
-        const { nodes, subdivisions } = nodeDataCache;
+        console.debug("renderDetailedStatusTable: Начало рендеринга таблицы.");
+        const { nodes, subdivisions } = detailedNodeDataCache;
 
-        // 1. Строим иерархию подразделений
-        const subdivisionMap = {};
-        const rootSubdivisionIds = [];
-        subdivisions.forEach(s => {
-            subdivisionMap[s.id] = { ...s, children: [], nodesByType: {}, totalNodesRecursive: 0, onlineNodesRecursive: 0 };
-            if (s.parent_id === null) { rootSubdivisionIds.push(s.id); }
-            else if (subdivisionMap[s.parent_id]) { subdivisionMap[s.parent_id].children.push(s.id); }
-            else { console.warn(`Родительское подразделение ${s.parent_id} для подразделения ${s.id} не найдено.`); }
+        // 1. Строим иерархическую структуру подразделений для корректного отображения дерева
+        const subdivisionTree = {}; // Карта для быстрого доступа и построения дерева
+        const rootSubdivisionIdsInOrder = []; // Массив ID корневых подразделений в порядке сортировки
+        subdivisions.forEach(s => { // Инициализируем карту
+            subdivisionTree[s.id] = { ...s, children: [], nodesByType: {}, totalNodesInSubtree: 0, onlineNodesInSubtree: 0 };
+        });
+        subdivisions.forEach(s => { // Строим связи родитель-потомок
+            if (s.parent_id === null) {
+                if(!rootSubdivisionIdsInOrder.includes(s.id)) rootSubdivisionIdsInOrder.push(s.id);
+            } else if (subdivisionTree[s.parent_id]) {
+                subdivisionTree[s.parent_id].children.push(s.id);
+            } else { // Случай "осиротевшего" подразделения - добавляем как корневой
+                console.warn(`Родительское подразделение ID ${s.parent_id} для подразделения '${s.short_name}' (ID: ${s.id}) не найдено. Отображаем как корневое.`);
+                if(!rootSubdivisionIdsInOrder.includes(s.id)) rootSubdivisionIdsInOrder.push(s.id);
+            }
         });
 
-        // Распределяем узлы по типам внутри подразделений
-        nodes.forEach(n => {
-            const subdivisionId = n.subdivision_id;
-            if (subdivisionId && subdivisionMap[subdivisionId]) {
-                const subdivision = subdivisionMap[subdivisionId];
-                const typeId = n.node_type_id === null || n.node_type_id === undefined ? 0 : n.node_type_id;
-                if (!subdivision.nodesByType[typeId]) {
-                    subdivision.nodesByType[typeId] = {
-                        type_path: n.node_type_path || 'Без типа',
-                        priority: n.node_type_priority === null || n.node_type_priority === undefined ? 9999 : n.node_type_priority,
+        // 2. Распределяем узлы по типам внутри их родительских подразделений
+        nodes.forEach(node => {
+            const parentSubdivisionId = node.subdivision_id;
+            if (parentSubdivisionId && subdivisionTree[parentSubdivisionId]) {
+                const parentSub = subdivisionTree[parentSubdivisionId];
+                // Используем ID типа узла (0 для "Без типа") как ключ для группировки
+                const nodeTypeIdForGroup = node.node_type_id === null || node.node_type_id === undefined ? 0 : node.node_type_id;
+                if (!parentSub.nodesByType[nodeTypeIdForGroup]) {
+                    parentSub.nodesByType[nodeTypeIdForGroup] = {
+                        type_path: node.node_type_path || 'Узлы без типа', // Иерархический путь типа
+                        type_priority: node.node_type_priority === null || node.node_type_priority === undefined ? 9999 : node.node_type_priority,
                         nodes: []
                     };
                 }
-                subdivision.nodesByType[typeId].nodes.push(n);
-            } else { console.warn(`Узел ${n.name} (ID: ${n.id}) имеет некорректный subdivision_id: ${subdivisionId}`); }
+                parentSub.nodesByType[nodeTypeIdForGroup].nodes.push(node);
+            } else {
+                console.warn(`Узел '${node.name}' (ID: ${node.id}) имеет некорректный subdivision_id: ${parentSubdivisionId} или такое подразделение отсутствует в карте.`);
+            }
         });
 
-        // 2. Рекурсивный подсчет статистики
-        function calculateRecursiveStats(subdivisionId) {
-            const subdivision = subdivisionMap[subdivisionId];
-            if (!subdivision) return { total: 0, online: 0 };
-            let currentTotal = Object.values(subdivision.nodesByType).reduce((sum, type) => sum + type.nodes.length, 0);
-            let currentOnline = Object.values(subdivision.nodesByType).reduce((sum, type) => sum + type.nodes.filter(n => n.status_class === 'available').length, 0);
-            subdivision.children.forEach(childId => {
-                const childStats = calculateRecursiveStats(childId);
-                currentTotal += childStats.total;
-                currentOnline += childStats.online;
-            });
-            subdivision.totalNodesRecursive = currentTotal;
-            subdivision.onlineNodesRecursive = currentOnline;
-            return { total: currentTotal, online: currentOnline };
-        }
-        rootSubdivisionIds.forEach(rootId => calculateRecursiveStats(rootId));
+        // 3. Рекурсивный подсчет общей и онлайн статистики для каждого подразделения (включая дочерние)
+        function calculateRecursiveNodeStats(subdivisionId) {
+            const sub = subdivisionTree[subdivisionId];
+            if (!sub) return { total: 0, online: 0 }; // Базовый случай рекурсии
 
-        // 3. Сортировка узлов
-         Object.values(subdivisionMap).forEach(subdivision => {
-             Object.values(subdivision.nodesByType).forEach(typeGroup => { typeGroup.nodes.sort(nodeSorter); });
+            // Считаем узлы непосредственно в этом подразделении
+            let currentSubTotalNodes = Object.values(sub.nodesByType).reduce((sum, typeGroup) => sum + typeGroup.nodes.length, 0);
+            let currentSubOnlineNodes = Object.values(sub.nodesByType).reduce((sum, typeGroup) =>
+                sum + typeGroup.nodes.filter(n => n && n.status_class === 'available').length, 0);
+
+            // Рекурсивно считаем для дочерних и прибавляем к текущим
+            sub.children.forEach(childId => {
+                const childStats = calculateRecursiveNodeStats(childId);
+                currentSubTotalNodes += childStats.total;
+                currentSubOnlineNodes += childStats.online;
+            });
+            sub.totalNodesInSubtree = currentSubTotalNodes;
+            sub.onlineNodesInSubtree = currentSubOnlineNodes;
+            return { total: currentSubTotalNodes, online: currentSubOnlineNodes };
+        }
+        // Запускаем подсчет статистики, начиная с корневых подразделений
+        rootSubdivisionIdsInOrder.forEach(rootId => calculateRecursiveNodeStats(rootId));
+
+        // 4. Сортировка узлов внутри каждой группы типов узлов (по display_order, затем по имени)
+         Object.values(subdivisionTree).forEach(sub => {
+             Object.values(sub.nodesByType).forEach(typeGroup => {
+                 typeGroup.nodes.sort(nodeDisplaySorter); // Используем nodeDisplaySorter
+             });
          });
 
-        // 4. Генерация HTML
-        let finalHtml = '';
-        function renderSubdivisionHtml(subdivisionId, level = 0) {
-            const subdivision = subdivisionMap[subdivisionId]; if (!subdivision) return '';
-            const subdivisionIdStr = String(subdivisionId);
-            const isExpanded = !!expandedState[subdivisionIdStr];
-            const childDisplayStyle = isExpanded ? 'table-row' : 'none';
-            const typeHeaders = [];
-            const sortedTypes = Object.values(subdivision.nodesByType).sort((a, b) => a.priority - b.priority);
+        // 5. Генерация HTML-строк для таблицы
+        let tableHtmlContent = '';
+        // Рекурсивная функция для рендеринга подразделения и его содержимого
+        function renderSubdivisionToHtml(subdivisionId, currentLevel = 0) {
+            const subData = subdivisionTree[subdivisionId];
+            if (!subData) return ''; // Если подразделение не найдено (не должно происходить)
 
-            sortedTypes.forEach(typeGroup => {
-                let nodeRowsHtml = typeGroup.nodes.map(node => renderNodeRow(node, level + 2, subdivisionIdStr, childDisplayStyle)).join('');
-                if (nodeRowsHtml) {
-                     typeHeaders.push(`
-                        <tr class="type-header subdivision-${subdivisionIdStr}" data-level="${level + 1}" style="display: ${childDisplayStyle};">
-                            <td colspan="8">${typeGroup.type_path}</td>
+            const subdivisionIdStr = String(subdivisionId); // ID для data-атрибутов
+            const isCurrentlyExpanded = !!hierarchialExpandedState[subdivisionIdStr]; // Раскрыто ли это подразделение
+            const childElementsDisplayStyle = isCurrentlyExpanded ? 'table-row' : 'none'; // Стиль для дочерних элементов
+
+            let typeHeadersHtml = ''; // HTML для заголовков типов узлов и самих узлов
+            // Сортируем группы типов узлов по их приоритету
+            const sortedNodeTypeGroups = Object.values(subData.nodesByType).sort((a, b) => a.type_priority - b.type_priority);
+
+            sortedNodeTypeGroups.forEach(typeGroupData => {
+                // Рендерим узлы этого типа
+                let nodeRowsForTypeHtml = typeGroupData.nodes
+                                          .map(node => renderSingleNodeRowHtml(node, currentLevel + 2, subdivisionIdStr, childElementsDisplayStyle))
+                                          .join('');
+                if (nodeRowsForTypeHtml) { // Если есть узлы этого типа, добавляем заголовок типа
+                     typeHeadersHtml += `
+                        <tr class="type-header subdivision-${subdivisionIdStr}" data-level="${currentLevel + 1}" style="display: ${childElementsDisplayStyle};">
+                            <td colspan="8">${typeGroupData.type_path}</td>
                         </tr>
-                        ${nodeRowsHtml}
-                    `);
+                        ${nodeRowsForTypeHtml}
+                    `;
                  }
              });
 
-            let childrenHtml = subdivision.children
-                .map(id => subdivisionMap[id]).filter(s => s).sort(subdivisionSorter)
-                .map(child => renderSubdivisionHtml(child.id, level + 1)).join('');
+            // Рендерим дочерние подразделения рекурсивно
+            let childrenSubdivisionsHtml = subData.children
+                .map(id => subdivisionTree[id]).filter(s => s) // Получаем объекты и отсеиваем null
+                .sort(subdivisionDisplaySorter) // Сортируем дочерние подразделения
+                .map(childSub => renderSubdivisionToHtml(childSub.id, currentLevel + 1)).join('');
 
+             // HTML для строки самого подразделения
              const subdivisionRowHtml = `
-                <tr class="subdivision-row ${isExpanded ? 'expanded' : ''}" data-subdivision-id="${subdivisionIdStr}" data-level="${level}">
-                    <td colspan="8">${subdivision.short_name} (${subdivision.onlineNodesRecursive}/${subdivision.totalNodesRecursive})</td>
+                <tr class="subdivision-row ${isCurrentlyExpanded ? 'expanded' : ''}" data-subdivision-id="${subdivisionIdStr}" data-level="${currentLevel}">
+                    <td colspan="8" title="ID подразделения: ${subData.id}, ObjectID: ${subData.object_id || 'N/A'}">
+                        ${subData.short_name} (${subData.onlineNodesInSubtree}/${subData.totalNodesInSubtree} онлайн)
+                    </td>
                 </tr>`;
-
-            return subdivisionRowHtml + typeHeaders.join('') + childrenHtml;
+            return subdivisionRowHtml + typeHeadersHtml + childrenSubdivisionsHtml;
         }
 
-        // Функция рендеринга строки узла
-        function renderNodeRow(node, level, subdivisionId, displayStyle) {
-             if (!node || !node.name || !node.status_class) { console.warn("Пропущен узел:", node); return ''; }
-             const exec = node.executor_host ? `${node.executor_object_id || '?'}:${node.executor_host}` : 'N/A';
-             const lChk = formatDateTime(node.last_checked);
-             const lAv = formatDateTime(node.last_available);
-             const iconFilename = node.icon_filename || DEFAULT_ICON;
-             const iconUrl = `${ICONS_BASE_URL}${encodeURIComponent(iconFilename)}`; // Encode filename
-             const iconStyle = `-webkit-mask-image: url("${iconUrl}"); mask-image: url("${iconUrl}");`; // Ensure URL is quoted
-             const actionsHtml = `<button class="assignments-btn" data-node-id="${node.id}" data-node-name="${encodeURIComponent(node.name)}" title="Показать задания">Задания</button>`; // Encode name
+        // Функция рендеринга HTML для одной строки узла
+        function renderSingleNodeRowHtml(nodeData, nodeLevel, parentSubdivisionIdStr, initialDisplayStyle) {
+             if (!nodeData || !nodeData.name || !nodeData.status_class) {
+                 console.warn("renderSingleNodeRowHtml: Пропущен узел с неполными данными:", nodeData);
+                 return '';
+             }
+             const executorDisplay = nodeData.executor_host ? `${nodeData.executor_object_id || '?'}:${nodeData.executor_host}` : 'N/A';
+             const lastCheckedTime = formatDateTime(nodeData.last_checked);
+             const lastAvailableTime = formatDateTime(nodeData.last_available);
+             const nodeIconFilename = nodeData.icon_filename || DEFAULT_NODE_ICON_FILENAME;
+             const nodeIconFullUrl = `${ICONS_STATIC_BASE_URL}${encodeURIComponent(nodeIconFilename)}`;
+             const nodeIconStyle = `-webkit-mask-image: url("${nodeIconFullUrl}"); mask-image: url("${nodeIconFullUrl}");`;
+             // Кнопка "Задания"
+             const assignmentsButtonHtml = `<button class="assignments-btn" data-node-id="${nodeData.id}" data-node-name="${encodeURIComponent(nodeData.name)}" title="Показать задания для узла ${nodeData.name}">Задания</button>`;
 
              return `
-                <tr class="node-row subdivision-${subdivisionId}" data-node-id="${node.id}" data-level="${level}" style="display: ${displayStyle};">
-                    <td class="node-name-cell">
-                        <span class="node-table-icon ${node.status_class}" style="${iconStyle}" title="${node.node_type_path || ''}"></span>
-                        ${node.name}
+                <tr class="node-row subdivision-${parentSubdivisionIdStr}" data-node-id="${nodeData.id}" data-level="${nodeLevel}" style="display: ${initialDisplayStyle};">
+                    <td class="node-name-cell" title="Тип: ${nodeData.node_type_path || 'Не указан'}">
+                        <span class="node-table-icon ${nodeData.status_class}" style="${nodeIconStyle}"></span>
+                        ${nodeData.name}
                     </td>
-                    <td>${node.ip_address || 'N/A'}</td>
-                    <td class="status-cell ${node.status_class}">${node.status_text || 'N/A'}</td>
-                    <td>${lChk}</td>
-                    <td>${lAv}</td>
-                    <td>${exec}</td>
-                    <td>${node.node_type_name || 'N/A'}</td>
-                    <td class="actions-cell">${actionsHtml}</td>
+                    <td>${nodeData.ip_address || 'N/A'}</td>
+                    <td class="status-cell ${nodeData.status_class}">${nodeData.status_text || 'N/A'}</td>
+                    <td title="Время проверки на агенте: ${formatDateTime(nodeData.check_timestamp)}">${lastCheckedTime}</td>
+                    <td>${lastAvailableTime}</td>
+                    <td>${executorDisplay}</td>
+                    <td>${nodeData.node_type_name || 'N/A'}</td>
+                    <td class="actions-cell">${assignmentsButtonHtml}</td>
                 </tr>`;
         }
 
-        // Сортируем и рендерим корневые
-        const sortedRootSubdivisionIds = rootSubdivisionIds
-             .map(id => subdivisionMap[id]).filter(s => s).sort(subdivisionSorter)
+        // Сортируем корневые подразделения и запускаем рендеринг
+        const sortedRootIds = rootSubdivisionIdsInOrder
+             .map(id => subdivisionTree[id]).filter(s => s) // Получаем объекты и отсеиваем null
+             .sort(subdivisionDisplaySorter)
              .map(s => s.id);
 
-        if (sortedRootSubdivisionIds.length === 0 && nodes.length === 0) {
-            finalHtml = '<tr><td colspan="8" style="text-align:center; padding:1em;">Нет подразделений или узлов для отображения.</td></tr>';
+        if (sortedRootIds.length === 0 && nodes.length === 0) { // Если нет ни подразделений, ни узлов
+            tableHtmlContent = '<tr><td colspan="8" style="text-align:center; padding:1em;">Нет данных для отображения (нет подразделений и узлов).</td></tr>';
         } else {
-            sortedRootSubdivisionIds.forEach(rootId => { finalHtml += renderSubdivisionHtml(rootId, 0); });
+            sortedRootIds.forEach(rootId => { tableHtmlContent += renderSubdivisionToHtml(rootId, 0); });
         }
 
-        console.debug("HTML сгенерирован.");
-        tableBody.innerHTML = finalHtml;
-        updateToggleButtonText();
-        updateSortIndicators(); // <<< Обновляем индикаторы сортировки после рендера
-        console.debug("HTML вставлен.");
-    } // Конец renderTable
+        console.debug("renderDetailedStatusTable: HTML для таблицы сгенерирован.");
+        statusTableBodyElement.innerHTML = tableHtmlContent; // Вставляем готовый HTML в таблицу
+        updateToggleAllButtonText(); // Обновляем текст кнопки "Развернуть/Свернуть все"
+        updateTableSortIndicators(); // Обновляем индикаторы сортировки на заголовках таблицы
+        console.debug("renderDetailedStatusTable: HTML таблицы вставлен в DOM.");
+    }
 
-    // --- Функции сортировки ---
-    function nodeSorter(a, b) {
-        const field = sortState.column;
-        const dir = sortState.direction === 'asc' ? 1 : -1;
-        let valA = getSortValue(a, field);
-        let valB = getSortValue(b, field);
-        // Особая сортировка для имени узла (сначала по display_order, потом по имени)
-        if (field === 'name') {
-             const orderA = a.display_order === null || a.display_order === undefined ? Infinity : a.display_order;
+    // --- Функции для сортировки данных (используются в renderDetailedStatusTable) ---
+    /** Сортировщик для узлов (сначала по display_order, затем по имени). */
+    function nodeDisplaySorter(nodeA, nodeB) {
+        const sortCol = currentSortState.columnKey;
+        const sortDir = currentSortState.direction === 'asc' ? 1 : -1;
+        let valA = getNodeSortValue(nodeA, sortCol);
+        let valB = getNodeSortValue(nodeB, sortCol);
+
+        if (sortCol === 'name') { // Особая сортировка для имени узла
+             const orderA = nodeA.display_order === null || nodeA.display_order === undefined ? Infinity : nodeA.display_order;
              const orderB = b.display_order === null || b.display_order === undefined ? Infinity : b.display_order;
-             if (orderA !== orderB) return (orderA - orderB) * dir;
-             // Если display_order одинаковый, сравниваем по имени
-             valA = getSortValue(a, 'name');
-             valB = getSortValue(b, 'name');
+             if (orderA !== orderB) return (orderA - orderB) * sortDir;
+             // Если display_order одинаковый, сравниваем по имени (valA и valB уже содержат имена)
         }
-        if (valA < valB) return -1 * dir;
-        if (valA > valB) return 1 * dir;
-        return 0; // Если равны
+        // Общее сравнение
+        if (valA < valB) return -1 * sortDir;
+        if (valA > valB) return 1 * sortDir;
+        return 0;
     }
-    function subdivisionSorter(a, b) {
-         const priorityA = a.priority === null || a.priority === undefined ? Infinity : a.priority;
-         const priorityB = b.priority === null || b.priority === undefined ? Infinity : b.priority;
-         if (priorityA !== priorityB) return priorityA - priorityB;
-         return (a.short_name || '').localeCompare(b.short_name || '');
+    /** Сортировщик для подразделений (сначала по priority, затем по short_name). */
+    function subdivisionDisplaySorter(subA, subB) {
+         const priorityA = subA.priority === null || subA.priority === undefined ? Infinity : subA.priority;
+         const priorityB = subB.priority === null || subB.priority === undefined ? Infinity : subB.priority;
+         if (priorityA !== priorityB) return priorityA - priorityB; // Приоритет всегда по возрастанию
+         return (subA.short_name || '').localeCompare(subB.short_name || ''); // Имя по алфавиту
     }
-    function getSortValue(obj, field) {
-        const value = obj ? obj[field] : undefined; // Добавлена проверка obj
+    /** Возвращает значение поля объекта для сортировки, приводя типы. */
+    function getNodeSortValue(nodeObject, fieldKey) {
+        const value = nodeObject ? nodeObject[fieldKey] : undefined;
         if (value === null || value === undefined) {
-            // Для числовых полей (order) - бесконечность, для статуса - низший приоритет, для строк - пустая строка
-            return field === 'status' ? -1 : (field === 'display_order' ? Infinity : '');
+            // Для числовых полей (например, display_order) - бесконечность, чтобы они были в конце при сортировке asc
+            // Для статуса - низший приоритет (0), для строк - пустая строка
+            return fieldKey === 'status' ? -1 : (fieldKey === 'display_order' ? Infinity : '');
         }
-        if (field === 'status') { // Сортировка по статусу PING
-            if (obj.status_class === 'available') return 3;
-            if (obj.status_class === 'warning') return 2;
-            if (obj.status_class === 'unavailable') return 1;
+        if (fieldKey === 'status') { // Сортировка по числовому представлению статуса PING
+            if (nodeObject.status_class === 'available') return 3;
+            if (nodeObject.status_class === 'warning') return 2;
+            if (nodeObject.status_class === 'unavailable') return 1;
             return 0; // unknown
         }
-         if (field === 'last_checked' || field === 'last_available') { // Даты
-             try { return new Date(value).getTime() || 0; } catch { return 0; }
+         if (fieldKey === 'last_checked' || fieldKey === 'last_available' || fieldKey === 'check_timestamp') { // Даты
+             try { return new Date(value).getTime() || 0; } // Преобразуем в миллисекунды для сравнения
+             catch { return 0; }
          }
-        if (typeof value === 'string') { return value.toLowerCase(); } // Строки - в нижний регистр
-        return value; // Числа и булевы - как есть
+        if (typeof value === 'string') { return value.toLowerCase(); } // Строки сравниваем без учета регистра
+        return value; // Числа и булевы значения возвращаем как есть
     }
-    function handleSort(columnName) {
-        if (sortState.column === columnName) {
-            sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
-        } else {
-            sortState.column = columnName;
-            sortState.direction = 'asc';
+    /** Обрабатывает клик на заголовок колонки для сортировки. */
+    function handleTableSort(clickedColumnKey) {
+        if (currentSortState.columnKey === clickedColumnKey) { // Если кликнули по той же колонке
+            currentSortState.direction = currentSortState.direction === 'asc' ? 'desc' : 'asc'; // Меняем направление
+        } else { // Если кликнули по новой колонке
+            currentSortState.columnKey = clickedColumnKey;
+            currentSortState.direction = 'asc'; // По умолчанию сортируем по возрастанию
         }
-        renderTable(); // Перерендериваем с новой сортировкой
+        renderDetailedStatusTable(); // Перерисовываем таблицу с новой сортировкой
     }
-    function updateSortIndicators() {
-         document.querySelectorAll('.node-table th[data-column]').forEach(th => {
-             th.classList.remove('sort-asc', 'sort-desc');
-             if (th.dataset.column === sortState.column) {
-                 th.classList.add(sortState.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+    /** Обновляет CSS-классы на заголовках таблицы для отображения текущего направления сортировки. */
+    function updateTableSortIndicators() {
+         document.querySelectorAll('.node-table th[data-column]').forEach(thElement => {
+             thElement.classList.remove('sort-asc', 'sort-desc'); // Сбрасываем классы
+             if (thElement.dataset.column === currentSortState.columnKey) {
+                 thElement.classList.add(currentSortState.direction === 'asc' ? 'sort-asc' : 'sort-desc');
              }
          });
     }
 
-    // --- Функции Управления UI ---
-    function toggleSubdivision(subdivisionId) {
-        if (!tableBody || subdivisionId === undefined || subdivisionId === null) return;
-        const sid = String(subdivisionId);
-        const isNowExpanded = !(expandedState[sid] === true);
-        expandedState[sid] = isNowExpanded;
-        const childRows = tableBody.querySelectorAll(`.subdivision-${sid}, .type-header.subdivision-${sid}`); // Включаем заголовки типов
-        const subdivisionRow = tableBody.querySelector(`tr.subdivision-row[data-subdivision-id="${sid}"]`);
+    // --- Функции Управления UI (раскрытие групп, модальные окна) ---
+    /** Переключает состояние раскрытия/сворачивания для указанного подразделения. */
+    function toggleSubdivisionDisplay(subdivisionId) {
+        if (!statusTableBodyElement || subdivisionId === undefined || subdivisionId === null) return;
+        const subdivisionIdString = String(subdivisionId);
+        const isNowExpanded = !(hierarchialExpandedState[subdivisionIdString] === true); // Инвертируем текущее состояние
+        hierarchialExpandedState[subdivisionIdString] = isNowExpanded; // Сохраняем новое состояние
 
-        console.debug(`toggleSubdivision ${sid}: ${isNowExpanded}`);
-        // Прячем/показываем все дочерние строки (узлы И заголовки типов)
-        childRows.forEach(r => { r.style.display = isNowExpanded ? 'table-row' : 'none'; });
-        if (subdivisionRow) { subdivisionRow.classList.toggle('expanded', isNowExpanded); }
+        // Находим все дочерние строки (узлы И заголовки типов) для этого подразделения
+        const childRowElements = statusTableBodyElement.querySelectorAll(
+            `.subdivision-${subdivisionIdString}, .type-header.subdivision-${subdivisionIdString}`
+        );
+        const subdivisionRowElement = statusTableBodyElement.querySelector(
+            `tr.subdivision-row[data-subdivision-id="${subdivisionIdString}"]`
+        );
 
-        updateToggleButtonText();
+        console.debug(`toggleSubdivisionDisplay для ID ${subdivisionIdString}: новое состояние expanded = ${isNowExpanded}`);
+        // Устанавливаем стиль display для всех дочерних строк
+        childRowElements.forEach(rowEl => { rowEl.style.display = isNowExpanded ? 'table-row' : 'none'; });
+        // Обновляем класс 'expanded' для строки самого подразделения (для иконки +/-)
+        if (subdivisionRowElement) { subdivisionRowElement.classList.toggle('expanded', isNowExpanded); }
+
+        updateToggleAllButtonText(); // Обновляем текст кнопки "Развернуть/Свернуть все"
     }
 
-    function toggleAll() {
-         if (!tableBody || !toggleBtn) return;
-        const newStateIsExpanded = !isAllExpanded();
-        const allSubdivisionRows = tableBody.querySelectorAll('tr.subdivision-row');
-        expandedState = {}; // Сбрасываем состояние для всех
+    /** Раскрывает или сворачивает все подразделения в таблице. */
+    function toggleAllSubdivisions() {
+         if (!statusTableBodyElement || !toggleAllButtonElement) return;
+        const shouldBeExpandedNow = !isAllCurrentlyExpanded(); // Определяем, какое состояние установить для всех
+        const allSubdivisionRowElements = statusTableBodyElement.querySelectorAll('tr.subdivision-row');
+        hierarchialExpandedState = {}; // Сбрасываем сохраненные состояния для всех
 
-        allSubdivisionRows.forEach(row => {
-            const sid = row.dataset.subdivisionId;
-            if (sid) {
-                expandedState[sid] = newStateIsExpanded; // Устанавливаем новое состояние
-                row.classList.toggle('expanded', newStateIsExpanded);
-                // Находим ВСЕ дочерние элементы (узлы и заголовки типов)
-                const childRows = tableBody.querySelectorAll(`.subdivision-${sid}, .type-header.subdivision-${sid}`);
-                childRows.forEach(r => { r.style.display = newStateIsExpanded ? 'table-row' : 'none'; });
+        allSubdivisionRowElements.forEach(subRowElement => {
+            const subId = subRowElement.dataset.subdivisionId;
+            if (subId) {
+                hierarchialExpandedState[subId] = shouldBeExpandedNow; // Устанавливаем новое состояние
+                subRowElement.classList.toggle('expanded', shouldBeExpandedNow);
+                // Находим ВСЕ дочерние элементы (узлы и заголовки типов) для этого подразделения
+                const childElementsOfSub = statusTableBodyElement.querySelectorAll(
+                    `.subdivision-${subId}, .type-header.subdivision-${subId}`
+                );
+                childElementsOfSub.forEach(childEl => { childEl.style.display = shouldBeExpandedNow ? 'table-row' : 'none'; });
             }
         });
-        updateToggleButtonText();
+        updateToggleAllButtonText(); // Обновляем текст кнопки
     }
 
-    function isAllExpanded() {
-        if (!tableBody) return false;
-        const allSids = Array.from(tableBody.querySelectorAll('tr.subdivision-row')).map(r => r.dataset.subdivisionId).filter(id => id);
-        if (allSids.length === 0) return false;
-        return allSids.every(id => expandedState[id] === true);
+    /** Проверяет, все ли подразделения на странице в данный момент раскрыты. */
+    function isAllCurrentlyExpanded() {
+        if (!statusTableBodyElement) return false;
+        // Получаем все ID подразделений, которые есть в таблице
+        const allSubdivisionIdsInTable = Array.from(statusTableBodyElement.querySelectorAll('tr.subdivision-row'))
+                                         .map(rowEl => rowEl.dataset.subdivisionId)
+                                         .filter(id => id); // Убираем возможные undefined/null
+        if (allSubdivisionIdsInTable.length === 0) return false; // Если нет подразделений, то нечего раскрывать
+        // Проверяем, что для каждого ID состояние в expandedState равно true
+        return allSubdivisionIdsInTable.every(id => hierarchialExpandedState[id] === true);
     }
-    function updateToggleButtonText() {
-        if (toggleBtn) { toggleBtn.textContent = isAllExpanded() ? 'Свернуть все' : 'Развернуть все'; }
-    }
-    function openModal() {
-         if (assignmentsModal) {
-             assignmentsModal.style.display = "block";
-             if (modalDetailsContainer) modalDetailsContainer.style.display = "none";
-             if (modalHistoryContainer) modalHistoryContainer.style.display = "none";
-         }
-    }
-    function closeModal() {
-         if (assignmentsModal) assignmentsModal.style.display = "none";
-         if (modalDetailsContainer) modalDetailsContainer.style.display = "none";
-         if (modalDetailsJson) modalDetailsJson.textContent = '';
-         if (modalHistoryContainer) modalHistoryContainer.style.display = "none";
-         if (modalHistoryList) modalHistoryList.innerHTML = '';
-    }
-    async function showAssignments(nodeId, nodeName) {
-         if (!modalTitle || !modalBody) return;
-        modalTitle.textContent = `Задания для узла: ${decodeURIComponent(nodeName)} (ID: ${nodeId})`; // Decode name
-        modalBody.innerHTML = '<p>Загрузка заданий...</p>';
-        if (modalDetailsContainer) modalDetailsContainer.style.display = "none";
-        if (modalHistoryContainer) modalHistoryContainer.style.display = "none";
-        openModal();
-        try {
-            const assignments = await fetchAssignments(nodeId);
-            renderAssignments(assignments);
-        } catch (error) {
-            console.error(`Ошибка загрузки заданий для узла ${nodeId}:`, error);
-            modalBody.innerHTML = `<p class="error-message">Ошибка загрузки заданий: ${error.message}</p>`;
+    /** Обновляет текст на кнопке "Развернуть/Свернуть все". */
+    function updateToggleAllButtonText() {
+        if (toggleAllButtonElement) {
+            toggleAllButtonElement.textContent = isAllCurrentlyExpanded() ? 'Свернуть все' : 'Развернуть все';
         }
     }
-    function renderAssignments(assignments) {
-         if (!modalBody) return;
-         if (!Array.isArray(assignments) || assignments.length === 0) {
-             modalBody.innerHTML = '<p>Для этого узла нет назначенных заданий.</p>';
+
+    /** Открывает модальное окно. */
+    function openAssignmentsModal() {
+         if (assignmentsModalElement) {
+             assignmentsModalElement.style.display = "block";
+             // При открытии основного модального, скрываем секции деталей и истории по умолчанию
+             if (modalDetailsContainerElement) modalDetailsContainerElement.style.display = "none";
+             if (modalHistoryContainerElement) modalHistoryContainerElement.style.display = "none";
+         }
+    }
+    /** Закрывает модальное окно и очищает его содержимое. */
+    function closeModal() {
+         if (assignmentsModalElement) assignmentsModalElement.style.display = "none";
+         // Очищаем содержимое при закрытии
+         if (modalDetailsContainerElement) modalDetailsContainerElement.style.display = "none";
+         if (modalDetailsJsonPreElement) modalDetailsJsonPreElement.textContent = '';
+         if (modalHistoryContainerElement) modalHistoryContainerElement.style.display = "none";
+         if (modalHistoryListElement) modalHistoryListElement.innerHTML = '';
+         if (historyAssignmentIdDisplaySpan) historyAssignmentIdDisplaySpan.textContent = '';
+    }
+
+    /** Загружает и отображает назначенные задания для узла в модальном окне. */
+    async function showNodeAssignmentsInModal(nodeId, nodeName) {
+         if (!modalTitleElement || !modalBodyElement) {
+             console.error("showNodeAssignmentsInModal: Элементы модального окна не найдены.");
              return;
          }
-        let tableHtml = `<table class="assignments-table"><thead><tr><th>ID</th><th>Метод</th><th>Параметры</th><th>Вкл.</th><th>Интервал</th><th>Посл. выполнено</th><th>Статус</th><th style="min-width: 110px;">Действия</th></tr></thead><tbody>`;
-         assignments.forEach(a => {
-             // <<< Проверка наличия assignment_id >>>
-             if (a.assignment_id === undefined || a.assignment_id === null) {
-                 console.warn("Пропущено задание без assignment_id:", a);
+        modalTitleElement.textContent = `Задания для узла: ${decodeURIComponent(nodeName)} (ID: ${nodeId})`;
+        modalBodyElement.innerHTML = '<p class="loading-message">Загрузка назначенных заданий...</p>';
+        // Скрываем секции деталей и истории перед загрузкой новых заданий
+        if (modalDetailsContainerElement) modalDetailsContainerElement.style.display = "none";
+        if (modalHistoryContainerElement) modalHistoryContainerElement.style.display = "none";
+        openAssignmentsModal(); // Открываем модальное окно
+
+        try {
+            const nodeAssignments = await fetchNodeAssignments(nodeId); // Загружаем задания
+            renderNodeAssignmentsInModal(nodeAssignments); // Рендерим их
+        } catch (error) {
+            console.error(`Ошибка загрузки заданий для узла ID ${nodeId}:`, error);
+            modalBodyElement.innerHTML = `<p class="error-message">Ошибка загрузки заданий: ${error.message}</p>`;
+        }
+    }
+
+    /** Рендерит таблицу с заданиями внутри модального окна. */
+    function renderNodeAssignmentsInModal(assignmentsData) {
+         if (!modalBodyElement) return;
+         if (!Array.isArray(assignmentsData) || assignmentsData.length === 0) {
+             modalBodyElement.innerHTML = '<p>Для этого узла нет назначенных заданий.</p>';
+             return;
+         }
+        // Формируем HTML для таблицы заданий
+        let assignmentsTableHtml = `
+            <table class="assignments-table">
+                <thead>
+                    <tr>
+                        <th>ID Задания</th>
+                        <th>Метод</th>
+                        <th>Параметры (pipeline)</th>
+                        <th>Вкл.</th>
+                        <th>Интервал</th>
+                        <th>Посл. вып.</th>
+                        <th>Статус посл.</th>
+                        <th style="min-width: 110px;">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+         assignmentsData.forEach(assign => {
+             if (assign.assignment_id === undefined || assign.assignment_id === null) {
+                 console.warn("renderNodeAssignmentsInModal: Пропущено задание без assignment_id:", assign);
                  return; // Пропускаем это задание
              }
-             const paramsStr = a.parameters ? JSON.stringify(a.parameters) : 'Нет';
-             const lastExec = formatDateTime(a.last_executed_at);
-             let statusClass = 'status-unknown'; let statusText = 'Нет данных';
-             if (a.last_check_id !== null) {
-                 if (a.last_check_is_available === true) { statusClass = 'status-ok'; statusText = 'Доступен'; }
-                 else if (a.last_check_is_available === false) { statusClass = 'status-error'; statusText = 'Недоступен'; }
-             }
-             const detailsButton = a.has_details ? `<button class="details-btn" data-check-id="${a.last_check_id}">Детали</button>` : '';
-             // <<< Убеждаемся, что assignment_id передается в data- атрибут >>>
-             const historyButton = `<button class="history-btn" data-assignment-id="${a.assignment_id}">История</button>`;
+             // Отображаем pipeline как JSON, если он есть, иначе "Нет"
+             const pipelineDisplay = assign.pipeline && Object.keys(assign.pipeline).length > 0
+                                  ? JSON.stringify(assign.pipeline)
+                                  : 'Нет';
+             const pipelineTitle = assign.pipeline && Object.keys(assign.pipeline).length > 0
+                                 ? JSON.stringify(assign.pipeline, null, 2) // Форматированный для title
+                                 : 'Конвейер не задан';
 
-             tableHtml += `
+             const lastExecutedTime = formatDateTime(assign.last_executed_at);
+             let checkStatusClass = 'status-unknown';
+             let checkStatusText = 'Нет данных';
+             if (assign.last_check_id !== null && assign.last_check_is_available !== null) {
+                 checkStatusClass = assign.last_check_is_available ? 'status-ok' : 'status-error';
+                 checkStatusText = assign.last_check_is_available ? 'Доступен' : 'Недоступен';
+             }
+             // Кнопка "Детали" отображается, только если есть детали последней проверки (has_details из БД)
+             const detailsButtonHtml = assign.has_details && assign.last_check_id
+                                     ? `<button class="details-btn" data-check-id="${assign.last_check_id}">Детали</button>`
+                                     : '';
+             // Кнопка "История" для каждого задания
+             const historyButtonHtml = `<button class="history-btn" data-assignment-id="${assign.assignment_id}">История</button>`;
+
+             assignmentsTableHtml += `
                 <tr>
-                    <td>${a.assignment_id}</td>
-                    <td>${a.method_name}</td>
-                    <td class="params" title="${paramsStr}">${paramsStr}</td>
-                    <td>${a.is_enabled ? 'Да' : 'Нет'}</td>
-                    <td>${a.check_interval_seconds ? a.check_interval_seconds + ' сек' : 'По умолч.'}</td>
-                    <td>${lastExec}</td>
-                    <td class="${statusClass}">${statusText}</td>
-                    <td class="actions-cell">${detailsButton} ${historyButton}</td>
+                    <td>${assign.assignment_id}</td>
+                    <td>${assign.method_name || 'N/A'}</td>
+                    <td class="params" title='${pipelineTitle.replace(/'/g, '"')}'>${pipelineDisplay}</td>
+                    <td>${assign.is_enabled ? 'Да' : 'Нет'}</td>
+                    <td>${assign.check_interval_seconds ? assign.check_interval_seconds + ' сек' : 'По умолч.'}</td>
+                    <td>${lastExecutedTime}</td>
+                    <td class="${checkStatusClass}">${checkStatusText}</td>
+                    <td class="actions-cell">${detailsButtonHtml} ${historyButtonHtml}</td>
                 </tr>
             `;
          });
-         tableHtml += `</tbody></table>`;
-         modalBody.innerHTML = tableHtml;
+         assignmentsTableHtml += `</tbody></table>`;
+         modalBodyElement.innerHTML = assignmentsTableHtml; // Вставляем таблицу в модальное окно
     }
 
-    async function showDetails(checkId) {
-         if (!checkId || !modalDetailsContainer || !modalDetailsJson) return;
-         modalDetailsContainer.style.display = 'block';
-         modalHistoryContainer.style.display = 'none';
-         modalDetailsJson.textContent = 'Загрузка деталей...';
-         const detailsList = await fetchCheckDetails(checkId);
+    /** Загружает и отображает детали конкретной проверки в модальном окне. */
+    async function showCheckDetailsInModal(checkId) {
+         if (!checkId || !modalDetailsContainerElement || !modalDetailsJsonPreElement) {
+            console.error("showCheckDetailsInModal: Отсутствуют необходимые элементы DOM или checkId.");
+            return;
+         }
+         modalDetailsContainerElement.style.display = 'block'; // Показываем блок деталей
+         modalHistoryContainerElement.style.display = 'none';  // Скрываем блок истории, если был открыт
+         modalDetailsJsonPreElement.textContent = 'Загрузка деталей проверки...'; // Сообщение о загрузке
 
-         if (detailsList === null) { modalDetailsJson.textContent = '[Ошибка загрузки деталей]'; }
-         else if (detailsList.length > 0) {
-             modalDetailsJson.textContent = detailsList.map(d => `Тип: ${d.detail_type || 'N/A'}\nДанные:\n${JSON.stringify(d.data, null, 2)}`).join('\n\n---\n\n');
-         } else { modalDetailsJson.textContent = 'Детальная информация для этой проверки отсутствует.'; }
+         const checkDetailsList = await fetchSingleCheckDetails(checkId); // Загружаем детали
+
+         if (checkDetailsList === null) { // Ошибка загрузки
+            modalDetailsJsonPreElement.textContent = '[Ошибка загрузки деталей проверки]';
+         } else if (Array.isArray(checkDetailsList) && checkDetailsList.length > 0) {
+            // Форматируем и отображаем детали (каждая запись detail_type + data)
+            modalDetailsJsonPreElement.textContent = checkDetailsList.map(detailItem =>
+                `Тип детали: ${detailItem.detail_type || 'N/A'}\n` +
+                `Данные:\n${JSON.stringify(detailItem.data, null, 2)}` // Форматированный JSON
+            ).join('\n\n--------------------------\n\n');
+         } else {
+            modalDetailsJsonPreElement.textContent = 'Детальная информация для этой проверки отсутствует.';
+         }
      }
 
-     async function showHistory(assignmentId) {
-         // <<< УЛУЧШЕННАЯ ПРОВЕРКА ID >>>
-         console.log("showHistory called with assignmentId:", assignmentId, typeof assignmentId);
-         if (assignmentId === undefined || assignmentId === null || assignmentId === '' || isNaN(parseInt(assignmentId, 10))) {
-             console.error("showHistory: Получен неверный assignmentId:", assignmentId);
-             if (modalHistoryList) modalHistoryList.innerHTML = '<li class="error-message">Ошибка: Неверный ID задания для загрузки истории.</li>';
-             if (historyAssignmentIdSpan) historyAssignmentIdSpan.textContent = 'Ошибка';
-             if (modalHistoryContainer) modalHistoryContainer.style.display = 'block';
-             if (modalDetailsContainer) modalDetailsContainer.style.display = 'none';
+    /** Загружает и отображает историю проверок для задания в модальном окне. */
+     async function showAssignmentHistoryInModal(assignmentId) {
+         // Валидация assignmentId (должно быть числом)
+         const numericAssignmentId = parseInt(assignmentId, 10);
+         if (isNaN(numericAssignmentId) || numericAssignmentId <= 0) {
+             console.error("showAssignmentHistoryInModal: Получен неверный assignmentId:", assignmentId);
+             if (modalHistoryListElement) modalHistoryListElement.innerHTML = '<li class="error-message">Ошибка: Неверный ID задания для загрузки истории.</li>';
+             if (historyAssignmentIdDisplaySpan) historyAssignmentIdDisplaySpan.textContent = 'Ошибка ID';
+             if (modalHistoryContainerElement) modalHistoryContainerElement.style.display = 'block'; // Показываем блок, чтобы было видно ошибку
+             if (modalDetailsContainerElement) modalDetailsContainerElement.style.display = 'none';
              return;
          }
-         const idNum = parseInt(assignmentId, 10); // <<< Используем распарсенное число
 
-         modalHistoryContainer.style.display = 'block';
-         modalDetailsContainer.style.display = 'none';
-         historyAssignmentIdSpan.textContent = idNum; // <<< Показываем числовой ID
-         modalHistoryList.innerHTML = '<li class="loading-message">Загрузка истории...</li>';
+         if (!modalHistoryContainerElement || !modalHistoryListElement || !historyAssignmentIdDisplaySpan) {
+             console.error("showAssignmentHistoryInModal: Отсутствуют необходимые DOM-элементы для истории.");
+             return;
+         }
+         modalHistoryContainerElement.style.display = 'block'; // Показываем блок истории
+         modalDetailsContainerElement.style.display = 'none';  // Скрываем блок деталей
+         historyAssignmentIdDisplaySpan.textContent = numericAssignmentId; // Отображаем ID задания
+         modalHistoryListElement.innerHTML = '<li class="loading-message">Загрузка истории проверок...</li>';
 
-         const history = await fetchAssignmentHistory(idNum); // <<< Передаем числовой ID
+         const historyData = await fetchSingleAssignmentHistory(numericAssignmentId); // Загружаем историю
 
-         if (history === null) { modalHistoryList.innerHTML = '<li class="error-message">Ошибка загрузки истории</li>'; }
-         else if (history.length > 0) {
-             let historyHtml = history.map(h => {
-                 const time = formatDateTime(h.checked_at);
-                 const agentTime = h.check_timestamp ? ` (Агент: ${formatDateTime(h.check_timestamp)})` : '';
-                 const statusClass = h.is_available ? 'ok' : 'error';
-                 const statusText = h.is_available ? 'Доступен' : 'Недоступен';
-                 const executor = h.executor_host ? `${h.executor_object_id}:${h.executor_host}` : 'N/A';
-                 const detailsLink = h.has_details ? `<a href="#" class="details-link" data-check-id="${h.id}" title="Показать детали этой проверки">Детали</a>` : '';
-
+         if (historyData === null) { // Ошибка загрузки
+             modalHistoryListElement.innerHTML = '<li class="error-message">Ошибка загрузки истории проверок.</li>';
+         } else if (Array.isArray(historyData) && historyData.length > 0) {
+             let historyHtmlContent = historyData.map(histEntry => {
+                 const checkTime = formatDateTime(histEntry.checked_at);
+                 const agentCheckTime = histEntry.check_timestamp ? ` (Агент: ${formatDateTime(histEntry.check_timestamp)})` : '';
+                 const statusCssClass = histEntry.is_available ? 'ok' : 'error';
+                 const statusTextDisplay = histEntry.is_available ? 'Доступен' : 'Недоступен';
+                 const executorInfo = histEntry.executor_host ? `${histEntry.executor_object_id || '?'}:${histEntry.executor_host}` : 'N/A';
+                 // Кнопка "Детали" для каждой записи истории, если у нее есть детали
+                 const detailsLinkHtml = histEntry.has_details && histEntry.id
+                                       ? `<a href="#" class="details-link" data-check-id="${histEntry.id}" title="Показать детали этой проверки">Детали</a>`
+                                       : '';
                  return `
                     <li>
-                        <span class="hist-time" title="Время проверки на агенте">${time}${agentTime}</span>
-                        <span class="hist-status ${statusClass}" title="${h.method_name}">${statusText}</span>
-                        <span class="hist-executor" title="Исполнитель">${executor}</span>
-                        <span class="hist-details-link">${detailsLink}</span>
-                    </li>
-                 `;
+                        <span class="hist-time" title="Время проверки на сервере (и на агенте, если есть)">${checkTime}${agentCheckTime}</span>
+                        <span class="hist-status ${statusCssClass}" title="Метод: ${histEntry.method_name || 'N/A'}">${statusTextDisplay}</span>
+                        <span class="hist-executor" title="Исполнитель проверки">${executorInfo}</span>
+                        <span class="hist-details-link">${detailsLinkHtml}</span>
+                    </li>`;
              }).join('');
-             modalHistoryList.innerHTML = historyHtml;
-         } else { modalHistoryList.innerHTML = '<li>Нет записей истории для этого задания.</li>'; }
+             modalHistoryListElement.innerHTML = historyHtmlContent;
+         } else { // Если история пуста
+             modalHistoryListElement.innerHTML = '<li>Нет записей в истории для этого задания.</li>';
+         }
      }
 
-    // --- Инициализация и Обработчики ---
-    function handleTableClick(event) {
-        const subdivisionRow = event.target.closest('tr.subdivision-row');
-        const assignmentsBtn = event.target.closest('button.assignments-btn');
-        const detailsBtn = event.target.closest('button.details-btn');
-        const historyBtn = event.target.closest('button.history-btn'); // <<< Обработчик кнопки История
-        const headerCell = event.target.closest('th[data-column]');
-        const detailsLink = event.target.closest('a.details-link'); // <<< Обработчик ссылки Детали в истории
 
-        if (subdivisionRow) {
-            toggleSubdivision(subdivisionRow.dataset.subdivisionId);
-        } else if (assignmentsBtn) {
-            event.stopPropagation();
-            // Передаем декодированное имя узла
-            showAssignments(assignmentsBtn.dataset.nodeId, decodeURIComponent(assignmentsBtn.dataset.nodeName));
-        } else if (detailsBtn) {
-             event.stopPropagation();
-             showDetails(detailsBtn.dataset.checkId);
-        } else if (historyBtn) {
-             event.stopPropagation();
-             // <<< ИСПРАВЛЕНО: Извлекаем ID и передаем в showHistory >>>
-             const assignmentIdRaw = historyBtn.dataset.assignmentId;
-             console.log("History button clicked. Raw assignmentId:", assignmentIdRaw); // Лог
-             if (assignmentIdRaw !== undefined && assignmentIdRaw !== null && assignmentIdRaw !== '') {
-                showHistory(assignmentIdRaw); // Передаем строку, parseInt будет в showHistory
-             } else {
-                console.error("Не удалось получить assignmentId из data-assignment-id кнопки 'История'.", historyBtn);
-                alert("Не удалось загрузить историю: ID задания не найден на кнопке.");
-             }
-        } else if (detailsLink) {
-             event.preventDefault();
-             event.stopPropagation();
-             showDetails(detailsLink.dataset.checkId);
-        } else if (headerCell) {
-             handleSort(headerCell.dataset.column);
-        }
-    }
+    // --- Инициализация страницы и назначение глобальных обработчиков ---
+    /** Инициализирует страницу: находит DOM-элементы, назначает обработчики, загружает данные. */
+    function initializeDetailedStatusPage() {
+        console.log("Detailed Status: Инициализация страницы детального статуса...");
+        // Получаем ссылки на все необходимые DOM-элементы
+        statusTableBodyElement = document.getElementById('status-table-body');
+        toggleAllButtonElement = document.getElementById('toggle-all-btn');
+        assignmentsModalElement = document.getElementById('assignments-modal');
+        modalTitleElement = document.getElementById('modal-title');
+        modalBodyElement = document.getElementById('modal-body');
+        modalDetailsContainerElement = document.getElementById('modal-details');
+        modalDetailsJsonPreElement = modalDetailsContainerElement?.querySelector('.details-json'); // Используем querySelector для поиска внутри
+        modalHistoryContainerElement = document.getElementById('modal-history');
+        modalHistoryListElement = modalHistoryContainerElement?.querySelector('.history-list');
+        historyAssignmentIdDisplaySpan = modalHistoryContainerElement?.querySelector('#history-assignment-id-span'); // Обновленный ID
 
-    // --- Общая функция форматирования даты (если еще не определена) ---
-    function formatDateTime(dateStr) {
-        if (!dateStr) return 'N/A';
-        try {
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime())) return 'Неверная дата';
-            return date.toLocaleString('ru-RU', {
-                timeZone: 'Europe/Moscow', // Отображаем всегда по МСК
-                year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-        } catch (e) {
-            console.error("Ошибка форматирования даты:", dateStr, e);
-            return 'Ошибка даты';
-        }
-    }
-
-    function initializePage() {
-        console.log("Инициализация страницы детального статуса...");
-        tableBody = document.getElementById('status-table-body');
-        toggleBtn = document.getElementById('toggle-all-btn');
-        assignmentsModal = document.getElementById('assignments-modal');
-        modalTitle = document.getElementById('modal-title');
-        modalBody = document.getElementById('modal-body');
-        modalDetailsContainer = document.getElementById('modal-details');
-        modalDetailsJson = modalDetailsContainer?.querySelector('.details-json');
-        modalHistoryContainer = document.getElementById('modal-history');
-        modalHistoryList = modalHistoryContainer?.querySelector('.history-list');
-        historyAssignmentIdSpan = modalHistoryContainer?.querySelector('#history-assignment-id');
-
-        if (!tableBody || !toggleBtn || !assignmentsModal || !modalTitle || !modalBody || !modalDetailsContainer || !modalDetailsJson || !modalHistoryContainer || !modalHistoryList || !historyAssignmentIdSpan) {
-            console.error("Критическая ошибка: Не найдены все необходимые элементы DOM!");
-            // Попробуем показать ошибку в body, если ничего другого нет
-            document.body.insertAdjacentHTML('afterbegin', '<p style="color:red; background:pink; padding:1em; text-align:center;">Ошибка инициализации страницы. Элементы не найдены.</p>');
+        // Проверка, что все критически важные элементы найдены
+        if (!statusTableBodyElement || !toggleAllButtonElement || !assignmentsModalElement || !modalTitleElement ||
+            !modalBodyElement || !modalDetailsContainerElement || !modalDetailsJsonPreElement ||
+            !modalHistoryContainerElement || !modalHistoryListElement || !historyAssignmentIdDisplaySpan) {
+            console.error("Критическая ошибка инициализации: Не найдены все необходимые элементы DOM на странице детального статуса!");
+            // Можно отобразить сообщение об ошибке пользователю
+            document.body.insertAdjacentHTML('afterbegin', '<p style="color:red; background:pink; padding:1em; text-align:center;">Критическая ошибка: Не удалось инициализировать страницу. Некоторые элементы не найдены.</p>');
             return;
         }
+        console.debug("Detailed Status: Все необходимые DOM-элементы найдены.");
 
-        console.debug("Элементы DOM найдены. Добавление обработчиков...");
-        tableBody.addEventListener('click', handleTableClick);
-        toggleBtn.addEventListener('click', toggleAll);
-        // Используем modalBody и modalHistoryList для обработки кликов на кнопках/ссылках внутри модального окна
-        modalBody.addEventListener('click', handleTableClick);
-        modalHistoryList.addEventListener('click', handleTableClick);
+        // Назначаем обработчики событий
+        // Делегирование кликов для основной таблицы (раскрытие групп, кнопки "Задания", сортировка)
+        statusTableBodyElement.addEventListener('click', handleDetailedTableClick);
+        // Кнопка "Развернуть/Свернуть все"
+        toggleAllButtonElement.addEventListener('click', toggleAllSubdivisions);
+        // Делегирование кликов для модального окна (кнопки "Детали", "История" внутри таблицы заданий и ссылки "Детали" в истории)
+        modalBodyElement.addEventListener('click', handleDetailedTableClick); // Переиспользуем тот же обработчик
+        modalHistoryListElement.addEventListener('click', handleDetailedTableClick); // Для ссылок "Детали" в истории
 
-        window.onclick = function(event) { if (event.target == assignmentsModal) closeModal(); }
+        // Закрытие модального окна при клике вне его контента
+        window.onclick = function(event) {
+            if (event.target == assignmentsModalElement) {
+                closeModal();
+            }
+        }
+        // Также можно добавить закрытие по Escape, но это уже улучшение UX
 
-        console.debug("Обработчики добавлены.");
-        fetchDetailedStatus();
-        setInterval(fetchDetailedStatus, 30000); // Автообновление каждые 30 секунд
-        console.log("Страница детального статуса инициализирована.");
+        console.debug("Detailed Status: Обработчики событий назначены.");
+        fetchAndRenderDetailedStatus(); // Загружаем и рендерим данные при инициализации
+        // Устанавливаем интервал для автоматического обновления данных
+        setInterval(fetchAndRenderDetailedStatus, 30000); // Обновление каждые 30 секунд
+        console.log("Detailed Status: Страница детального статуса успешно инициализирована.");
     }
 
-    // --- Запуск ---
-    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', initializePage); }
-    else { console.log("DOM уже загружен, инициализация..."); initializePage(); }
+    /** Обрабатывает клики внутри основной таблицы статусов и модального окна. */
+    function handleDetailedTableClick(event) {
+        const targetElement = event.target;
+        // Клик по строке подразделения для раскрытия/сворачивания
+        const subdivisionRowTarget = targetElement.closest('tr.subdivision-row');
+        if (subdivisionRowTarget) {
+            toggleSubdivisionDisplay(subdivisionRowTarget.dataset.subdivisionId);
+            return; // Прекращаем дальнейшую обработку, если это был клик по группе
+        }
+        // Клик по кнопке "Задания" в основной таблице
+        const assignmentsButtonTarget = targetElement.closest('button.assignments-btn');
+        if (assignmentsButtonTarget) {
+            event.stopPropagation(); // Предотвращаем всплытие, если кнопка внутри другой кликабельной области
+            const nodeId = assignmentsButtonTarget.dataset.nodeId;
+            const nodeName = assignmentsButtonTarget.dataset.nodeName; // Имя уже URL-декодировано при получении из data-атрибута
+            if (nodeId && nodeName) {
+                showNodeAssignmentsInModal(nodeId, nodeName); // Показываем задания для узла
+            } else { console.error("Не удалось получить nodeId или nodeName из кнопки 'Задания'."); }
+            return;
+        }
+        // Клик по кнопке "Детали" (в таблице заданий внутри модального окна)
+        const detailsButtonTarget = targetElement.closest('button.details-btn');
+        if (detailsButtonTarget) {
+            event.stopPropagation();
+            const checkId = detailsButtonTarget.dataset.checkId;
+            if (checkId) showCheckDetailsInModal(parseInt(checkId, 10));
+            else console.error("Не удалось получить checkId из кнопки 'Детали'.");
+            return;
+        }
+        // Клик по кнопке "История" (в таблице заданий внутри модального окна)
+        const historyButtonTarget = targetElement.closest('button.history-btn');
+        if (historyButtonTarget) {
+            event.stopPropagation();
+            const assignmentId = historyButtonTarget.dataset.assignmentId;
+            if (assignmentId) showAssignmentHistoryInModal(assignmentId); // Передаем строку, парсинг внутри
+            else console.error("Не удалось получить assignmentId из кнопки 'История'.");
+            return;
+        }
+        // Клик по ссылке "Детали" в списке истории (внутри модального окна)
+        const detailsLinkInHistory = targetElement.closest('a.details-link');
+        if (detailsLinkInHistory) {
+            event.preventDefault(); event.stopPropagation();
+            const checkIdForHistoryDetail = detailsLinkInHistory.dataset.checkId;
+            if (checkIdForHistoryDetail) showCheckDetailsInModal(parseInt(checkIdForHistoryDetail, 10));
+            else console.error("Не удалось получить checkId из ссылки 'Детали' в истории.");
+            return;
+        }
+        // Клик по заголовку колонки для сортировки
+        const tableHeaderCell = targetElement.closest('th[data-column]');
+        if (tableHeaderCell) {
+            handleTableSort(tableHeaderCell.dataset.column);
+            return;
+        }
+    }
 
+    // --- Общая функция форматирования даты (если еще не определена в base.html или глобально) ---
+    // В base.html уже есть formatDateTime, поэтому здесь ее дублировать не нужно,
+    // если этот скрипт выполняется ПОСЛЕ скриптов из base.html.
+    // Если есть сомнения, можно ее здесь переопределить или убедиться, что она доступна глобально.
+    // function formatDateTime(dateStr) { /* ... (реализация как в base.html) ... */ }
+
+    // --- Запуск инициализации страницы ---
+    // Ожидаем полной загрузки DOM перед тем, как начать работу со скриптами
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeDetailedStatusPage);
+    } else { // Если DOM уже загружен
+        console.log("DOM уже был загружен, немедленная инициализация страницы детального статуса...");
+        initializeDetailedStatusPage();
+    }
 </script>
 {% endblock %}

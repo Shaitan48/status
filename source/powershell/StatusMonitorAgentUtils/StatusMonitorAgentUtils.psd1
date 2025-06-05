@@ -4,8 +4,8 @@
 @{
 
     # --- ОБНОВЛЕНО: Версия модуля ---
-    # Версия 2.0.0: Существенно доработана логика проверки критериев (Test-SuccessCriteria)
-    ModuleVersion = '2.0.0'
+    # Версия 2.1.3: Соответствует последним изменениям в .psm1 (комментарии и логика для pipeline).
+    ModuleVersion = '2.1.3'
 
     # Уникальный идентификатор модуля (GUID). Не меняется.
     GUID = 'e5fa7cfe-608d-47c9-898d-215bb6b0ef0d'
@@ -20,16 +20,12 @@
     # Copyright = '(c) 2024 Your Company. All rights reserved.'
 
     # --- ОБНОВЛЕНО: Описание модуля ---
-    Description = 'Общий модуль для Гибридного Агента системы мониторинга Status Monitor. Содержит диспетчер проверок (Invoke-StatusMonitorCheck), функцию форматирования результата (New-CheckResultObject), универсальную функцию проверки критериев (Test-SuccessCriteria) и скрипты для конкретных проверок в папке Checks.'
+    Description = 'Общий модуль для Гибридного Агента системы мониторинга Status Monitor (v5.x+). Содержит диспетчер для выполнения одного шага pipeline (Invoke-StatusMonitorCheck), функцию форматирования результата шага (New-CheckResultObject), универсальную функцию проверки критериев (Test-SuccessCriteria) и скрипты для конкретных типов шагов в папке Checks.'
 
     # Минимально необходимая версия PowerShell
     PowerShellVersion = '5.1'
 
     # Зависимости от других модулей (раскомментировать и добавить при необходимости)
-    # Например, если бы использовались командлеты ActiveDirectory:
-    # RequiredModules = @{ ModuleName = 'ActiveDirectory'; RequiredVersion = '1.0.0.0' }
-    # Для SQL проверок модуль SqlServer ДОЛЖЕН БЫТЬ установлен на машине агента,
-    # но его не обязательно указывать здесь, т.к. он используется ВНУТРИ Check-*.ps1
     # RequiredModules = @()
 
     # Основной файл модуля .psm1
@@ -37,21 +33,19 @@
 
     # --- ПОДТВЕРЖДЕНО: Экспортируемые функции ---
     # Список функций, видимых снаружи модуля.
-    # Test-SuccessCriteria и Compare-Values экспортируются для возможности
-    # их потенциального использования в более сложных сценариях или тестах.
+    # Invoke-StatusMonitorCheck теперь используется для выполнения ОДНОГО ШАГА pipeline.
     FunctionsToExport = @(
-        'Invoke-StatusMonitorCheck', # Диспетчер для агента
+        'Invoke-StatusMonitorCheck', # Диспетчер для выполнения шага pipeline
         'New-CheckResultObject',     # Стандартизация результата (для Checks/*.ps1)
         'Test-SuccessCriteria',      # Универсальная проверка критериев
         'Compare-Values'             # Вспомогательная для Test-SuccessCriteria
-        # Test-ArrayCriteria является приватной и не экспортируется
     )
 
     # Список командлетов, экспортируемых модулем (у нас таких нет).
     CmdletsToExport = @()
 
     # Список переменных, экспортируемых модулем (не рекомендуется).
-    VariablesToExport = @() # Явно указываем пустой список
+    VariablesToExport = @()
 
     # Список псевдонимов (aliases), экспортируемых модулем.
     AliasesToExport = @()

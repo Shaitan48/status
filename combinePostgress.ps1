@@ -1,5 +1,5 @@
-﻿$sourcePath = "F:\status\source"
-$outputFile = "F:\status\combined.txt"
+﻿$sourcePath = "F:\status\source\postgres"
+$outputFile = "F:\status\combined_postgres.txt"
 
 # Удалим файл, если уже существует
 if (Test-Path $outputFile) {
@@ -22,8 +22,8 @@ function Get-FileEncoding {
 # Получаем все нужные файлы, исключая .log, .png, .svg, .ico и папки __pycache__
 $files = Get-ChildItem -Path $sourcePath -Recurse -File |
     Where-Object {
-        $_.Extension -notin '.log', '.png', '.rpu', '.7z', '.svg', '.xls', '.ico' -and
-        $_.FullName -notmatch '__pycache__|.venv|.vscode|.git|combine|.pytest_cache'
+        $_.Extension -notin '.log', '.png', '.rpu', '.7z', '.svg', '.ico' -and
+        $_.FullName -notmatch '__pycache__|.venv|.pytest_cache'
     }
 
 # Собираем информацию о файлах и их кодировках

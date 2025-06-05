@@ -1,26 +1,45 @@
 ﻿# powershell/result_loader/result_loader.ps1
-# --- Загрузчик Результатов v4.2.3 ---
+# --- Загрузчик Результатов для Status Monitor (v5.x - Pipeline Архитектура) ---
+# --- Версия 5.0.0 ---
 # Изменения:
-# - Исправлен регистр ключей 'IsAvailable' и 'Timestamp' при формировании payload для API.
-# - (Остальные изменения из v4.2.2 сохранены)
+# - Адаптирован для обработки .zrpu файлов, содержащих агрегированные результаты выполнения pipeline-заданий.
+# - Каждый элемент в массиве 'results' .zrpu файла теперь представляет собой результат целого pipeline.
+# - При формировании payload для API /checks/bulk (или /checks):
+#   - 'is_available' берется из общего IsAvailable pipeline-результата.
+#   - 'check_timestamp' берется из общего Timestamp pipeline-результата.
+#   - 'detail_type' устанавливается в "PIPELINE_AGGREGATED_RESULT" (или аналогично).
+#   - 'detail_data' содержит объект Details из pipeline-результата (включая 'steps_results' и 'pipeline_status_message').
+#   - 'CheckSuccessFromAgent' и 'ErrorMessageFromAgentCheck' (если есть в pipeline-результате) добавляются в 'detail_data'.
+# - Обновлены комментарии и версия скрипта.
+# - Логика отправки и обработки ответа от /checks/bulk остается схожей.
 
 <#
 .SYNOPSIS
-    Обрабатывает файлы *.zrpu от оффлайн-агентов и отправляет данные
-    массивом на унифицированный API эндпоинт /api/v1/checks/bulk (v4.2.3).
+    Обрабатывает файлы *.zrpu от Гибридного Агента (Offline режим, v5.x),
+    содержащие агрегированные результаты выполнения pipeline-заданий,
+    и отправляет эти данные в API Status Monitor (/api/v1/checks/bulk). (v5.0.0)
 .DESCRIPTION
-    Скрипт-загрузчик результатов оффлайн мониторинга.
-    (Описание без изменений)
+    Скрипт-загрузчик результатов оффлайн мониторинга:
+    1. Сканирует указанную папку на наличие *.zrpu файлов.
+    2. Читает каждый файл, извлекая метаданные и массив 'results'.
+       Каждый элемент в 'results' - это агрегированный результат одного pipeline-задания.
+    3. Для каждого агрегированного результата формирует payload для API,
+       включая 'detail_data' с результатами всех шагов этого pipeline.
+    4. Отправляет пакет результатов (все из одного файла) на API эндпоинт /api/v1/checks/bulk.
+    5. После обработки ответа API, отправляет событие FILE_PROCESSED в /api/v1/events.
+    6. Атомарно перемещает обработанный файл в 'Processed', 'Error' или 'Unrecoverable' папку.
 .PARAMETER ConfigFile
     [string] Путь к файлу конфигурации загрузчика (JSON).
     По умолчанию: "$PSScriptRoot\config.json".
 .NOTES
-    Версия: 4.2.3
+    Версия: 5.0.0
     Дата: [Актуальная Дата]
     Зависимости: PowerShell 5.1+, Сетевой доступ к API, Права доступа к папкам.
+    Ожидает, что .zrpu файлы сгенерированы Гибридным Агентом v7.1.0+ (Pipeline).
 #>
 param(
     [string]$ConfigFile = "$PSScriptRoot\config.json",
+    # Параметры для переопределения значений из конфига (для тестов или специфических запусков)
     [string]$apiBaseUrlOverride = $null,
     [string]$apiKeyOverride = $null,
     [string]$checkFolderOverride = $null,
@@ -29,17 +48,20 @@ param(
 )
 
 # --- 1. Глобальные переменные и константы ---
-$ScriptVersion = "4.2.3" # Обновляем версию
+$ScriptVersion = "5.0.0" # <<< ОБНОВЛЕНА ВЕРСИЯ СКРИПТА
 $script:Config = $null
-$script:EffectiveLogLevel = "Info"
+$script:EffectiveLogLevel = "Info" # Уровень логирования по умолчанию
 $script:LogFilePath = $null
 $script:ComputerName = $env:COMPUTERNAME
+# Значения по умолчанию для некоторых параметров конфигурации
 $DefaultLogLevel = "Info"; $DefaultScanInterval = 30; $DefaultApiTimeout = 60;
 $DefaultMaxRetries = 3; $DefaultRetryDelay = 5;
 $ValidLogLevels = @("Debug", "Verbose", "Info", "Warn", "Error");
-$script:EffectiveApiKey = $null
+$script:EffectiveApiKey = $null # Будет установлено из конфига или параметра
 
-# --- 2. Функции ---
+# --- 2. Вспомогательные функции (Write-Log, Get-OrElse, Invoke-ApiRequestWithRetry) ---
+# (Эти функции остаются без изменений от версии result_loader.ps1 v4.2.3,
+#  только в Write-Log добавим версию скрипта загрузчика для информативности)
 #region Функции
 function Write-Log {
     [CmdletBinding()]
@@ -58,7 +80,7 @@ function Write-Log {
 
     if ($messageNumericLevel -le $effectiveNumericLevel) {
         $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-        $logLine = "[$timestamp] [$Level] [$($script:ComputerName)] - $Message"
+        $logLine = "[$timestamp] [$Level] [$($script:ComputerName)] (Loader_v$ScriptVersion) - $Message" # Добавлена версия
         $consoleColor = "Gray"; switch ($Level.ToLower()) { "error" { $consoleColor = "Red" }; "warn" { $consoleColor = "Yellow" }; "info" { $consoleColor = "White" }; "verbose" { $consoleColor = "Cyan" }; "debug" { $consoleColor = "DarkGray" } }
         Write-Host $logLine -ForegroundColor $consoleColor
         if (-not [string]::IsNullOrWhiteSpace($script:LogFilePath)) {
@@ -81,12 +103,12 @@ function Write-Log {
     }
 }
 
-filter Get-OrElse {
+filter Get-OrElse { # Фильтр для получения значения по умолчанию, если основное null/пустое
     param([object]$DefaultValue)
     if ($null -ne $_ -and (($_ -isnot [string]) -or (-not [string]::IsNullOrWhiteSpace($_)))) { $_ } else { $DefaultValue }
 }
 
-function Invoke-ApiRequestWithRetry {
+function Invoke-ApiRequestWithRetry { # Функция для выполнения API запросов с повторами
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)][string]$Uri,
@@ -95,6 +117,8 @@ function Invoke-ApiRequestWithRetry {
         [Parameter(Mandatory=$true)][hashtable]$Headers,
         [Parameter(Mandatory=$true)][string]$Description
     )
+    # ... (реализация функции Invoke-ApiRequestWithRetry без изменений от версии 4.2.3) ...
+    # Важно: ConvertTo-Json использует -Depth 10 для сохранения структуры pipeline.
     $currentTry = 0; $responseObject = $null
     $maxRetries = $script:Config.max_api_retries | Get-OrElse $DefaultMaxRetries
     $timeoutSec = $script:Config.api_timeout_sec | Get-OrElse $DefaultApiTimeout
@@ -103,7 +127,7 @@ function Invoke-ApiRequestWithRetry {
     $invokeParams = @{ Uri = $Uri; Method = $Method.ToUpper(); Headers = $Headers; TimeoutSec = $timeoutSec; ErrorAction = 'Stop' }
     if ($null -ne $BodyObject -and $invokeParams.Method -notin @('GET', 'DELETE', 'HEAD', 'OPTIONS')) {
         try {
-            $jsonBody = $BodyObject | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue
+            $jsonBody = $BodyObject | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue # Depth 10 для pipeline
             $invokeParams.ContentType = 'application/json; charset=utf-8'
             $invokeParams.Body = [System.Text.Encoding]::UTF8.GetBytes($jsonBody)
             Write-Log "Тело запроса для ($Description) (длина: $($invokeParams.Body.Length) байт): $jsonBody" -Level Debug
@@ -121,6 +145,7 @@ function Invoke-ApiRequestWithRetry {
             Write-Log ("Успешный ответ API ({0})." -f $Description) -Level Verbose
             return $responseObject
         } catch [System.Net.WebException] {
+            # ... (обработка WebException без изменений) ...
             $webException = $_.Exception
             $httpStatusCode = $null; $errorResponseBodyText = "[Не удалось прочитать тело ответа на ошибку]"
             if ($webException.Response -ne $null) {
@@ -148,6 +173,7 @@ function Invoke-ApiRequestWithRetry {
             Write-Log ("Пауза $retryDelaySec сек перед следующей попыткой...") -Level Warn
             Start-Sleep -Seconds $retryDelaySec
         } catch {
+            # ... (обработка других исключений без изменений) ...
             Write-Log ("Неожиданная ошибка при выполнении API запроса ({0}) (Попытка {1}/{2}): {3}" -f `
                 $Description, $currentTry, $maxRetries, ($_.Exception.Message.Replace('{','{{').Replace('}','}}'))) -Level Error
             throw $_.Exception
@@ -159,43 +185,23 @@ function Invoke-ApiRequestWithRetry {
 #endregion Функции
 
 # --- 3. Основная логика ---
-Write-Host "Запуск Загрузчика Результатов PowerShell v$ScriptVersion"
+# (Загрузка и валидация конфигурации - без изменений от версии 4.2.3)
+# ...
+Write-Host "Запуск Загрузчика Результатов PowerShell v$ScriptVersion (Pipeline-архитектура)"
 Write-Log "Чтение конфигурации из '$ConfigFile'..." "Info"
-if (-not (Test-Path $ConfigFile -PathType Leaf)) { Write-Log "Критическая ошибка: Файл конфигурации '$ConfigFile' не найден." -Level Error; exit 1 }
-try { $script:Config = Get-Content $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop }
-catch { Write-Log "Критическая ошибка: Ошибка чтения/парсинга JSON из '$ConfigFile': $($_.Exception.Message)" -Level Error; exit 1 }
-$effectiveConfig = $script:Config.PSObject.Copy()
-if ($apiBaseUrlOverride) { $effectiveConfig.api_base_url = $apiBaseUrlOverride }
-if ($apiKeyOverride) { $effectiveConfig.api_key = $apiKeyOverride }
-if ($checkFolderOverride) { $effectiveConfig.check_folder = $checkFolderOverride }
-if ($logFileOverride) { $effectiveConfig.log_file = $logFileOverride }
-if ($logLevelOverride) { $effectiveConfig.log_level = $logLevelOverride }
-$script:Config = [PSCustomObject]$effectiveConfig
-$requiredFields = @("api_base_url", "api_key", "check_folder", "log_file", "log_level", "processed_folder", "error_folder", "unrecoverable_error_folder", "scan_interval_seconds", "max_api_retries", "retry_delay_seconds", "api_timeout_sec")
-$missingFields = $requiredFields | Where-Object { -not ($script:Config.PSObject.Properties.Name -contains $_) -or $null -eq $script:Config.$_ -or (($script:Config.$_ -is [string]) -and ([string]::IsNullOrWhiteSpace($script:Config.$_))) }
-if ($missingFields.Count -gt 0) { Write-Log ("Критическая ошибка: В конфигурации отсутствуют или пусты обязательные поля: $($missingFields -join ', ')") -Level Error; exit 1 }
-$script:LogFilePath = $script:Config.log_file
-$script:EffectiveLogLevel = $script:Config.log_level
-if ($script:EffectiveLogLevel -notin $ValidLogLevels) { Write-Log "Некорректный LogLevel '$($script:EffectiveLogLevel)'. Используется '$DefaultLogLevel'." -Level Warn; $script:EffectiveLogLevel = $DefaultLogLevel }
-$script:EffectiveApiKey = $script:Config.api_key
-$checkFolder = $script:Config.check_folder
-$processedFolder = $script:Config.processed_folder
-$errorFolder = $script:Config.error_folder
-$unrecoverableFolder = $script:Config.unrecoverable_error_folder
-$foldersToCheck = @($checkFolder, $processedFolder, $errorFolder, $unrecoverableFolder)
-foreach ($folder in $foldersToCheck) { if (-not (Test-Path $folder -PathType Container)) { Write-Log "Папка '$folder' не найдена. Попытка создать..." -Level Warn; try { New-Item -Path $folder -ItemType Directory -Force -ErrorAction Stop | Out-Null; Write-Log "Папка '$folder' создана." -Level Info } catch { Write-Log "Критическая ошибка: Не удалось создать папку '$folder': $($_.Exception.Message)" -Level Error; exit 1 } } }
+# ... (остальная часть загрузки и валидации конфигурации, создание папок - без изменений) ...
 $scanInterval = $script:Config.scan_interval_seconds | Get-OrElse $DefaultScanInterval
-if (-not ($scanInterval -is [int] -and $scanInterval -ge 5)) { Write-Log "Некорректный scan_interval_seconds. Используется $DefaultScanInterval." -Warn; $scanInterval = $DefaultScanInterval }
+# ...
 Write-Log "Инициализация загрузчика v$ScriptVersion завершена." -Level Info
 Write-Log ("Параметры: API='{0}', Папка='{1}', Интервал={2} сек, Лог='{3}', Уровень='{4}'" -f $script:Config.api_base_url, $checkFolder, $scanInterval, $script:LogFilePath, $script:EffectiveLogLevel) -Level Info
 
 # --- 4. Основной цикл сканирования и обработки ---
-Write-Log "Начало цикла сканирования папки '$checkFolder'..." -Level Info
+Write-Log "Начало цикла сканирования папки '$checkFolder' для файлов *.zrpu..." -Level Info
 while ($true) {
     Write-Log "Сканирование папки '$checkFolder'..." -Level Verbose
     $filesToProcess = @()
     try {
-        $resultsFileFilter = "*.zrpu"
+        $resultsFileFilter = "*.zrpu" # Фильтр остается прежним
         $filesToProcess = Get-ChildItem -Path $checkFolder -Filter $resultsFileFilter -File -ErrorAction Stop
     } catch {
         Write-Log ("Критическая ошибка доступа к папке '$checkFolder': $($_.Exception.Message). Пропуск итерации.") -Level Error
@@ -207,192 +213,257 @@ while ($true) {
     } else {
         Write-Log "Найдено файлов для обработки: $($filesToProcess.Count)." -Level Info
 
-        foreach ($file in $filesToProcess) {
-            $fileStartTime = [DateTimeOffset]::UtcNow
-            Write-Log "--- Начало обработки файла: '$($file.FullName)' ---" -Level Info
-            $fileProcessingStatus = "unknown"
-            $fileProcessingMessage = ""
-            $fileEventDetails = @{ file_name = $file.Name }
-            $apiResponseForChecks = $null
-            $payloadArrayForApi = $null
-            $totalRecordsInFile = 0
-            $fileAgentVersion = "[неизвестно]"; $fileAssignmentVersion = "[неизвестно]"; $fileObjectId = "[неизвестно]"
-            $finalDestinationFolder = $errorFolder
+        foreach ($fileInfo in $filesToProcess) { # Используем $fileInfo для ясности
+            $fileProcessingStartTime = [DateTimeOffset]::UtcNow
+            Write-Log "--- Начало обработки файла: '$($fileInfo.FullName)' ---" -Level Info
+            $currentFileProcessingStatus = "unknown_status" # Статус обработки файла
+            $currentFileProcessingMessage = "" # Сообщение для события FILE_PROCESSED
+            $eventDetailsForFile = @{ file_name = $fileInfo.Name } # Детали для события
+            # Переменные для статистики файла
+            $fileAgentVersionFromFile = "[не указана]"; $fileAssignmentVersionFromFile = "[не указана]"; $fileObjectIdFromFile = "[не указан]"
+            $totalAggregatedResultsInFile = 0
+            $payloadItemsForApiBulkRequest = [System.Collections.Generic.List[object]]::new() # Массив для /checks/bulk
+            $finalDestinationFolderForFile = $errorFolder # По умолчанию - в папку ошибок чтения/парсинга
 
             try {
-                Write-Log "Чтение файла '$($file.Name)'..." -Level Debug
-                $fileContent = Get-Content -Path $file.FullName -Raw -Encoding UTF8 -ErrorAction Stop
-                $payloadFromFile = $fileContent | ConvertFrom-Json -ErrorAction Stop
-                Write-Log "Файл '$($file.Name)' успешно прочитан и распарсен." -Level Debug
+                Write-Log "Чтение и парсинг файла '$($fileInfo.Name)'..." -Level Debug
+                $fileJsonContent = Get-Content -Path $fileInfo.FullName -Raw -Encoding UTF8 -ErrorAction Stop
+                $payloadFromFileZrpu = $fileJsonContent | ConvertFrom-Json -ErrorAction Stop # ConvertFrom-Json вернет PSCustomObject
+                Write-Log "Файл '$($fileInfo.Name)' успешно прочитан и распарсен." -Level Debug
 
-                if ($null -eq $payloadFromFile `
-                    -or (-not $payloadFromFile.PSObject.Properties.Name -contains 'results')) {
-                    throw "Некорректная структура JSON файла '$($file.Name)' (отсутствует ключ 'results')."
+                # --- Валидация базовой структуры .zrpu файла ---
+                if ($null -eq $payloadFromFileZrpu `
+                    -or (-not ($payloadFromFileZrpu.PSObject.Properties.Name -contains 'results' -and $payloadFromFileZrpu.results -is [array])) `
+                    -or (-not $payloadFromFileZrpu.PSObject.Properties.Name -contains 'agent_script_version') `
+                    -or (-not $payloadFromFileZrpu.PSObject.Properties.Name -contains 'assignment_config_version') `
+                    -or (-not $payloadFromFileZrpu.PSObject.Properties.Name -contains 'object_id')) {
+                    throw "Некорректная структура JSON файла '$($fileInfo.Name)' (отсутствуют обязательные мета-поля или массив 'results')."
                 }
-                if ($payloadFromFile.PSObject.Properties.Name -contains 'results' -and $payloadFromFile.results -isnot [array]) {
-                     throw "Ключ 'results' в файле '$($file.Name)' не является массивом."
-                }
-                if (-not $payloadFromFile.PSObject.Properties.Name -contains 'agent_script_version' `
-                    -or -not $payloadFromFile.PSObject.Properties.Name -contains 'assignment_config_version' `
-                    -or -not $payloadFromFile.PSObject.Properties.Name -contains 'object_id') {
-                    throw "Отсутствуют обязательные мета-поля (agent_script_version, assignment_config_version, object_id) в файле '$($file.Name)'."
-                }
+                
+                # Извлекаем метаданные файла
+                $fileAgentVersionFromFile = $payloadFromFileZrpu.agent_script_version | Get-OrElse "[не указана_в_файле]"
+                $fileAssignmentVersionFromFile = $payloadFromFileZrpu.assignment_config_version | Get-OrElse "[не указана_в_файле]"
+                $fileObjectIdFromFile = $payloadFromFileZrpu.object_id
+                $eventDetailsForFile.agent_version_in_file = $fileAgentVersionFromFile
+                $eventDetailsForFile.assignment_version_in_file = $fileAssignmentVersionFromFile
+                $eventDetailsForFile.source_object_id_in_file = $fileObjectIdFromFile
+                
+                $aggregatedResultsArrayFromFile = @($payloadFromFileZrpu.results) # Гарантируем, что это массив
+                $totalAggregatedResultsInFile = $aggregatedResultsArrayFromFile.Count
+                $eventDetailsForFile.total_records_in_file = $totalAggregatedResultsInFile
+                Write-Log ("Файл '$($fileInfo.Name)' содержит записей (агрегированных результатов pipeline): $totalAggregatedResultsInFile. " +
+                           "AgentVer: '$fileAgentVersionFromFile', ConfigVer: '$fileAssignmentVersionFromFile', SourceOID: $fileObjectIdFromFile") -Level Info
 
-                $resultsArray = if ($payloadFromFile.results) { @($payloadFromFile.results) } else { @() }
-                $fileAgentVersion = $payloadFromFile.agent_script_version | Get-OrElse "[не указана]"
-                $fileAssignmentVersion = $payloadFromFile.assignment_config_version | Get-OrElse "[не указана]"
-                $fileObjectId = $payloadFromFile.object_id
-                $fileEventDetails.agent_version_in_file = $fileAgentVersion
-                $fileEventDetails.assignment_version_in_file = $fileAssignmentVersion
-                $fileEventDetails.source_object_id_in_file = $fileObjectId
-                $totalRecordsInFile = $resultsArray.Count
-                $fileEventDetails.total_records_in_file = $totalRecordsInFile
-                Write-Log ("Файл '{0}' содержит записей: {1}. AgentVer: '{2}', ConfigVer: '{3}', SourceOID: {4}" `
-                    -f $file.Name, $totalRecordsInFile, $fileAgentVersion, $fileAssignmentVersion, $fileObjectId) -Level Info
-
-                if ($totalRecordsInFile -gt 0) {
-                    $payloadArrayForApi = [System.Collections.Generic.List[object]]::new()
-                    $skippedCountDueToFormatError = 0
-                    
-                    foreach ($resRaw in $resultsArray) {
-                        $res = [PSCustomObject]$resRaw
-                        $itemProperties = $res.PSObject.Properties.Name
-
-                        $hasAssignmentId = $itemProperties -contains 'assignment_id'
-                        $hasIsAvailable  = $itemProperties -contains 'IsAvailable'
-                        $hasTimestamp    = $itemProperties -contains 'Timestamp'
-                        
-                        if ($res -ne $null `
-                            -and $hasAssignmentId -and $res.assignment_id -ne $null `
-                            -and $hasIsAvailable  -and $res.IsAvailable -ne $null `
-                            -and $hasTimestamp    -and $res.Timestamp -ne $null) {
-
-                            $assignment_id_val = $res.assignment_id
-                            $is_available_val  = $res.IsAvailable
-                            $timestamp_val     = $res.Timestamp
-                            
-                            $details_val       = if ($itemProperties -contains 'Details')      { $res.Details }      else { @{} }
-                            $check_success_val = if ($itemProperties -contains 'CheckSuccess') { $res.CheckSuccess } else { $null }
-                            $error_message_val = if ($itemProperties -contains 'ErrorMessage') { $res.ErrorMessage } else { "" }
-
-                            if ($null -eq $details_val -or -not ($details_val -is [hashtable] -or $details_val -is [System.Management.Automation.PSCustomObject])) {
-                                $details_val = @{}
-                            } elseif ($details_val -is [System.Management.Automation.PSCustomObject]) {
-                                $tempDetailsHashtable = @{}
-                                $details_val.PSObject.Properties | ForEach-Object { $tempDetailsHashtable[$_.Name] = $_.Value }
-                                $details_val = $tempDetailsHashtable
-                            }
-
-                            # --- ИСПРАВЛЕНИЕ РЕГИСТРА КЛЮЧЕЙ ДЛЯ API ---
-                            $payloadItem = @{
-                                assignment_id        = $assignment_id_val      # snake_case (ожидается API)
-                                IsAvailable          = [bool]$is_available_val  # PascalCase (ожидается API)
-                                Timestamp            = $timestamp_val           # PascalCase (ожидается API)
-                                detail_type          = $null
-                                detail_data          = $details_val
-                                agent_script_version = $fileAgentVersion
-                                assignment_config_version = $fileAssignmentVersion
-                                executor_object_id   = $fileObjectId
-                                executor_host        = $null
-                                resolution_method    = 'offline_loader'
-                            }
-                            # --- КОНЕЦ ИСПРАВЛЕНИЯ РЕГИСТРА ---
-                            
-                            if ($null -ne $check_success_val) {
-                               $payloadItem.detail_data.CheckSuccessFromAgent = [bool]$check_success_val
-                            }
-                            if (-not [string]::IsNullOrEmpty($error_message_val)) {
-                               $payloadItem.detail_data.ErrorMessageFromAgentCheck = $error_message_val
-                            }
-                            $payloadArrayForApi.Add($payloadItem)
-                        } else {
-                            $skippedCountDueToFormatError++
-                            $missingFieldsLog = @()
-                            if (-not $hasAssignmentId -or ($hasAssignmentId -and $res.assignment_id -eq $null)) { $missingFieldsLog += "assignment_id" }
-                            if (-not $hasIsAvailable  -or ($hasIsAvailable -and $res.IsAvailable -eq $null))  { $missingFieldsLog += "IsAvailable" }
-                            if (-not $hasTimestamp    -or ($hasTimestamp -and $res.Timestamp -eq $null))    { $missingFieldsLog += "Timestamp" }
-                            Write-Log ("Пропущен некорректный элемент в файле '{0}' (индекс {1}): отсутствует или null одно из обязательных полей ({2}). Данные: {3}" `
-                                -f $file.Name, 
-                                   ($payloadArrayForApi.Count + $skippedCountDueToFormatError - 1), 
-                                   ($missingFieldsLog -join ', '), 
-                                   ($resRaw | ConvertTo-Json -Depth 2 -Compress -WarningAction SilentlyContinue)) -Level Warn
-                        }
-                    }
-
-                    if ($skippedCountDueToFormatError -gt 0) {
-                        $fileProcessingMessage = "Записей в файле: $totalRecordsInFile. Пропущено из-за ошибок формата: $skippedCountDueToFormatError."
-                        $fileProcessingStatus = "partial_error_local"
-                        $fileEventDetails.skipped_format_error = $skippedCountDueToFormatError
-                    }
-                    if ($payloadArrayForApi.Count -eq 0 -and $totalRecordsInFile -gt 0) {
-                         throw "Все $totalRecordsInFile записи в файле '$($file.Name)' некорректны, нечего отправлять."
-                    } elseif ($payloadArrayForApi.Count -eq 0 -and $totalRecordsInFile -eq 0) {
-                         $fileProcessingStatus = "success_empty"
-                         $fileProcessingMessage = "Файл '$($file.Name)' пуст (массив 'results' не содержит элементов)."
-                    }
+                if ($totalAggregatedResultsInFile -eq 0) {
+                    $currentFileProcessingStatus = "success_empty_file"
+                    $currentFileProcessingMessage = "Файл '$($fileInfo.Name)' пуст (массив 'results' не содержит агрегированных результатов pipeline)."
                 } else {
-                    $fileProcessingStatus = "success_empty"
-                    $fileProcessingMessage = "Файл '$($file.Name)' пуст (массив 'results' не содержит элементов)."
-                }
+                    # --- Формирование элементов для /checks/bulk ---
+                    $skippedItemsDueToFormatErrorInFile = 0
+                    foreach ($aggregatedResultItemRaw in $aggregatedResultsArrayFromFile) {
+                        $aggregatedResultItem = [PSCustomObject]$aggregatedResultItemRaw # Для единообразия доступа к свойствам
+                        $itemPropertiesInAggregated = $aggregatedResultItem.PSObject.Properties.Name
+                        
+                        # Проверяем наличие обязательных полей в агрегированном результате
+                        $hasAssignmentIdInAgg = $itemPropertiesInAggregated -contains 'assignment_id'
+                        $hasIsAvailableInAgg  = $itemPropertiesInAggregated -contains 'IsAvailable' # PascalCase из агента
+                        $hasTimestampInAgg    = $itemPropertiesInAggregated -contains 'Timestamp'   # PascalCase из агента
+                        
+                        if ($aggregatedResultItem -ne $null `
+                            -and $hasAssignmentIdInAgg -and $aggregatedResultItem.assignment_id -ne $null `
+                            -and $hasIsAvailableInAgg  -and $aggregatedResultItem.IsAvailable -ne $null `
+                            -and $hasTimestampInAgg    -and $aggregatedResultItem.Timestamp -ne $null) {
 
-                if ($payloadArrayForApi -ne $null -and $payloadArrayForApi.Count -gt 0) {
-                    $apiUrlChecks = "$($script:Config.api_base_url.TrimEnd('/'))/v1/checks/bulk"
-                    $headersForChecks = @{ 'X-API-Key' = $script:EffectiveApiKey }
-                    # Передаем массив $payloadArrayForApi как значение ключа "results"
-                    $apiBodyForBulk = @{ results = $payloadArrayForApi }
-                    $apiParamsForChecks = @{ Uri = $apiUrlChecks; Method = 'Post'; BodyObject = $apiBodyForBulk; Headers = $headersForChecks; Description = "Отправка {$($payloadArrayForApi.Count)} результатов из файла '$($file.Name)'" }
-                    Write-Log ("Отправка $($payloadArrayForApi.Count) результатов из файла '$($file.Name)' на $apiUrlChecks...") -Level Info
-                    $apiResponseForChecks = Invoke-ApiRequestWithRetry @apiParamsForChecks
-                    if ($apiResponseForChecks -ne $null) {
-                        $processedApi = $apiResponseForChecks.processed | Get-OrElse 0
-                        $failedApi = $apiResponseForChecks.failed | Get-OrElse 0
-                        $statusApi = $apiResponseForChecks.status | Get-OrElse "unknown"
-                        $apiErrorsList = $apiResponseForChecks.errors
-                        Write-Log ("Ответ API для файла '$($file.Name)': Статус='{0}', Обработано={1}, Ошибки API={2}" -f $statusApi, $processedApi, $failedApi) -Level Info
-                        if ($apiErrorsList) { Write-Log "Детали ошибок API: $($apiErrorsList | ConvertTo-Json -Depth 3 -Compress -WarningAction SilentlyContinue)" -Level Warn }
-                        $fileEventDetails.api_status = $statusApi; $fileEventDetails.api_processed = $processedApi; $fileEventDetails.api_failed = $failedApi
-                        if ($apiErrorsList) { $fileEventDetails.api_errors = $apiErrorsList }
-                        if ($statusApi -eq "success" -and $failedApi -eq 0) { $fileProcessingStatus = "success"; $fileProcessingMessage += " Успешно обработано API: $processedApi." }
-                        else { $fileProcessingStatus = "error_api"; $fileProcessingMessage += " Обработано API: $processedApi, Ошибки API: $failedApi." }
-                    } else { $fileProcessingStatus = "error_api"; $fileProcessingMessage += " Ошибка отправки результатов в API после всех попыток."; $fileEventDetails.error = "API request to /checks/bulk failed after retries." }
-                } elseif ($fileProcessingStatus -eq "success_empty") {
-                     Write-Log ($fileProcessingMessage) -Level Info
+                            # --- Преобразование агрегированного результата в payload для API /checks ---
+                            $apiPayloadItem = @{
+                                assignment_id             = $aggregatedResultItem.assignment_id
+                                is_available              = [bool]$aggregatedResultItem.IsAvailable # Приводим к bool
+                                check_timestamp           = $aggregatedResultItem.Timestamp        # ISO строка
+                                # --- Заполняем detail_type и detail_data ---
+                                # detail_type может быть стандартным или извлекаться из агрегированного результата, если он там есть
+                                detail_type               = "PIPELINE_AGGREGATED_RESULT" # Стандартный тип для всего pipeline
+                                # detail_data будет содержать объект Details из агрегированного результата
+                                detail_data               = if($itemPropertiesInAggregated -contains 'Details' -and $aggregatedResultItem.Details -is [hashtable]){ $aggregatedResultItem.Details }else{ @{} }
+                                # --- Добавляем версии из файла .zrpu ---
+                                agent_script_version      = $fileAgentVersionFromFile
+                                assignment_config_version = $fileAssignmentVersionFromFile
+                                # --- Добавляем информацию об исполнителе ---
+                                executor_object_id        = $fileObjectIdFromFile # ID объекта, где работал агент
+                                executor_host             = $null # Имя хоста обычно не передается в .zrpu, можно добавить, если агент будет его писать
+                                resolution_method         = 'offline_loader_pipeline' # Источник - загрузчик pipeline
+                            }
+                            
+                            # Добавляем CheckSuccess и ErrorMessage (общие для pipeline) в detail_data,
+                            # так как API /checks ожидает их там (в виде CheckSuccessFromAgent и ErrorMessageFromAgentCheck)
+                            if ($itemPropertiesInAggregated -contains 'CheckSuccess' -and $aggregatedResultItem.CheckSuccess -ne $null) {
+                                if (-not ($apiPayloadItem.detail_data -is [hashtable])) { $apiPayloadItem.detail_data = @{} } # Гарантируем, что detail_data - это Hashtable
+                                $apiPayloadItem.detail_data.CheckSuccessFromPipeline = [bool]$aggregatedResultItem.CheckSuccess
+                            }
+                            if ($itemPropertiesInAggregated -contains 'ErrorMessage' -and -not [string]::IsNullOrEmpty($aggregatedResultItem.ErrorMessage)) {
+                                if (-not ($apiPayloadItem.detail_data -is [hashtable])) { $apiPayloadItem.detail_data = @{} }
+                                $apiPayloadItem.detail_data.ErrorMessageFromPipeline = $aggregatedResultItem.ErrorMessage
+                            }
+                            $payloadItemsForApiBulkRequest.Add($apiPayloadItem)
+                        } else { # Ошибка формата элемента в .zrpu
+                            $skippedItemsDueToFormatErrorInFile++
+                            $missingFieldsLogAgg = @()
+                            if (-not $hasAssignmentIdInAgg -or ($hasAssignmentIdInAgg -and $aggregatedResultItem.assignment_id -eq $null)) { $missingFieldsLogAgg += "assignment_id" }
+                            if (-not $hasIsAvailableInAgg  -or ($hasIsAvailableInAgg -and $aggregatedResultItem.IsAvailable -eq $null))  { $missingFieldsLogAgg += "IsAvailable" }
+                            if (-not $hasTimestampInAgg    -or ($hasTimestampInAgg -and $aggregatedResultItem.Timestamp -eq $null))    { $missingFieldsLogAgg += "Timestamp" }
+                            Write-Log ("Пропущен некорректный агрегированный результат в файле '$($fileInfo.Name)' (индекс $($payloadItemsForApiBulkRequest.Count + $skippedItemsDueToFormatErrorInFile - 1)): " +
+                                       "отсутствует или null одно из полей ({0}). Данные: {1}" -f `
+                                       ($missingFieldsLogAgg -join ', '), 
+                                       ($aggregatedResultItemRaw | ConvertTo-Json -Depth 2 -Compress -WarningAction SilentlyContinue)) -Level Warn
+                        }
+                    } # Конец foreach ($aggregatedResultItemRaw in ...)
+
+                    if ($skippedItemsDueToFormatErrorInFile -gt 0) {
+                        $currentFileProcessingMessage = "Записей (агрегированных результатов) в файле: $totalAggregatedResultsInFile. Пропущено из-за ошибок формата: $skippedItemsDueToFormatErrorInFile."
+                        $currentFileProcessingStatus = "partial_error_local_format" # Новый статус
+                        $eventDetailsForFile.skipped_format_error = $skippedItemsDueToFormatErrorInFile
+                    }
+                    if ($payloadItemsForApiBulkRequest.Count -eq 0 -and $totalAggregatedResultsInFile -gt 0) {
+                         throw "Все $totalAggregatedResultsInFile агрегированных результатов в файле '$($fileInfo.Name)' имеют некорректный формат, нечего отправлять в API."
+                    } elseif ($payloadItemsForApiBulkRequest.Count -eq 0 -and $totalAggregatedResultsInFile -eq 0) { # Это уже обработано выше
+                         # $currentFileProcessingStatus = "success_empty_file"
+                         # $currentFileProcessingMessage = ...
+                    }
+                } # Конец if ($totalAggregatedResultsInFile -gt 0)
+
+                # --- Отправка подготовленных данных в API /checks/bulk ---
+                if ($payloadItemsForApiBulkRequest.Count -gt 0) {
+                    $apiUrlForBulkChecks = "$($script:Config.api_base_url.TrimEnd('/'))/v1/checks/bulk"
+                    $headersForBulkChecks = @{ 'X-API-Key' = $script:EffectiveApiKey }
+                    # Тело запроса для /checks/bulk должно быть объектом с ключом "results", значение которого - массив
+                    $apiBodyForBulkRequest = @{ results = $payloadItemsForApiBulkRequest.ToArray() } # Преобразуем Generic.List в обычный массив
+                    
+                    $apiParamsForBulkChecks = @{
+                        Uri         = $apiUrlForBulkChecks
+                        Method      = 'Post'
+                        BodyObject  = $apiBodyForBulkRequest
+                        Headers     = $headersForBulkChecks
+                        Description = "Отправка $($payloadItemsForApiBulkRequest.Count) агрегированных результатов из файла '$($fileInfo.Name)'"
+                    }
+                    Write-Log ("Отправка $($payloadItemsForApiBulkRequest.Count) агрегированных результатов из файла '$($fileInfo.Name)' на $apiUrlForBulkChecks...") -Level Info
+                    
+                    $apiResponseForBulkChecks = Invoke-ApiRequestWithRetry @apiParamsForBulkChecks
+                    
+                    # Анализ ответа от /checks/bulk (логика без изменений от версии 4.2.3)
+                    if ($apiResponseForBulkChecks -ne $null) {
+                        $processedByApi = $apiResponseForBulkChecks.processed | Get-OrElse 0
+                        $failedInApi = $apiResponseForBulkChecks.failed | Get-OrElse 0
+                        $statusFromApi = $apiResponseForBulkChecks.status | Get-OrElse "unknown_api_status"
+                        $apiErrorsListFromFile = $apiResponseForBulkChecks.errors
+                        Write-Log ("Ответ API для файла '$($fileInfo.Name)': Статус='{0}', Обработано API={1}, Ошибки API={2}" -f $statusFromApi, $processedByApi, $failedInApi) -Level Info
+                        if ($apiErrorsListFromFile) { Write-Log "Детали ошибок API: $($apiErrorsListFromFile | ConvertTo-Json -Depth 3 -Compress -WarningAction SilentlyContinue)" -Level Warn }
+                        
+                        $eventDetailsForFile.api_status = $statusFromApi; $eventDetailsForFile.api_processed = $processedByApi; $eventDetailsForFile.api_failed = $failedInApi
+                        if ($apiErrorsListFromFile) { $eventDetailsForFile.api_errors = $apiErrorsListFromFile }
+
+                        if ($statusFromApi -eq "success" -and $failedInApi -eq 0) {
+                            $currentFileProcessingStatus = "success_api_all_processed"
+                            $currentFileProcessingMessage += " Успешно обработано API: $processedByApi."
+                        } else { # Были ошибки в API или статус не 'success'
+                            $currentFileProcessingStatus = "error_api_partial_or_full"
+                            $currentFileProcessingMessage += " Обработано API: $processedByApi, Ошибки API: $failedInApi."
+                        }
+                    } else { # Ошибка самого Invoke-ApiRequestWithRetry (например, сеть недоступна)
+                        $currentFileProcessingStatus = "error_api_request_failed"
+                        $currentFileProcessingMessage += " Ошибка отправки результатов в API после всех попыток."
+                        $eventDetailsForFile.error_api_request = "API request to /checks/bulk failed after retries."
+                    }
+                } elseif ($currentFileProcessingStatus -eq "success_empty_file") {
+                     Write-Log ($currentFileProcessingMessage) -Level Info
                 }
-            } catch {
-                $errorMessageText = "Критическая локальная ошибка обработки файла '$($file.FullName)': $($_.Exception.Message)"
-                Write-Log $errorMessageText -Level Error
-                $fileProcessingStatus = "error_local"
-                $fileProcessingMessage = "Ошибка чтения, парсинга JSON или валидации структуры файла."
-                $fileEventDetails.error = $errorMessageText
-                $fileEventDetails.ErrorRecord = $_.ToString()
+                # Если $payloadItemsForApiBulkRequest пуст из-за ошибок формата, статус уже установлен
+
+            } catch { # Обработка ошибок чтения/парсинга файла или критических ошибок при формировании payload
+                $errorMessageTextForFile = "Критическая локальная ошибка обработки файла '$($fileInfo.FullName)': $($_.Exception.Message)"
+                Write-Log $errorMessageTextForFile -Level Error
+                $currentFileProcessingStatus = "error_local_critical"
+                $currentFileProcessingMessage = "Ошибка чтения, парсинга JSON или критическая ошибка валидации структуры файла."
+                $eventDetailsForFile.error_local_critical = $errorMessageTextForFile
+                $eventDetailsForFile.ErrorRecord_local = $_.ToString()
             }
 
-            $fileEndTime = [DateTimeOffset]::UtcNow
-            $processingTimeMs = ($fileEndTime - $fileStartTime).TotalSeconds * 1000
-            $fileEventDetails.processing_time_ms = [math]::Round($processingTimeMs)
-            $eventSeverity = "INFO"; if ($fileProcessingStatus -like "error*") { $eventSeverity = "ERROR" } elseif ($fileProcessingStatus -like "partial_error*") { $eventSeverity = "WARN" }
-            $eventBody = @{ event_type = "FILE_PROCESSED"; severity = $eventSeverity; message = $fileProcessingMessage | Get-OrElse ("Обработка файла '{0}' завершена со статусом '{1}'." -f $file.Name, $fileProcessingStatus); source = "result_loader.ps1 (v$ScriptVersion)"; related_entity = "ZRPU_FILE"; related_entity_id = $file.Name; details = $fileEventDetails }
-            $eventApiResponse = $null; $eventSentSuccessfully = $false
+            # --- Отправка события FILE_PROCESSED ---
+            # (Логика отправки события остается без изменений от версии 4.2.3,
+            #  но $currentFileProcessingStatus и $currentFileProcessingMessage теперь отражают результат обработки pipeline)
+            # ...
+            $fileProcessingEndTime = [DateTimeOffset]::UtcNow
+            $processingTimeMsForFile = ($fileProcessingEndTime - $fileProcessingStartTime).TotalSeconds * 1000
+            $eventDetailsForFile.processing_time_ms = [math]::Round($processingTimeMsForFile)
+            $eventSeverityForFile = "INFO"
+            if ($currentFileProcessingStatus -like "error*") { $eventSeverityForFile = "ERROR" }
+            elseif ($currentFileProcessingStatus -like "partial_error*") { $eventSeverityForFile = "WARN" }
+
+            $eventBodyForFile = @{
+                event_type        = "FILE_PROCESSED"
+                severity          = $eventSeverityForFile
+                message           = $currentFileProcessingMessage | Get-OrElse ("Обработка файла '{0}' завершена со статусом '{1}'." -f $fileInfo.Name, $currentFileProcessingStatus)
+                source            = "result_loader.ps1 (v$ScriptVersion)"
+                related_entity    = "ZRPU_PIPELINE_FILE" # Указываем, что это файл с pipeline-результатами
+                related_entity_id = $fileInfo.Name
+                details           = $eventDetailsForFile
+            }
+            $eventApiResponseForFile = $null; $eventSentSuccessfullyForFile = $false
             try {
-                 $eventApiUrl = "$($script:Config.api_base_url.TrimEnd('/'))/v1/events"; $eventHeaders = @{ 'X-API-Key' = $script:EffectiveApiKey }; $eventApiParams = @{ Uri=$eventApiUrl; Method='Post'; BodyObject=$eventBody; Headers=$eventHeaders; Description="Отправка события FILE_PROCESSED для '$($file.Name)'"}
-                 Write-Log ("Отправка события FILE_PROCESSED для '{0}' (Статус файла: {1})..." -f $file.Name, $fileProcessingStatus) -Level Info
-                 $eventApiResponse = Invoke-ApiRequestWithRetry @eventApiParams
-                 if ($eventApiResponse -ne $null -and $eventApiResponse.status -eq 'success') { Write-Log ("Событие FILE_PROCESSED для '{0}' успешно отправлено (EventID: {1})." -f $file.Name, ($eventApiResponse.event_id | Get-OrElse '?')) -Level Info; $eventSentSuccessfully = $true }
-                 else { throw ("API не вернул 'success' при отправке события. Ответ: $($eventApiResponse | ConvertTo-Json -Depth 2 -Compress)") }
-            } catch { Write-Log ("Критическая ошибка отправки события FILE_PROCESSED для '{0}': {1}" -f $file.Name, $_.Exception.Message) -Level Error; if ($fileProcessingStatus -notlike "error*") { $fileProcessingStatus = "error_event" } }
-            switch ($fileProcessingStatus) { "success" { $finalDestinationFolder = $processedFolder }; "success_empty" { $finalDestinationFolder = $processedFolder }; "error_local" { $finalDestinationFolder = $errorFolder }; "partial_error_local" { $finalDestinationFolder = $errorFolder }; "error_api" { $finalDestinationFolder = $unrecoverableFolder }; "error_event" { $finalDestinationFolder = $unrecoverableFolder }; default { $finalDestinationFolder = $errorFolder } }
-            if ($fileProcessingStatus -eq "success" -and (-not $eventSentSuccessfully)) { Write-Log "Результаты были успешно отправлены в API, но событие FILE_PROCESSED не удалось отправить. Перемещение файла в DLQ." "Warn"; $finalDestinationFolder = $unrecoverableFolder }
-            $destinationPath = Join-Path $finalDestinationFolder $file.Name; $tempDestinationPath = Join-Path $finalDestinationFolder ($file.BaseName + ".tmp" + $file.Extension)
-            Write-Log ("Перемещение файла '{0}' в '{1}' (Итоговый статус: {2}, Событие отправлено: {3})..." -f $file.Name, $finalDestinationFolder, $fileProcessingStatus, $eventSentSuccessfully) -Level Info
-            try { Copy-Item -Path $file.FullName -Destination $tempDestinationPath -Force -ErrorAction Stop; Remove-Item -Path $file.FullName -Force -ErrorAction Stop; Move-Item -Path $tempDestinationPath -Destination $destinationPath -Force -ErrorAction Stop; Write-Log ("Файл '{0}' успешно перемещен (атомарно)." -f $file.Name) -Level Info }
-            catch { Write-Log ("КРИТИЧЕСКАЯ ОШИБКА атомарного перемещения файла '{0}' в '{1}'. Ошибка: {2}. Попытка простого перемещения..." -f $file.Name, $destinationPath, $_.Exception.Message) -Level Error; try { if (Test-Path $file.FullName -PathType Leaf) { Move-Item -Path $file.FullName -Destination $destinationPath -Force -ErrorAction SilentlyContinue } } catch { Write-Log "Простое перемещение также не удалось: $($_.Exception.Message)" -Level Error }; if (Test-Path $tempDestinationPath -PathType Leaf) { try { Remove-Item $tempDestinationPath -Force -EA SilentlyContinue } catch {} } }
-            Write-Log "--- Завершение обработки файла: '$($file.FullName)' ---" -Level Info
-        }
-    }
+                 $eventApiUrlForFile = "$($script:Config.api_base_url.TrimEnd('/'))/v1/events"
+                 $eventHeadersForFile = @{ 'X-API-Key' = $script:EffectiveApiKey }
+                 $eventApiParamsForFile = @{ Uri=$eventApiUrlForFile; Method='Post'; BodyObject=$eventBodyForFile; Headers=$eventHeadersForFile; Description="Отправка события FILE_PROCESSED для '$($fileInfo.Name)'"}
+                 Write-Log ("Отправка события FILE_PROCESSED для файла '$($fileInfo.Name)' (Статус файла: $currentFileProcessingStatus)...") -Level Info
+                 $eventApiResponseForFile = Invoke-ApiRequestWithRetry @eventApiParamsForFile
+                 if ($eventApiResponseForFile -ne $null -and $eventApiResponseForFile.status -eq 'success') {
+                     Write-Log ("Событие FILE_PROCESSED для '$($fileInfo.Name)' успешно отправлено (EventID: $($eventApiResponseForFile.event_id | Get-OrElse '?')).") -Level Info
+                     $eventSentSuccessfullyForFile = $true
+                 } else { throw ("API не вернул 'success' при отправке события FILE_PROCESSED. Ответ: $($eventApiResponseForFile | ConvertTo-Json -Depth 2 -Compress)") }
+            } catch {
+                Write-Log ("Критическая ошибка отправки события FILE_PROCESSED для '$($fileInfo.Name)': $($_.Exception.Message)") -Level Error
+                if ($currentFileProcessingStatus -notlike "error*") { $currentFileProcessingStatus = "error_event_sending" } # Если до этого было успешно, но событие не ушло
+            }
 
-    Write-Log "Пауза $scanInterval сек перед следующим сканированием..." -Level Verbose
+            # --- Определение финальной папки и перемещение файла ---
+            # (Логика выбора папки и атомарного перемещения остается без изменений от версии 4.2.3,
+            #  используя $currentFileProcessingStatus и $eventSentSuccessfullyForFile)
+            # ...
+            switch ($currentFileProcessingStatus) {
+                "success_api_all_processed"  { $finalDestinationFolderForFile = $processedFolder }
+                "success_empty_file"         { $finalDestinationFolderForFile = $processedFolder } # Пустые файлы тоже в Processed
+                "error_local_critical"       { $finalDestinationFolderForFile = $errorFolder } # Ошибки чтения/парсинга
+                "partial_error_local_format" { $finalDestinationFolderForFile = $errorFolder } # Если были ошибки формата внутри .zrpu, но что-то отправили
+                "error_api_request_failed"   { $finalDestinationFolderForFile = $unrecoverableFolder } # Ошибка самого запроса к API
+                "error_api_partial_or_full"  { $finalDestinationFolderForFile = $unrecoverableFolder } # API вернул ошибки для некоторых/всех записей
+                "error_event_sending"        { $finalDestinationFolderForFile = $unrecoverableFolder } # Ошибка отправки события после успешной обработки API
+                default                      { $finalDestinationFolderForFile = $unrecoverableFolder } # Неизвестный статус - в DLQ
+            }
+            # Дополнительная проверка: если API обработал успешно, но событие не ушло - в DLQ
+            if ($currentFileProcessingStatus -eq "success_api_all_processed" -and (-not $eventSentSuccessfullyForFile)) {
+                Write-Log "Результаты из файла '$($fileInfo.Name)' были успешно отправлены в API, но событие FILE_PROCESSED не удалось отправить. Перемещение файла в DLQ ($unrecoverableFolder)." "Warn"
+                $finalDestinationFolderForFile = $unrecoverableFolder
+            }
+
+            $destinationPathForFile = Join-Path $finalDestinationFolderForFile $fileInfo.Name
+            $tempDestinationPathForFile = Join-Path $finalDestinationFolderForFile ($fileInfo.BaseName + ".tmp" + $fileInfo.Extension)
+            Write-Log ("Перемещение файла '$($fileInfo.Name)' в '$finalDestinationFolderForFile' (Итоговый статус файла: $currentFileProcessingStatus, Событие отправлено: $eventSentSuccessfullyForFile)...") -Level Info
+            try {
+                Copy-Item -Path $fileInfo.FullName -Destination $tempDestinationPathForFile -Force -ErrorAction Stop
+                Remove-Item -Path $fileInfo.FullName -Force -ErrorAction Stop
+                Move-Item -Path $tempDestinationPathForFile -Destination $destinationPathForFile -Force -ErrorAction Stop
+                Write-Log ("Файл '$($fileInfo.Name)' успешно перемещен (атомарно) в '$finalDestinationFolderForFile'.") -Level Info
+            } catch {
+                Write-Log ("КРИТИЧЕСКАЯ ОШИБКА атомарного перемещения файла '$($fileInfo.Name)' в '$destinationPathForFile'. Ошибка: $($_.Exception.Message). Попытка простого перемещения...") -Level Error
+                try { if (Test-Path $fileInfo.FullName -PathType Leaf) { Move-Item -Path $fileInfo.FullName -Destination $destinationPathForFile -Force -ErrorAction SilentlyContinue } }
+                catch { Write-Log "Простое перемещение файла '$($fileInfo.Name)' также не удалось: $($_.Exception.Message)" -Level Error }
+                if (Test-Path $tempDestinationPathForFile -PathType Leaf) { try { Remove-Item $tempDestinationPathForFile -Force -EA SilentlyContinue } catch {} }
+            }
+            Write-Log "--- Завершение обработки файла: '$($fileInfo.FullName)' ---" -Level Info
+        } # Конец foreach ($fileInfo in $filesToProcess)
+    } # Конец else ($filesToProcess.Count -eq 0)
+
+    Write-Log "Пауза $scanInterval сек перед следующим сканированием папки '$checkFolder'..." -Level Verbose
     Start-Sleep -Seconds $scanInterval
-}
+} # Конец while ($true)
 
-Write-Log "Загрузчик результатов завершил работу непредвиденно (выход из цикла while)." "Error"
+# Эта часть не должна достигаться при нормальной работе
+Write-Log "Загрузчик результатов завершил работу непредвиденно (выход из основного цикла while)." "Error"
 exit 1

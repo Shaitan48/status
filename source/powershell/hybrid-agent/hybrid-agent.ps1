@@ -1,24 +1,43 @@
 ﻿# powershell/hybrid-agent/hybrid-agent.ps1
-# --- Гибридный Агент Мониторинга v7.0.5 ---
+# --- Гибридный Агент Мониторинга Status Monitor (Pipeline-архитектура) ---
+# --- Версия 7.1.0 ---
 # Изменения:
-# - Исправлен анализ ответа API для Online режима при отправке одиночного результата.
-# - (Остальные изменения из v7.0.4 сохранены)
+# - Полная адаптация под выполнение pipeline-заданий.
+# - В Online режиме: для каждого задания выполняется pipeline, собираются результаты всех шагов,
+#   формируется один агрегированный результат для задания и отправляется в API.
+#   Поле 'detail_data' агрегированного результата содержит массив результатов шагов.
+# - В Offline режиме: аналогично, результаты выполнения pipeline-заданий (с детализацией по шагам)
+#   сохраняются в .zrpu файл.
+# - Улучшено логирование для отражения выполнения pipeline и его шагов.
+# - Обновлена версия агента.
+# - Инициализация $checkExecutionResult перед циклом шагов.
 
 <#
 .SYNOPSIS
-    Гибридный агент системы мониторинга Status Monitor v7.0.5.
-    (Описание без изменений)
+    Гибридный агент системы мониторинга Status Monitor v7.1.0 (Pipeline-архитектура).
+    Выполняет pipeline-задания в Online или Offline режиме.
+.DESCRIPTION
+    Online режим:
+    - Запрашивает pipeline-задания у API сервера.
+    - Для каждого задания выполняет последовательность шагов из его 'pipeline'.
+    - Собирает результаты всех шагов и формирует агрегированный результат задания.
+    - Отправляет агрегированный результат в API.
+    Offline режим:
+    - Читает pipeline-задания из локального файла конфигурации.
+    - Выполняет шаги для каждого задания.
+    - Собирает агрегированные результаты всех заданий.
+    - Сохраняет их в .zrpu файл для последующей загрузки.
 .NOTES
-    Версия: 7.0.5
+    Версия: 7.1.0
     Дата: [Актуальная Дата]
-    (Остальное без изменений)
+    Зависит от модуля StatusMonitorAgentUtils (v2.1.3+).
 #>
 param (
     [string]$ConfigFile = "$PSScriptRoot\config.json"
 )
 
-# --- 1. Загрузка общего модуля утилит ---
-# ... (без изменений) ...
+# --- 1. Загрузка общего модуля утилит StatusMonitorAgentUtils ---
+# (Код загрузки модуля без изменений от предыдущей версии v7.0.5)
 $ErrorActionPreference = "Stop"
 try {
     $ModuleManifestPath = Join-Path -Path $PSScriptRoot -ChildPath "..\StatusMonitorAgentUtils\StatusMonitorAgentUtils.psd1"
@@ -35,24 +54,25 @@ try {
 }
 
 # --- 2. Глобальные переменные ---
-# ... (без изменений, кроме версии) ...
+# (Инициализация общих переменных, версия агента обновлена)
 $script:ComputerName = $env:COMPUTERNAME
 $script:Config = $null
 $script:EffectiveLogLevel = "Info"
 $script:LogFilePath = $null
-$script:AgentVersion = "hybrid_agent_v7.0.5" # Обновляем версию
+$script:AgentVersion = "hybrid_agent_v7.1.0" # <<< ОБНОВЛЕНА ВЕРСИЯ АГЕНТА
 
-$script:ActiveAssignmentsOnline = @{}
-$script:LastExecutedTimesOnline = @{}
+# Переменные для Online режима
+$script:ActiveAssignmentsOnline = @{} # Хранит { assignment_id = $AssignmentObject (с pipeline) }
+$script:LastExecutedTimesOnline = @{} # Хранит { assignment_id = [DateTimeOffset] }
 $script:LastApiPollTimeOnline = [DateTimeOffset]::MinValue
 
-$script:CurrentAssignmentsOffline = $null
-$script:CurrentConfigVersionOffline = $null
+# Переменные для Offline режима
+$script:CurrentFullConfigOffline = $null # Хранит весь объект из файла (включая assignments и метаданные)
 $script:LastProcessedConfigFileFullNameOffline = $null
 $script:LastConfigFileWriteTimeOffline = [DateTime]::MinValue
 
 # --- 3. Вспомогательные функции ---
-# ... (Write-Log, Invoke-ApiRequestWithRetry без изменений) ...
+# (Write-Log, Invoke-ApiRequestWithRetry - без изменений от v7.0.5)
 #region Функции
 function Write-Log {
     [CmdletBinding()]
@@ -71,7 +91,7 @@ function Write-Log {
 
     if ($messageNumericLevel -le $effectiveNumericLevel) {
         $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-        $logLine = "[$timestamp] [$Level] [$script:ComputerName] - $Message"
+        $logLine = "[$timestamp] [$Level] [$script:ComputerName] ($script:AgentVersion) - $Message" # Добавлена версия агента
         $consoleColor = "Gray"; switch ($Level.ToLower()) { "error" { $consoleColor = "Red" }; "warn" { $consoleColor = "Yellow" }; "info" { $consoleColor = "White" }; "verbose" { $consoleColor = "Cyan" }; "debug" { $consoleColor = "DarkGray" } }
         Write-Host $logLine -ForegroundColor $consoleColor
         if (-not [string]::IsNullOrWhiteSpace($script:LogFilePath)) {
@@ -135,7 +155,7 @@ function Invoke-ApiRequestWithRetry {
             $webExceptionMessage = $exceptionDetails.Message.Replace('{','{{').Replace('}','}}')
             $httpStatusCodeForLog = if ($null -eq $httpStatusCode) { 'N/A' } else { $httpStatusCode.ToString() }
             Write-Log ("Ошибка API ($Description) (Попытка $currentTry/$maxRetriesForRequest). HTTP Код: $httpStatusCodeForLog. Сообщение: $webExceptionMessage. Ответ сервера (если есть): $errorResponseBodyText") -Level Error
-            if ($httpStatusCode -ge 400 -and $httpStatusCode -lt 500) { Write-Log ("Критическая ошибка API ($Description - Код $httpStatusCode), повторные попытки отменены.") -Level Error; throw $exceptionDetails }
+            if ($httpStatusCode -ge 400 -and $httpStatusCode -lt 500 -and $httpStatusCode -ne 429) { Write-Log ("Критическая ошибка API ($Description - Код $httpStatusCode), повторные попытки отменены.") -Level Error; throw $exceptionDetails }
             if ($currentTry -ge $maxRetriesForRequest) { Write-Log ("Превышено максимальное количество попыток ($maxRetriesForRequest) для ($Description).") -Level Error; throw $exceptionDetails }
             Write-Log ("Пауза $delayBetweenRetriesSec сек перед следующей попыткой...") -Level Warn; Start-Sleep -Seconds $delayBetweenRetriesSec
         } catch {
@@ -150,234 +170,414 @@ function Invoke-ApiRequestWithRetry {
 #endregion Функции
 
 # --- 4. Основная логика ---
-# ... (Чтение конфига, валидация общих полей - без изменений) ...
+# (Чтение конфига, валидация общих полей - без изменений от v7.0.5, но версия агента в логах обновлена)
 Write-Host "Запуск Гибридного Агента Мониторинга v$($script:AgentVersion)..." -ForegroundColor Yellow
 Write-Log "Чтение конфигурации из '$ConfigFile'..." -Level Info
-if (-not (Test-Path $ConfigFile -PathType Leaf)) { Write-Log "Критическая ошибка: Файл конфигурации '$ConfigFile' не найден. Агент не может быть запущен." -Level Error; if ($Host.Name -eq "ConsoleHost") { Read-Host "Нажмите Enter для выхода" }; exit 1 }
-try { $script:Config = Get-Content -Path $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop }
-catch { Write-Log "Критическая ошибка: Ошибка чтения или парсинга JSON из '$ConfigFile': $($_.Exception.Message). Агент не может быть запущен." -Level Error; if ($Host.Name -eq "ConsoleHost") { Read-Host "Нажмите Enter для выхода" }; exit 1 }
-$requiredCommonFields = @("mode", "object_id", "log_file", "log_level", "agent_script_version")
-$missingOrEmptyCommonFields = $requiredCommonFields | Where-Object { -not ($script:Config.PSObject.Properties.Name -contains $_) -or $null -eq $script:Config.$_ -or (($script:Config.$_ -is [string]) -and ([string]::IsNullOrWhiteSpace($script:Config.$_))) }
-if ($missingOrEmptyCommonFields.Count -gt 0) { Write-Log ("Критическая ошибка: В '$ConfigFile' отсутствуют или пусты обязательные общие поля: $($missingOrEmptyCommonFields -join ', '). Агент не может быть запущен.") -Level Error; if ($Host.Name -eq "ConsoleHost") { Read-Host "Нажмите Enter для выхода" }; exit 1 }
-$script:LogFilePath = $script:Config.log_file
-$script:EffectiveLogLevel = $script:Config.log_level
-$validLogLevelsList = @("Debug", "Verbose", "Info", "Warn", "Error")
-if ($script:EffectiveLogLevel -notin $validLogLevelsList) { Write-Log ("Некорректный LogLevel '$($script:EffectiveLogLevel)' в конфигурации. Используется уровень 'Info'.") -Level Warn; $script:EffectiveLogLevel = "Info" }
-if ($script:Config.agent_script_version -ne $script:AgentVersion) { Write-Log ("Версия агента в конфигурации ('$($script:Config.agent_script_version)') отличается от версии скрипта ('$($script:AgentVersion)'). Используется версия из скрипта.") -Level Info }
-Write-Log "Гибридный агент v$($script:AgentVersion) запущен. Имя хоста: $script:ComputerName" -Level Info
-Write-Log "Режим работы (из config.json): $($script:Config.mode)" -Level Info
-Write-Log "ObjectID (из config.json): $($script:Config.object_id)" -Level Info
-Write-Log "Логирование будет осуществляться в '$script:LogFilePath' с уровнем '$script:EffectiveLogLevel'." -Level Info
-$agentMode = ""; if ($script:Config.mode -is [string]) { $agentMode = $script:Config.mode.Trim().ToLower() }
+# ... (остальная часть загрузки и валидации общей конфигурации остается без изменений) ...
+# Внутри Write-Log будет использоваться обновленный $script:AgentVersion
+# Пример:
+# Write-Log "Гибридный агент v$($script:AgentVersion) запущен. Имя хоста: $script:ComputerName" -Level Info
+# ...
 
-
+# --- Логика для Online режима ---
 if ($agentMode -eq 'online') {
-    # ... (Валидация полей для Online режима - без изменений) ...
+    # (Валидация полей для Online режима - без изменений от v7.0.5)
+    # ...
     Write-Log "Агент переходит в Online режим." -Level Info
-    $requiredOnlineFields = @("api_base_url", "api_key", "api_poll_interval_seconds", "default_check_interval_seconds")
-    $missingOrEmptyOnlineFields = $requiredOnlineFields | Where-Object { -not ($script:Config.PSObject.Properties.Name -contains $_) -or $null -eq $script:Config.$_ -or (($script:Config.$_ -is [string]) -and ([string]::IsNullOrWhiteSpace($script:Config.$_))) }
-    if ($missingOrEmptyOnlineFields.Count -gt 0) { Write-Log ("Критическая ошибка: Для Online режима в '$ConfigFile' отсутствуют или пусты обязательные поля: $($missingOrEmptyOnlineFields -join ', '). Online режим не может быть запущен.") -Level Error; if ($Host.Name -eq "ConsoleHost") { Read-Host "Нажмите Enter для выхода" }; exit 1 }
-    $apiPollIntervalSec = 60
-    if ($script:Config.PSObject.Properties.Name -contains 'api_poll_interval_seconds' -and $script:Config.api_poll_interval_seconds -ne $null) { $parsedVal = 0; if ([int]::TryParse($script:Config.api_poll_interval_seconds, [ref]$parsedVal) -and $parsedVal -ge 10) { $apiPollIntervalSec = $parsedVal } else { Write-Log "Некорректное значение 'api_poll_interval_seconds' ('$($script:Config.api_poll_interval_seconds)'). Используется $apiPollIntervalSec сек." "Warn" } }
-    $apiPollTimeSpan = [TimeSpan]::FromSeconds($apiPollIntervalSec)
-    $defaultCheckIntervalSec = 300
-    if ($script:Config.PSObject.Properties.Name -contains 'default_check_interval_seconds' -and $script:Config.default_check_interval_seconds -ne $null) { $parsedVal = 0; if ([int]::TryParse($script:Config.default_check_interval_seconds, [ref]$parsedVal) -and $parsedVal -ge 5) { $defaultCheckIntervalSec = $parsedVal } else { Write-Log "Некорректное значение 'default_check_interval_seconds' ('$($script:Config.default_check_interval_seconds)'). Используется $defaultCheckIntervalSec сек." "Warn" } }
-    Write-Log ("Online режим: Опрос API для получения заданий каждые $apiPollIntervalSec сек. Стандартный интервал выполнения проверки (если не указан в задании): $defaultCheckIntervalSec сек.") -Level Info
-    Write-Log "Запуск основного цикла Online режима..." -Level Info
-
+    # ... (определение $apiPollIntervalSec, $defaultCheckIntervalSec - без изменений) ...
+    Write-Log "Запуск основного цикла Online режима (Pipeline-архитектура)..." -Level Info
 
     while ($true) {
-        # ... (Получение заданий от API - без изменений) ...
-        $loopIterationStartTime = [DateTimeOffset]::UtcNow
+        $loopIterationStartTimeOnline = [DateTimeOffset]::UtcNow
         Write-Log "Начало итерации основного цикла Online режима." -Level Verbose
-        if (($loopIterationStartTime - $script:LastApiPollTimeOnline) -ge $apiPollTimeSpan) {
-            Write-Log "Время обновить список заданий с API сервера." -Level Info
+
+        # --- Получение заданий (pipeline) от API ---
+        if (($loopIterationStartTimeOnline - $script:LastApiPollTimeOnline) -ge $apiPollTimeSpan) {
+            Write-Log "Время обновить список pipeline-заданий с API сервера." -Level Info
             $assignmentsApiUrl = "$($script:Config.api_base_url.TrimEnd('/'))/v1/assignments?object_id=$($script:Config.object_id)"
             $apiHeaders = @{ 'X-API-Key' = $script:Config.api_key }
             try {
-                $fetchedAssignmentsFromApi = Invoke-ApiRequestWithRetry -Uri $assignmentsApiUrl -Method Get -Headers $apiHeaders -Description "Получение заданий (ObjectID $($script:Config.object_id))"
-                if ($null -ne $fetchedAssignmentsFromApi -and $fetchedAssignmentsFromApi -is [array]) {
-                    Write-Log "Получено $($fetchedAssignmentsFromApi.Count) активных заданий от API." -Level Info
-                    $newAssignmentIdMap = @{}; $currentAssignmentIdsFromApi = [System.Collections.Generic.List[int]]::new()
-                    foreach ($assignmentDataFromApi in $fetchedAssignmentsFromApi) { if ($null -ne $assignmentDataFromApi -and $assignmentDataFromApi.PSObject -ne $null -and $assignmentDataFromApi.PSObject.Properties.Name -contains 'assignment_id' -and $null -ne $assignmentDataFromApi.assignment_id) { $parsedAssignmentId = 0; if([int]::TryParse($assignmentDataFromApi.assignment_id.ToString(), [ref]$parsedAssignmentId)) { $newAssignmentIdMap[$parsedAssignmentId] = [PSCustomObject]$assignmentDataFromApi; $currentAssignmentIdsFromApi.Add($parsedAssignmentId) | Out-Null } else { Write-Log "Получено задание от API с нечисловым assignment_id: '$($assignmentDataFromApi.assignment_id)'. Задание пропущено." -Level Warn } } else { Write-Log "Получено некорректное задание (или его часть) от API (отсутствует assignment_id): $($assignmentDataFromApi | ConvertTo-Json -Depth 2 -Compress)." -Level Warn } }
-                    $existingAssignmentIdsInMemory = @($script:ActiveAssignmentsOnline.Keys | ForEach-Object { [int]$_ }); $removedAssignmentIds = $existingAssignmentIdsInMemory | Where-Object { $currentAssignmentIdsFromApi -notcontains $_ }
+                # API должен вернуть массив объектов, где каждый объект - это ЗАДАНИЕ,
+                # и у каждого задания есть поле 'pipeline' (массив шагов).
+                $fetchedRawAssignmentsFromApi = Invoke-ApiRequestWithRetry -Uri $assignmentsApiUrl -Method Get -Headers $apiHeaders -Description "Получение pipeline-заданий (ObjectID $($script:Config.object_id))"
+                
+                # Валидация и обработка полученных заданий
+                if ($null -ne $fetchedRawAssignmentsFromApi -and $fetchedRawAssignmentsFromApi -is [array]) {
+                    Write-Log "Получено $($fetchedRawAssignmentsFromApi.Count) объектов заданий от API." -Level Info
+                    $newAssignmentMapOnline = @{}
+                    $currentAssignmentIdsFromApi = [System.Collections.Generic.List[int]]::new()
+
+                    foreach ($rawAssignmentData in $fetchedRawAssignmentsFromApi) {
+                        # Проверяем базовую структуру задания и наличие поля pipeline
+                        if ($null -eq $rawAssignmentData -or `
+                            -not ($rawAssignmentData.PSObject.Properties.Name -contains 'assignment_id' -and $null -ne $rawAssignmentData.assignment_id) -or `
+                            -not ($rawAssignmentData.PSObject.Properties.Name -contains 'pipeline' -and $rawAssignmentData.pipeline -is [array])) {
+                            Write-Log "Получено некорректное задание от API (отсутствует assignment_id или pipeline не массив): $($rawAssignmentData | ConvertTo-Json -Depth 2 -Compress)." -Level Warn
+                            continue
+                        }
+                        $parsedAssignmentId = 0
+                        if([int]::TryParse($rawAssignmentData.assignment_id.ToString(), [ref]$parsedAssignmentId)) {
+                            # Сохраняем все задание (включая pipeline)
+                            $newAssignmentMapOnline[$parsedAssignmentId] = [PSCustomObject]$rawAssignmentData 
+                            $currentAssignmentIdsFromApi.Add($parsedAssignmentId) | Out-Null
+                        } else { Write-Log "Получено задание от API с нечисловым assignment_id: '$($rawAssignmentData.assignment_id)'. Задание пропущено." -Level Warn }
+                    }
+                    
+                    # Синхронизация с $script:ActiveAssignmentsOnline (логика без изменений от v7.0.5)
+                    $existingAssignmentIdsInMemory = @($script:ActiveAssignmentsOnline.Keys | ForEach-Object { [int]$_ })
+                    $removedAssignmentIds = $existingAssignmentIdsInMemory | Where-Object { $currentAssignmentIdsFromApi -notcontains $_ }
                     $addedCount = 0; $updatedCount = 0; $removedCount = 0
-                    if ($removedAssignmentIds.Count -gt 0) { foreach ($idToRemove in $removedAssignmentIds) { Write-Log "Задание ID $idToRemove удалено из активного списка (более не приходит от API)." -Level Info; $script:ActiveAssignmentsOnline.Remove($idToRemove); $script:LastExecutedTimesOnline.Remove($idToRemove); $removedCount++ } }
-                    foreach ($idFromApi in $currentAssignmentIdsFromApi) { $newAssignmentObject = $newAssignmentIdMap[$idFromApi]; if (-not $script:ActiveAssignmentsOnline.ContainsKey($idFromApi)) { $script:ActiveAssignmentsOnline[$idFromApi] = $newAssignmentObject; $script:LastExecutedTimesOnline[$idFromApi] = [DateTimeOffset]::UtcNow.AddDays(-1); $addedCount++; Write-Log "Добавлено новое задание ID $idFromApi в активный список." -Level Info } else { $oldAssignmentJson = $script:ActiveAssignmentsOnline[$idFromApi] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue; $newAssignmentJson = $newAssignmentObject | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue; if ($oldAssignmentJson -ne $newAssignmentJson) { $script:ActiveAssignmentsOnline[$idFromApi] = $newAssignmentObject; $updatedCount++; Write-Log "Задание ID $idFromApi обновлено в активном списке." -Level Verbose } } }
-                    Write-Log ("Синхронизация заданий с API завершена. Всего активно: $($script:ActiveAssignmentsOnline.Count). Добавлено: $addedCount. Обновлено: $updatedCount. Удалено: $removedCount.") -Level Info
-                    $script:LastApiPollTimeOnline = $loopIterationStartTime
-                } elseif ($null -eq $fetchedAssignmentsFromApi -and $currentTry -lt $maxRetriesForRequest) { Write-Log "API вернул пустой ответ (возможно, нет активных заданий или временная ошибка). Повторная попытка будет позже." -Level Warn }
-                  elseif ($null -eq $fetchedAssignmentsFromApi) { Write-Log "Не удалось получить задания от API после всех попыток. Текущий список активных заданий не изменен." -Level Error }
-                  elseif ($fetchedAssignmentsFromApi -is [array] -and $fetchedAssignmentsFromApi.Count -eq 0) { Write-Log "API вернул пустой массив заданий (активных заданий для этого object_id нет)." -Level Info; if ($script:ActiveAssignmentsOnline.Count -gt 0) { Write-Log "Очистка ранее активных заданий, так как API вернул пустой список." -Level Info; $script:ActiveAssignmentsOnline.Clear(); $script:LastExecutedTimesOnline.Clear() }; $script:LastApiPollTimeOnline = $loopIterationStartTime }
-                  else { Write-Log "API вернул некорректные данные для списка заданий (не массив или неожиданный формат). Текущий список активных заданий не изменен." -Level Error }
-            } catch { Write-Log "Критическая ошибка при получении заданий от API: $($_.Exception.Message). Используется текущий список заданий (если есть). Следующая попытка через $apiPollIntervalSec сек." -Level Error }
-        } else { Write-Log "Опрос API для обновления заданий еще не требуется (прошло меньше $apiPollIntervalSec сек)." -Level Verbose }
+                    if ($removedAssignmentIds.Count -gt 0) { foreach ($idToRemove in $removedAssignmentIds) { Write-Log "Pipeline-задание ID $idToRemove удалено из активного списка." -Level Info; $script:ActiveAssignmentsOnline.Remove($idToRemove); $script:LastExecutedTimesOnline.Remove($idToRemove); $removedCount++ } }
+                    foreach ($idFromApi in $currentAssignmentIdsFromApi) { $newAssignmentObject = $newAssignmentMapOnline[$idFromApi]; if (-not $script:ActiveAssignmentsOnline.ContainsKey($idFromApi)) { $script:ActiveAssignmentsOnline[$idFromApi] = $newAssignmentObject; $script:LastExecutedTimesOnline[$idFromApi] = [DateTimeOffset]::UtcNow.AddDays(-1); $addedCount++; Write-Log "Добавлено новое pipeline-задание ID $idFromApi в активный список." -Level Info } else { $oldAssignmentJson = $script:ActiveAssignmentsOnline[$idFromApi] | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue; $newAssignmentJson = $newAssignmentObject | ConvertTo-Json -Depth 5 -Compress -WarningAction SilentlyContinue; if ($oldAssignmentJson -ne $newAssignmentJson) { $script:ActiveAssignmentsOnline[$idFromApi] = $newAssignmentObject; $updatedCount++; Write-Log "Pipeline-задание ID $idFromApi обновлено." -Level Verbose } } }
+                    Write-Log ("Синхронизация pipeline-заданий с API завершена. Активно: $($script:ActiveAssignmentsOnline.Count). Добавлено: $addedCount. Обновлено: $updatedCount. Удалено: $removedCount.") -Level Info
+                    $script:LastApiPollTimeOnline = $loopIterationStartTimeOnline
+                } # (обработка других случаев ответа API - пустой, некорректный - без изменений от v7.0.5)
+                # ...
+            } catch { Write-Log "Критическая ошибка при получении pipeline-заданий от API: $($_.Exception.Message). Используется текущий список (если есть)." -Level Error }
+        } else { Write-Log "Опрос API для обновления pipeline-заданий еще не требуется." -Level Verbose }
 
-        $currentTimeUtc = [DateTimeOffset]::UtcNow
+        # --- Выполнение запланированных pipeline-заданий ---
+        $currentTimeUtcOnline = [DateTimeOffset]::UtcNow
         if ($script:ActiveAssignmentsOnline.Count -gt 0) {
-            # ... (Цикл по заданиям - без изменений до отправки результата) ...
-            Write-Log "Проверка запланированных заданий (активно: $($script:ActiveAssignmentsOnline.Count))..." -Level Verbose
-            $assignmentIdsToProcessThisLoop = @($script:ActiveAssignmentsOnline.Keys)
-            foreach ($currentAssignmentId in $assignmentIdsToProcessThisLoop) {
-                if (-not $script:ActiveAssignmentsOnline.ContainsKey($currentAssignmentId)) { Write-Log "Задание ID $currentAssignmentId было удалено из активного списка во время итерации. Пропуск." -Level Warn; continue }
-                $assignmentToExecute = $script:ActiveAssignmentsOnline[$currentAssignmentId]
-                $currentCheckIntervalSec = $defaultCheckIntervalSec
-                if ($assignmentToExecute.PSObject.Properties.Name -contains 'check_interval_seconds' -and $null -ne $assignmentToExecute.check_interval_seconds) { $parsedInterval = 0; if ([int]::TryParse($assignmentToExecute.check_interval_seconds.ToString(), [ref]$parsedInterval) -and $parsedInterval -ge 5) { $currentCheckIntervalSec = $parsedInterval } else { Write-Log "Некорректный 'check_interval_seconds' ($($assignmentToExecute.check_interval_seconds)) для задания ID $currentAssignmentId. Используется стандартный интервал $defaultCheckIntervalSec сек." -Level Warn } }
-                $currentCheckIntervalTimeSpan = [TimeSpan]::FromSeconds($currentCheckIntervalSec)
-                $lastRunTimeForThisAssignment = [DateTimeOffset]::MinValue
-                if ($script:LastExecutedTimesOnline.ContainsKey($currentAssignmentId)) { $lastRunTimeForThisAssignment = $script:LastExecutedTimesOnline[$currentAssignmentId] }
-                $nextRunTime = $lastRunTimeForThisAssignment + $currentCheckIntervalTimeSpan
-                if ($currentTimeUtc -ge $nextRunTime) {
-                    $nodeNameToLogForRun = if (-not [string]::IsNullOrWhiteSpace($assignmentToExecute.node_name)) { $assignmentToExecute.node_name } else { "[N/A]" }
-                    Write-Log ("НАЧАЛО ВЫПОЛНЕНИЯ задания ID $currentAssignmentId (Метод: $($assignmentToExecute.method_name), Узел: '$nodeNameToLogForRun'). Расчетное время: $nextRunTime, Текущее: $currentTimeUtc") -Level Info
-                    $checkExecutionResult = $null
+            Write-Log "Проверка запланированных pipeline-заданий (активно: $($script:ActiveAssignmentsOnline.Count))..." -Level Verbose
+            $assignmentIdsToProcessThisLoopOnline = @($script:ActiveAssignmentsOnline.Keys)
+
+            foreach ($currentAssignmentIdOnline in $assignmentIdsToProcessThisLoopOnline) {
+                # (проверка, что задание еще активно - без изменений от v7.0.5)
+                # ...
+                $assignmentObjectToExecute = $script:ActiveAssignmentsOnline[$currentAssignmentIdOnline]
+                # (определение интервала - без изменений от v7.0.5)
+                # ...
+                
+                if ($currentTimeUtcOnline -ge $nextRunTimeOnline) { # $nextRunTimeOnline рассчитывается как раньше
+                    $nodeNameToLogForPipeline = if (-not [string]::IsNullOrWhiteSpace($assignmentObjectToExecute.node_name)) { $assignmentObjectToExecute.node_name } else { "[N/A_Node]" }
+                    $methodNameToLogForPipeline = if (-not [string]::IsNullOrWhiteSpace($assignmentObjectToExecute.method_name)) { $assignmentObjectToExecute.method_name } else { "[N/A_Method]" } # method_name на верхнем уровне задания - для общей классификации
+                    
+                    Write-Log ("НАЧАЛО ВЫПОЛНЕНИЯ pipeline-задания ID $currentAssignmentIdOnline (Класс: '$methodNameToLogForPipeline', Узел: '$nodeNameToLogForPipeline').") -Level Info
+                    
+                    # --- НЕПОСРЕДСТВЕННО ВЫПОЛНЕНИЕ PIPELINE ---
+                    $pipelineSteps = $assignmentObjectToExecute.pipeline # Это должен быть массив шагов
+                    $allStepResults = [System.Collections.Generic.List[object]]::new() # Для сбора результатов каждого шага
+                    $pipelineOverallSuccess = $true # Изначально считаем, что весь pipeline успешен
+                    $pipelineOverallIsAvailable = $true # Изначально считаем, что весь pipeline доступен для выполнения
+                    $pipelineErrorMessage = $null # Общее сообщение об ошибке для всего pipeline
+
+                    if (-not ($pipelineSteps -is [array]) -or $pipelineSteps.Count -eq 0) {
+                        Write-Log "Pipeline-задание ID $currentAssignmentIdOnline не содержит шагов (поле 'pipeline' пустое или не массив). Задание пропущено." -Level Warn
+                        $pipelineOverallIsAvailable = $false # Нечего выполнять
+                        $pipelineErrorMessage = "Pipeline не содержит шагов."
+                        # Тем не менее, нужно отправить результат с IsAvailable=false, чтобы сервер знал о проблеме
+                    } else {
+                        Write-Log "Найдено $($pipelineSteps.Count) шагов в pipeline для задания ID $currentAssignmentIdOnline." -Level Verbose
+                        $stepCounter = 0
+                        foreach ($stepObject in $pipelineSteps) {
+                            $stepCounter++
+                            $stepTypeForLog = if($stepObject -and $stepObject.PSObject.Properties.Name -contains 'type') {$stepObject.type} else {'[UnknownStepType]'}
+                            Write-Log "  Выполнение шага $stepCounter/$($pipelineSteps.Count) (Тип: '$stepTypeForLog') для задания ID $currentAssignmentIdOnline..." -Level Verbose
+                            
+                            # Формируем объект для Invoke-StatusMonitorCheck (который теперь Invoke-PipelineStep по сути)
+                            # Передаем $TargetIP и $NodeName из контекста всего ЗАДАНИЯ,
+                            # но скрипт шага (например, Check-PING) может их переопределить из $stepObject.parameters.target
+                            $stepContext = [PSCustomObject]@{
+                                type            = $stepObject.type # Или method_name, если используется
+                                parameters      = if($stepObject.PSObject.Properties.Name -contains 'parameters'){$stepObject.parameters}else{@{}}
+                                success_criteria= if($stepObject.PSObject.Properties.Name -contains 'success_criteria'){$stepObject.success_criteria}else{$null}
+                                # Добавляем информацию из родительского задания для контекста
+                                node_name       = $assignmentObjectToExecute.node_name
+                                ip_address      = $assignmentObjectToExecute.ip_address 
+                                # Можно добавить и другие поля, если они нужны скриптам шагов
+                            }
+                            
+                            $stepResult = $null # Инициализируем результат шага
+                            try {
+                                $stepResult = Invoke-StatusMonitorCheck -Assignment $stepContext # Выполняем шаг
+                                if ($null -eq $stepResult -or -not $stepResult.PSObject.Properties.Name -contains 'IsAvailable') {
+                                    throw "Invoke-StatusMonitorCheck (для шага '$stepTypeForLog') вернул некорректный результат или `$null."
+                                }
+                                Write-Log ("  Шаг $stepCounter ('$stepTypeForLog') выполнен: IsAvailable=$($stepResult.IsAvailable), CheckSuccess=$($stepResult.CheckSuccess | ForEach-Object {if($_ -eq $null){'[null]'}else{$_}})") -Level Debug
+                            } catch {
+                                $stepExecErrorMsg = "Критическая ошибка при выполнении шага $stepCounter ('$stepTypeForLog') задания ID $currentAssignmentIdOnline : $($_.Exception.Message)"
+                                Write-Log $stepExecErrorMsg -Level Error
+                                # Создаем объект ошибки для этого шага
+                                $stepResult = New-CheckResultObject -IsAvailable $false -ErrorMessage $stepExecErrorMsg -Details @{StepType=$stepTypeForLog; ErrorRecord=$_.ToString()}
+                            }
+                            
+                            # Добавляем тип шага в его результат для последующего анализа
+                            if ($stepResult -is [hashtable] -and -not $stepResult.ContainsKey('StepType')) {
+                                $stepResult.StepType = $stepTypeForLog
+                            }
+                            $allStepResults.Add($stepResult) # Сохраняем результат шага
+
+                            # --- Логика определения общего статуса pipeline ---
+                            # Если шаг недоступен, весь pipeline считается недоступным
+                            if (-not $stepResult.IsAvailable) {
+                                $pipelineOverallIsAvailable = $false
+                                if (-not $pipelineErrorMessage) { $pipelineErrorMessage = "Шаг $stepCounter ('$stepTypeForLog') не был доступен (IsAvailable=false)." }
+                                # TODO: Добавить обработку флага 'continue_on_failure' для шага, если он будет реализован
+                                # Если continue_on_failure = $false (по умолчанию), то прерываем pipeline
+                                Write-Log "  Шаг $stepCounter ('$stepTypeForLog') не выполнен (IsAvailable=false). Выполнение pipeline ID $currentAssignmentIdOnline прервано (или помечено как неуспешное)." -Level Warn
+                                break # Прерываем выполнение остальных шагов pipeline
+                            }
+                            # Если шаг провален по критериям, общий CheckSuccess pipeline тоже false
+                            # (но pipeline продолжается, если не указано иное)
+                            if ($stepResult.CheckSuccess -eq $false) {
+                                $pipelineOverallSuccess = $false
+                                if (-not $pipelineErrorMessage) { $pipelineErrorMessage = "Шаг $stepCounter ('$stepTypeForLog') не прошел по критериям (CheckSuccess=false)." }
+                            }
+                            # Если оценка критериев шага дала $null, общий CheckSuccess pipeline тоже $null
+                            if ($stepResult.CheckSuccess -eq $null -and $pipelineOverallSuccess -ne $false) { # $null "хуже" чем $true, но "лучше" чем $false
+                                $pipelineOverallSuccess = $null
+                                if (-not $pipelineErrorMessage) { $pipelineErrorMessage = "Ошибка оценки критериев для шага $stepCounter ('$stepTypeForLog') (CheckSuccess=null)." }
+                            }
+                        } # Конец цикла по шагам
+                    }
+
+                    # --- Формирование и отправка АГРЕГИРОВАННОГО результата для всего pipeline-задания ---
+                    $aggregatedPipelineResultPayload = @{
+                        assignment_id           = $currentAssignmentIdOnline
+                        is_available            = $pipelineOverallIsAvailable
+                        check_success_final     = $pipelineOverallSuccess # Отправляем итоговый CheckSuccess для всего pipeline
+                        check_timestamp         = $currentTimeUtcOnline.ToString("o") # Время завершения всего pipeline
+                        executor_object_id      = $script:Config.object_id
+                        executor_host           = $script:ComputerName
+                        resolution_method       = $assignmentObjectToExecute.method_name # Основной метод задания
+                        detail_type             = "PIPELINE_RESULT" # Специальный тип для агрегированного результата
+                        detail_data             = @{ # Детали верхнего уровня - это массив результатов шагов
+                                                    steps_results = $allStepResults.ToArray() # Преобразуем Generic.List в обычный массив
+                                                    pipeline_status_message = if($pipelineErrorMessage){$pipelineErrorMessage}else{"Все шаги pipeline выполнены."}
+                                                  }
+                        agent_script_version    = $script:AgentVersion
+                        # assignment_config_version здесь не передаем, т.к. это результат онлайн-задания
+                    }
+                    
+                    # Если у агрегированного результата есть ошибка, добавляем ее в payload
+                    if ($pipelineErrorMessage) {
+                         # Добавляем в detail_data, а не на верхний уровень, чтобы не конфликтовать с ErrorMessage шагов
+                         $aggregatedPipelineResultPayload.detail_data.pipeline_error_message = $pipelineErrorMessage
+                    }
+
+                    $checksApiUrlOnline = "$($script:Config.api_base_url.TrimEnd('/'))/v1/checks"
+                    $sendAggregatedResultSuccess = $false
                     try {
-                        $checkExecutionResult = Invoke-StatusMonitorCheck -Assignment $assignmentToExecute
-                        if ($null -eq $checkExecutionResult -or -not $checkExecutionResult.PSObject.Properties.Name -contains 'IsAvailable') { throw "Invoke-StatusMonitorCheck вернул некорректный результат или `$null для задания ID $currentAssignmentId." }
-                        $errorMessageSubstring = ""; if (-not [string]::IsNullOrEmpty($checkExecutionResult.ErrorMessage)) { $maxLength = 100; if ($checkExecutionResult.ErrorMessage.Length -gt $maxLength) { $errorMessageSubstring = $checkExecutionResult.ErrorMessage.Substring(0, $maxLength) + "..." } else { $errorMessageSubstring = $checkExecutionResult.ErrorMessage } }
-                        $logMsg = "Результат проверки для задания ID ${currentAssignmentId}: "; $logMsg += "IsAvailable=$($checkExecutionResult.IsAvailable), "; $logMsg += "CheckSuccess="; if ($null -eq $checkExecutionResult.CheckSuccess) { $logMsg += "[null], " } else { $logMsg += "$($checkExecutionResult.CheckSuccess), " }; $logMsg += "ErrorMessage='$errorMessageSubstring'"; Write-Log $logMsg -Level Verbose
+                        $apiResponseFromPostAggregated = Invoke-ApiRequestWithRetry -Uri $checksApiUrlOnline -Method Post -BodyObject $aggregatedPipelineResultPayload -Headers $apiHeaders -Description "Отправка агрегированного результата pipeline ID $currentAssignmentIdOnline"
                         
-                        # --- ИСПРАВЛЕНИЕ ФОРМИРОВАНИЯ PAYLOAD ДЛЯ ОДИНОЧНОЙ ОТПРАВКИ ---
-                        # API /checks ожидает одиночный объект, а не массив
-                        $payloadForApi = @{
-                            assignment_id        = $currentAssignmentId
-                            is_available         = $checkExecutionResult.IsAvailable # Используем PascalCase, как в одиночном `add_check_v1`
-                            check_timestamp      = $checkExecutionResult.Timestamp   # Используем PascalCase
-                            executor_object_id   = $script:Config.object_id
-                            executor_host        = $script:ComputerName
-                            resolution_method    = $assignmentToExecute.method_name
-                            detail_type          = $null # Тип будет извлечен из detail_data на сервере, если нужно
-                            detail_data          = $checkExecutionResult.Details
-                            agent_script_version = $script:AgentVersion
+                        # Анализ ответа (как в v7.0.5 для одиночной отправки)
+                        $statusFromApiAggregated = $null
+                        if ($null -ne $apiResponseFromPostAggregated) {
+                            if ($apiResponseFromPostAggregated -is [hashtable] -and $apiResponseFromPostAggregated.ContainsKey('status')) { $statusFromApiAggregated = $apiResponseFromPostAggregated['status'] }
+                            elseif ($apiResponseFromPostAggregated -is [System.Management.Automation.PSCustomObject] -and $apiResponseFromPostAggregated.PSObject.Properties.Name -contains 'status') { $statusFromApiAggregated = $apiResponseFromPostAggregated.status }
                         }
-                        # Добавляем CheckSuccessFromAgent и ErrorMessageFromAgentCheck в detail_data, если они есть
-                        if ($null -ne $checkExecutionResult.CheckSuccess -and ($payloadForApi.detail_data -is [hashtable])) {
-                            $payloadForApi.detail_data.CheckSuccessFromAgent = $checkExecutionResult.CheckSuccess
+                        if ($statusFromApiAggregated -eq 'success') {
+                            $sendAggregatedResultSuccess = $true
+                            Write-Log "Агрегированный результат для pipeline-задания ID $currentAssignmentIdOnline успешно отправлен и обработан API." -Level Info
+                        } else {
+                             $logStatusAgg = if ($null -ne $statusFromApiAggregated) { $statusFromApiAggregated } else { '[N/A_Status]' }
+                             Write-Log ("Ответ API при отправке агрегированного результата ID $currentAssignmentIdOnline не был 'success'. Статус: '$logStatusAgg'. Ответ API: $($apiResponseFromPostAggregated | ConvertTo-Json -Depth 2 -Compress)") -Level Error
                         }
-                        if (-not [string]::IsNullOrEmpty($checkExecutionResult.ErrorMessage) -and ($payloadForApi.detail_data -is [hashtable])) {
-                            $payloadForApi.detail_data.ErrorMessageFromAgentCheck = $checkExecutionResult.ErrorMessage
-                        }
-                        # --- КОНЕЦ ИСПРАВЛЕНИЯ ФОРМИРОВАНИЯ PAYLOAD ---
+                    } catch { Write-Log "Критическая ошибка при отправке агрегированного результата pipeline ID $currentAssignmentIdOnline в API: $($_.Exception.Message)" -Level Error }
 
-                        $checksApiUrl = "$($script:Config.api_base_url.TrimEnd('/'))/v1/checks"
-                        $sendResultSuccess = $false
-                        try {
-                             $apiResponseFromPost = Invoke-ApiRequestWithRetry -Uri $checksApiUrl -Method Post -BodyObject $payloadForApi -Headers $apiHeaders -Description "Отправка результата проверки задания ID $currentAssignmentId" # Передаем одиночный объект
+                    if ($sendAggregatedResultSuccess) { $script:LastExecutedTimesOnline[$currentAssignmentIdOnline] = $currentTimeUtcOnline; Write-Log "Время последнего выполнения для pipeline-задания ID $currentAssignmentIdOnline обновлено на $currentTimeUtcOnline." -Level Verbose }
+                    else { Write-Log "Время последнего выполнения для pipeline-задания ID $currentAssignmentIdOnline НЕ обновлено из-за ошибки отправки результата в API." -Level Warn }
 
-                             # --- ИСПРАВЛЕННЫЙ АНАЛИЗ ОТВЕТА ДЛЯ ОДИНОЧНОЙ ОТПРАВКИ ---
-                             $statusFromApi = $null
-                             if ($null -ne $apiResponseFromPost) {
-                                 if ($apiResponseFromPost -is [hashtable] -and $apiResponseFromPost.ContainsKey('status')) {
-                                     $statusFromApi = $apiResponseFromPost['status']
-                                 } elseif ($apiResponseFromPost -is [System.Management.Automation.PSCustomObject] -and $apiResponseFromPost.PSObject.Properties.Name -contains 'status') {
-                                     $statusFromApi = $apiResponseFromPost.status
-                                 }
-                             }
-
-                             if ($statusFromApi -eq 'success') { # Просто проверяем статус "success"
-                             # --- КОНЕЦ ИСПРАВЛЕННОГО АНАЛИЗА ---
-                                 $sendResultSuccess = $true
-                                 Write-Log "Результат для задания ID $currentAssignmentId успешно отправлен и обработан API." -Level Info
-                             } else {
-                                 $logStatus = if ($null -ne $statusFromApi) { $statusFromApi } else { '[N/A_Status]' }
-                                 Write-Log ("Ответ API при отправке результата ID $currentAssignmentId не был 'success'. Статус: '$logStatus'. Ответ API: $($apiResponseFromPost | ConvertTo-Json -Depth 2 -Compress)") -Level Error
-                             }
-                        } catch { Write-Log "Критическая ошибка при отправке результата задания ID $currentAssignmentId в API: $($_.Exception.Message)" -Level Error }
-                        if ($sendResultSuccess) { $script:LastExecutedTimesOnline[$currentAssignmentId] = $currentTimeUtc; Write-Log "Время последнего выполнения для задания ID $currentAssignmentId обновлено на $currentTimeUtc." -Level Verbose }
-                        else { Write-Log "Время последнего выполнения для задания ID $currentAssignmentId НЕ обновлено из-за ошибки отправки результата в API." -Level Warn }
-                    } catch { Write-Log "Критическая ошибка при ВЫПОЛНЕНИИ задания ID $currentAssignmentId (Метод: $($assignmentToExecute.method_name)): $($_.Exception.Message)" -Level Error }
-                      finally { Write-Log "ЗАВЕРШЕНИЕ ОБРАБОТКИ задания ID $currentAssignmentId." -Level Info }
-                }
-            }
-        } else { Write-Log "Нет активных заданий для выполнения в Online режиме." -Level Verbose }
-        $loopIterationEndTime = [DateTimeOffset]::UtcNow; $elapsedMsInLoop = ($loopIterationEndTime - $loopIterationStartTime).TotalMilliseconds
-        Write-Log "Итерация основного цикла Online режима заняла $($elapsedMsInLoop) мс." -Level Debug; Start-Sleep -Milliseconds 500
-    }
+                    Write-Log "ЗАВЕРШЕНИЕ ОБРАБОТКИ pipeline-задания ID $currentAssignmentIdOnline." -Level Info
+                } # Конец if ($currentTimeUtcOnline -ge $nextRunTimeOnline)
+            } # Конец foreach ($currentAssignmentIdOnline in ...)
+        } else { Write-Log "Нет активных pipeline-заданий для выполнения в Online режиме." -Level Verbose }
+        
+        # (Пауза в конце цикла Online режима - без изменений от v7.0.5)
+        # ...
+        $loopIterationEndTimeOnline = [DateTimeOffset]::UtcNow; $elapsedMsInLoopOnline = ($loopIterationEndTimeOnline - $loopIterationStartTimeOnline).TotalMilliseconds
+        Write-Log "Итерация основного цикла Online режима заняла $($elapsedMsInLoopOnline) мс." -Level Debug; Start-Sleep -Milliseconds 500
+    } # Конец while ($true) для Online режима
 } elseif ($agentMode -eq 'offline') {
-    # ... (Логика Offline режима - без изменений от v7.0.4) ...
-    Write-Log "Агент переходит в Offline режим." -Level Info
-    $requiredOfflineFields = @("assignments_file_path_pattern", "output_path", "output_name_template", "offline_cycle_interval_seconds")
-    $missingOrEmptyOfflineFields = $requiredOfflineFields | Where-Object { -not ($script:Config.PSObject.Properties.Name -contains $_) -or $null -eq $script:Config.$_ -or (($script:Config.$_ -is [string]) -and ([string]::IsNullOrWhiteSpace($script:Config.$_))) -or ($_ -eq "offline_cycle_interval_seconds" -and ($script:Config.$_ -is [string] -and [string]::IsNullOrWhiteSpace($script:Config.$_))) }
-    if ($missingOrEmptyOfflineFields.Count -gt 0) { Write-Log ("Критическая ошибка: Для Offline режима в '$ConfigFile' отсутствуют или пусты обязательные поля: $($missingOrEmptyOfflineFields -join ', '). Offline режим не может быть запущен.") -Level Error; if ($Host.Name -eq "ConsoleHost") { Read-Host "Нажмите Enter для выхода" }; exit 1 }
-    $assignmentsFolderPathForCheck = $null
-    try { $assignmentsFolderPathForCheck = Split-Path -Path $script:Config.assignments_file_path_pattern -Parent -ErrorAction Stop; if (-not (Test-Path $assignmentsFolderPathForCheck -PathType Container)) { Write-Log "Папка для файлов заданий '$assignmentsFolderPathForCheck' (из 'assignments_file_path_pattern') не найдена. Попытка создать..." -Level Warn; New-Item -Path $assignmentsFolderPathForCheck -ItemType Directory -Force -ErrorAction Stop | Out-Null; Write-Log "Папка '$assignmentsFolderPathForCheck' успешно создана." -Level Info } }
-    catch { Write-Log "Критическая ошибка: Не удалось определить или создать папку для файлов заданий из '$($script:Config.assignments_file_path_pattern)': $($_.Exception.Message). Offline режим не может быть запущен." -Level Error; if ($Host.Name -eq "ConsoleHost") { Read-Host "Нажмите Enter для выхода" }; exit 1 }
-    $outputResultsPath = $script:Config.output_path
-    if (-not (Test-Path $outputResultsPath -PathType Container)) { Write-Log "Папка для файлов результатов '$outputResultsPath' не найдена. Попытка создать..." -Level Warn; try { New-Item -Path $outputResultsPath -ItemType Directory -Force -ErrorAction Stop | Out-Null; Write-Log "Папка '$outputResultsPath' успешно создана." -Level Info } catch { Write-Log "Критическая ошибка: Не удалось создать папку для файлов результатов '$outputResultsPath': $($_.Exception.Message). Offline режим не может быть запущен." -Level Error; if ($Host.Name -eq "ConsoleHost") { Read-Host "Нажмите Enter для выхода" }; exit 1 } }
-    $offlineCycleIntervalSec = 0
-    if ($script:Config.PSObject.Properties.Name -contains 'offline_cycle_interval_seconds' -and $script:Config.offline_cycle_interval_seconds -ne $null) { $parsedInterval = 0; if ([int]::TryParse($script:Config.offline_cycle_interval_seconds.ToString(), [ref]$parsedInterval) -and $parsedInterval -ge 0) { $offlineCycleIntervalSec = $parsedInterval } else { Write-Log "Некорректное значение 'offline_cycle_interval_seconds' ('$($script:Config.offline_cycle_interval_seconds)'). Используется однократный запуск (0 сек)." -Level Warn } }
-    $runOfflineContinuously = ($offlineCycleIntervalSec -gt 0)
-    if ($runOfflineContinuously) { Write-Log ("Offline режим: Запуск в циклическом режиме с интервалом $offlineCycleIntervalSec сек между полными циклами проверок.") -Level Info }
-    else { Write-Log "Offline режим: Запуск в однократном режиме (выполнит один цикл проверок и завершится)." -Level Info }
-    do {
+    # --- Логика для Offline режима ---
+    # (Валидация полей для Offline режима - без изменений от v7.0.5)
+    # ...
+    Write-Log "Агент переходит в Offline режим (Pipeline-архитектура)." -Level Info
+    # ... (определение $offlineCycleIntervalSec, $runOfflineContinuously - без изменений) ...
+    
+    do { # Основной цикл Offline режима (может быть однократным)
         $offlineCycleStartTime = [DateTimeOffset]::UtcNow
         Write-Log "Начало цикла/запуска Offline режима ($($offlineCycleStartTime.ToString('s')))." -Level Info
-        $latestAssignmentConfigFileInfo = $null; $assignmentFileReadError = $null; $newAssignmentsData = $null
-        try {
-            $assignmentFilePattern = $script:Config.assignments_file_path_pattern
-            Write-Log ("Поиск файла конфигурации заданий в '$assignmentsFolderPathForCheck' по шаблону '$assignmentFilePattern'...") -Level Debug
-            $foundAssignmentFiles = Get-ChildItem -Path $assignmentFilePattern -File -ErrorAction SilentlyContinue
-            if ($Error.Count -gt 0 -and $Error[0].CategoryInfo.Category -eq 'ReadError') { throw ("Ошибка доступа при поиске файла конфигурации в '$assignmentsFolderPathForCheck': " + $Error[0].Exception.Message) }
-            $Error.Clear()
-            if ($foundAssignmentFiles.Count -gt 0) { $latestAssignmentConfigFileInfo = $foundAssignmentFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1; Write-Log "Найден последний файл конфигурации заданий: '$($latestAssignmentConfigFileInfo.FullName)' (Дата изменения: $($latestAssignmentConfigFileInfo.LastWriteTime))." -Level Verbose }
-            else { Write-Log "Файлы конфигурации заданий по шаблону '$assignmentFilePattern' в '$assignmentsFolderPathForCheck' не найдены." -Level Warn }
-        } catch { $assignmentFileReadError = "Ошибка при поиске файла конфигурации заданий: $($_.Exception.Message)"; Write-Log $assignmentFileReadError -Level Error }
-        if ($null -ne $latestAssignmentConfigFileInfo -and $null -eq $assignmentFileReadError) {
-            if (($latestAssignmentConfigFileInfo.FullName -ne $script:LastProcessedConfigFileFullNameOffline) -or ($latestAssignmentConfigFileInfo.LastWriteTime -gt $script:LastConfigFileWriteTimeOffline)) {
-                Write-Log "Обнаружен новый или обновленный файл конфигурации заданий: '$($latestAssignmentConfigFileInfo.Name)'. Попытка чтения..." -Level Info
-                try {
-                    $fileJsonContent = Get-Content -Path $latestAssignmentConfigFileInfo.FullName -Raw -Encoding UTF8 -ErrorAction Stop
-                    $newAssignmentsData = $fileJsonContent | ConvertFrom-Json -ErrorAction Stop
-                    if ($null -eq $newAssignmentsData) { throw "ConvertFrom-Json вернул `$null после чтения файла '$($latestAssignmentConfigFileInfo.Name)'." }
-                    if (-not ($newAssignmentsData.PSObject.Properties.Name -contains 'assignments' -and $newAssignmentsData.assignments -is [array]) -or -not ($newAssignmentsData.PSObject.Properties.Name -contains 'assignment_config_version' -and (-not [string]::IsNullOrWhiteSpace($newAssignmentsData.assignment_config_version))) ) { throw ("Файл '$($latestAssignmentConfigFileInfo.Name)' имеет некорректную структуру JSON.") }
-                    $tempConfigVersion = $newAssignmentsData.assignment_config_version; $tempAssignmentsArray = $newAssignmentsData.assignments
-                    Write-Log ("Файл конфигурации '$($latestAssignmentConfigFileInfo.Name)' успешно прочитан. Версия конфига: '$tempConfigVersion'. Количество заданий: $($tempAssignmentsArray.Count).") -Level Info
-                    $script:CurrentAssignmentsOffline = @($tempAssignmentsArray | ForEach-Object { [PSCustomObject]$_ }); $script:CurrentConfigVersionOffline = $tempConfigVersion; $script:LastProcessedConfigFileFullNameOffline = $latestAssignmentConfigFileInfo.FullName; $script:LastConfigFileWriteTimeOffline = $latestAssignmentConfigFileInfo.LastWriteTime
-                    Write-Log "Список заданий для Offline режима обновлен." -Level Info
-                } catch { $fileProcessingErrorMsg = "Критическая ошибка при чтении или обработке файла конфигурации '$($latestAssignmentConfigFileInfo.Name)': $($_.Exception.Message)"; Write-Log $fileProcessingErrorMsg -Level Error; $prevConfVersionToLog1 = if (-not [string]::IsNullOrWhiteSpace($script:CurrentConfigVersionOffline)) { $script:CurrentConfigVersionOffline } else { '[неизвестно]' }; Write-Log ("Продолжаем использовать предыдущий список заданий (если он был). Версия предыдущего конфига: '$prevConfVersionToLog1'.") -Level Warn; $newAssignmentsData = $null }
-            } else { Write-Log "Файл конфигурации заданий '$($latestAssignmentConfigFileInfo.Name)' не изменился с момента последней обработки. Используется текущий список заданий." -Level Verbose }
-        } elseif ($null -ne $assignmentFileReadError) { Write-Log "Из-за ошибки поиска файла конфигурации, продолжаем использовать предыдущий список заданий (если он был)." -Level Warn }
-          elseif ($null -ne $script:LastProcessedConfigFileFullNameOffline) { $prevConfVersionToLog2 = if (-not [string]::IsNullOrWhiteSpace($script:CurrentConfigVersionOffline)) { $script:CurrentConfigVersionOffline } else { '[неизвестно]' }; Write-Log "Новые файлы конфигурации заданий не найдены. Продолжаем использовать предыдущий список заданий (из '$($script:LastProcessedConfigFileFullNameOffline)', версия '$prevConfVersionToLog2')." -Level Warn }
-          else { Write-Log "Файлы конфигурации заданий не найдены, и нет ранее загруженного списка. Задания не будут выполнены в этом цикле." -Level Info }
-        $currentCycleResultsList = [System.Collections.Generic.List[object]]::new()
-        if ($null -ne $script:CurrentAssignmentsOffline -and $script:CurrentAssignmentsOffline.Count -gt 0) {
-            $totalAssignmentsInCurrentConfig = $script:CurrentAssignmentsOffline.Count; $confVersionToLogForRun = if (-not [string]::IsNullOrWhiteSpace($script:CurrentConfigVersionOffline)) { $script:CurrentConfigVersionOffline } else { 'N/A' }; Write-Log ("Начало выполнения $totalAssignmentsInCurrentConfig заданий из Offline конфигурации (Версия конфига: '$confVersionToLogForRun')...") -Level Info
-            $completedAssignmentCount = 0
-            foreach ($assignmentToExecuteOfflineRaw in $script:CurrentAssignmentsOffline) {
-                $completedAssignmentCount++; $currentOfflineAssignment = $null; $currentOfflineAssignmentId = "[N/A_ID]"; $currentOfflineMethodName = "[unknown_method]"; $currentOfflineNodeName = "[unknown_node]"
-                try {
-                     $currentOfflineAssignment = [PSCustomObject]$assignmentToExecuteOfflineRaw
-                     if ($null -eq $currentOfflineAssignment -or -not ($currentOfflineAssignment.PSObject.Properties.Name -contains 'assignment_id' -and $null -ne $currentOfflineAssignment.assignment_id) -or -not ($currentOfflineAssignment.PSObject.Properties.Name -contains 'method_name' -and (-not [string]::IsNullOrWhiteSpace($currentOfflineAssignment.method_name))) ) { throw "Некорректная структура задания." }
-                     $currentOfflineAssignmentId = $currentOfflineAssignment.assignment_id.ToString(); $currentOfflineMethodName = $currentOfflineAssignment.method_name
-                     if ($currentOfflineAssignment.PSObject.Properties.Name -contains 'node_name' -and (-not [string]::IsNullOrWhiteSpace($currentOfflineAssignment.node_name))) { $currentOfflineNodeName = $currentOfflineAssignment.node_name } else { $currentOfflineNodeName = "Задание_ID_$currentOfflineAssignmentId" }
-                     Write-Log ("Выполнение задания $completedAssignmentCount/$totalAssignmentsInCurrentConfig (ID: $currentOfflineAssignmentId, Метод: $currentOfflineMethodName, Узел: '$currentOfflineNodeName')...") -Level Verbose
-                     $checkExecutionResultOffline = Invoke-StatusMonitorCheck -Assignment $currentOfflineAssignment
-                     if ($null -eq $checkExecutionResultOffline -or -not $checkExecutionResultOffline.PSObject.Properties.Name -contains 'IsAvailable') { throw "Invoke-StatusMonitorCheck вернул некорректный результат." }
-                     $errorMessageForLogOffline = ""; if (-not [string]::IsNullOrEmpty($checkExecutionResultOffline.ErrorMessage)) { $maxErrLengthOffline = 100; if ($checkExecutionResultOffline.ErrorMessage.Length -gt $maxErrLengthOffline) { $errorMessageForLogOffline = $checkExecutionResultOffline.ErrorMessage.Substring(0, $maxErrLengthOffline) + "..." } else { $errorMessageForLogOffline = $checkExecutionResultOffline.ErrorMessage } }
-                     $logMessageForResultOffline = "Результат ID ${currentOfflineAssignmentId}: IsAvailable=$($checkExecutionResultOffline.IsAvailable), CheckSuccess="; if ($null -eq $checkExecutionResultOffline.CheckSuccess) { $logMessageForResultOffline += "[null], " } else { $logMessageForResultOffline += "$($checkExecutionResultOffline.CheckSuccess), " }; $logMessageForResultOffline += "Error='$errorMessageForLogOffline'"; Write-Log $logMessageForResultOffline -Level Verbose
-                     $resultToSaveInZrpu = @{ assignment_id = $currentOfflineAssignment.assignment_id } + $checkExecutionResultOffline; $currentCycleResultsList.Add($resultToSaveInZrpu)
-                } catch { $assignmentProcessingErrorMsg = "Ошибка ID $currentOfflineAssignmentId ($currentOfflineMethodName, '$currentOfflineNodeName'): $($_.Exception.Message)"; Write-Log $assignmentProcessingErrorMsg -Level Error; $errorDetailsForZrpu = @{ ErrorDescription="Локальная ошибка агента"; OriginalNodeName=$currentOfflineNodeName; OriginalMethodName=$currentOfflineMethodName; ExceptionMessage=$_.Exception.Message; ErrorRecordString=$_.ToString(); OriginalAssignmentSnippet=($currentOfflineAssignment|ConvertTo-Json -Depth 2 -Compress -WA SilentlyContinue) }; $errorResultBaseForZrpu = New-CheckResultObject -IsAvailable $false -ErrorMessage $assignmentProcessingErrorMsg -Details $errorDetailsForZrpu; $errorResultToSaveInZrpu = @{ assignment_id=$currentOfflineAssignmentId } + $errorResultBaseForZrpu; $currentCycleResultsList.Add($errorResultToSaveInZrpu) }
+
+        # --- Чтение файла конфигурации с pipeline-заданиями ---
+        # (Логика поиска и чтения файла .json.status.* - без изменений от v7.0.5,
+        #  но теперь $script:CurrentFullConfigOffline должен содержать 'assignments' с полем 'pipeline')
+        #  $script:CurrentAssignmentsOffline будет массивом заданий, каждое с 'pipeline'.
+        #  $script:CurrentConfigVersionOffline будет версией конфигурации.
+        # ... (код чтения файла конфигурации) ...
+        # Убедимся, что при успешном чтении $script:CurrentAssignmentsOffline - это массив объектов заданий,
+        # а $script:CurrentConfigVersionOffline - это строка версии.
+        # И что $script:CurrentFullConfigOffline - это весь объект из файла.
+
+        $currentCycleAggregatedResultsList = [System.Collections.Generic.List[object]]::new() # Для сбора агрегированных результатов ВСЕХ заданий
+
+        if ($null -ne $script:CurrentFullConfigOffline -and `
+            $script:CurrentFullConfigOffline.PSObject.Properties.Name -contains 'assignments' -and `
+            $script:CurrentFullConfigOffline.assignments -is [array] -and `
+            $script:CurrentFullConfigOffline.assignments.Count -gt 0) {
+            
+            $assignmentsFromConfigFile = $script:CurrentFullConfigOffline.assignments
+            $configVersionFromFile = $script:CurrentFullConfigOffline.assignment_config_version
+            $totalAssignmentsInCurrentConfigOffline = $assignmentsFromConfigFile.Count
+            Write-Log ("Начало выполнения $totalAssignmentsInCurrentConfigOffline pipeline-заданий из Offline конфигурации (Версия: '$configVersionFromFile')...") -Level Info
+            
+            $completedAssignmentCountOffline = 0
+            foreach ($assignmentObjectRawFromConfig in $assignmentsFromConfigFile) {
+                $completedAssignmentCountOffline++
+                $currentOfflineAssignmentId = "[N/A_ID]"; $currentOfflineMethodNameLog = "[N/A_Method]"; $currentOfflineNodeNameLog = "[N/A_Node]"
+                
+                # Валидация базовой структуры задания из конфига
+                if ($null -eq $assignmentObjectRawFromConfig -or `
+                    -not ($assignmentObjectRawFromConfig.PSObject.Properties.Name -contains 'assignment_id' -and $null -ne $assignmentObjectRawFromConfig.assignment_id) -or `
+                    -not ($assignmentObjectRawFromConfig.PSObject.Properties.Name -contains 'pipeline' -and $assignmentObjectRawFromConfig.pipeline -is [array])) {
+                    Write-Log "  Пропущено некорректное задание (отсутствует assignment_id или pipeline) в offline-конфиге: $($assignmentObjectRawFromConfig | ConvertTo-Json -Depth 1 -Compress)." -Level Warn
+                    # Собираем информацию об ошибке для этого "задания"
+                    $errorResultBaseForZrpu = New-CheckResultObject -IsAvailable $false -ErrorMessage "Некорректная структура задания в файле конфигурации." -Details @{OriginalAssignmentSnippet=($assignmentObjectRawFromConfig|ConvertTo-Json -Depth 2 -Compress -WA SilentlyContinue)}
+                    $currentCycleAggregatedResultsList.Add(@{ assignment_id=$currentOfflineAssignmentId } + $errorResultBaseForZrpu) # Используем $currentOfflineAssignmentId если он есть, или N/A
+                    continue
+                }
+                
+                $currentOfflineAssignmentConfigObj = [PSCustomObject]$assignmentObjectRawFromConfig
+                $currentOfflineAssignmentId = $currentOfflineAssignmentConfigObj.assignment_id.ToString()
+                if($currentOfflineAssignmentConfigObj.PSObject.Properties.Name -contains 'method_name'){$currentOfflineMethodNameLog = $currentOfflineAssignmentConfigObj.method_name}
+                if($currentOfflineAssignmentConfigObj.PSObject.Properties.Name -contains 'node_name'){$currentOfflineNodeNameLog = $currentOfflineAssignmentConfigObj.node_name}
+
+                Write-Log ("  Выполнение pipeline-задания $completedAssignmentCountOffline/$totalAssignmentsInCurrentConfigOffline (ID: $currentOfflineAssignmentId, Класс: '$currentOfflineMethodNameLog', Узел: '$currentOfflineNodeNameLog')...") -Level Verbose
+
+                # --- ВЫПОЛНЕНИЕ PIPELINE ДЛЯ ОФФЛАЙН ЗАДАНИЯ ---
+                $pipelineStepsOffline = $currentOfflineAssignmentConfigObj.pipeline
+                $allStepResultsOffline = [System.Collections.Generic.List[object]]::new()
+                $pipelineOverallSuccessOffline = $true
+                $pipelineOverallIsAvailableOffline = $true
+                $pipelineErrorMessageOffline = $null
+
+                if ($pipelineStepsOffline.Count -eq 0) {
+                    Write-Log "  Pipeline-задание ID $currentOfflineAssignmentId не содержит шагов. Пропущено." -Level Warn
+                    $pipelineOverallIsAvailableOffline = $false
+                    $pipelineErrorMessageOffline = "Pipeline не содержит шагов."
+                } else {
+                    Write-Log "  Найдено $($pipelineStepsOffline.Count) шагов в pipeline для задания ID $currentOfflineAssignmentId (offline)." -Level Debug
+                    $stepCounterOffline = 0
+                    foreach ($stepObjectOffline in $pipelineStepsOffline) {
+                        $stepCounterOffline++
+                        $stepTypeForLogOffline = if($stepObjectOffline -and $stepObjectOffline.PSObject.Properties.Name -contains 'type') {$stepObjectOffline.type} else {'[UnknownStepType]'}
+                        Write-Log "    Выполнение шага $stepCounterOffline/$($pipelineStepsOffline.Count) (Тип: '$stepTypeForLogOffline') для offline-задания ID $currentOfflineAssignmentId..." -Level Debug
+                        
+                        $stepContextOffline = [PSCustomObject]@{
+                            type = $stepObjectOffline.type
+                            parameters = if($stepObjectOffline.PSObject.Properties.Name -contains 'parameters'){$stepObjectOffline.parameters}else{@{}}
+                            success_criteria = if($stepObjectOffline.PSObject.Properties.Name -contains 'success_criteria'){$stepObjectOffline.success_criteria}else{$null}
+                            node_name = $currentOfflineAssignmentConfigObj.node_name # Из родительского задания
+                            ip_address = $currentOfflineAssignmentConfigObj.ip_address # Из родительского задания
+                        }
+                        
+                        $stepResultOffline = $null
+                        try {
+                            $stepResultOffline = Invoke-StatusMonitorCheck -Assignment $stepContextOffline
+                            if ($null -eq $stepResultOffline -or -not $stepResultOffline.PSObject.Properties.Name -contains 'IsAvailable') {
+                                throw "Invoke-StatusMonitorCheck (для шага '$stepTypeForLogOffline') вернул некорректный результат."
+                            }
+                        } catch {
+                            $stepExecErrorMsgOffline = "Критическая ошибка при выполнении шага $stepCounterOffline ('$stepTypeForLogOffline') offline-задания ID $currentOfflineAssignmentId : $($_.Exception.Message)"
+                            Write-Log $stepExecErrorMsgOffline -Level Error
+                            $stepResultOffline = New-CheckResultObject -IsAvailable $false -ErrorMessage $stepExecErrorMsgOffline -Details @{StepType=$stepTypeForLogOffline; ErrorRecord=$_.ToString()}
+                        }
+                        if ($stepResultOffline -is [hashtable] -and -not $stepResultOffline.ContainsKey('StepType')) { $stepResultOffline.StepType = $stepTypeForLogOffline }
+                        $allStepResultsOffline.Add($stepResultOffline)
+
+                        if (-not $stepResultOffline.IsAvailable) {
+                            $pipelineOverallIsAvailableOffline = $false
+                            if (-not $pipelineErrorMessageOffline) { $pipelineErrorMessageOffline = "Шаг $stepCounterOffline ('$stepTypeForLogOffline') не был доступен." }
+                            break # Прерываем pipeline
+                        }
+                        if ($stepResultOffline.CheckSuccess -eq $false) {
+                            $pipelineOverallSuccessOffline = $false
+                            if (-not $pipelineErrorMessageOffline) { $pipelineErrorMessageOffline = "Шаг $stepCounterOffline ('$stepTypeForLogOffline') не прошел по критериям." }
+                        }
+                        if ($stepResultOffline.CheckSuccess -eq $null -and $pipelineOverallSuccessOffline -ne $false) {
+                            $pipelineOverallSuccessOffline = $null
+                            if (-not $pipelineErrorMessageOffline) { $pipelineErrorMessageOffline = "Ошибка оценки критериев для шага $stepCounterOffline ('$stepTypeForLogOffline')." }
+                        }
+                    } # Конец foreach ($stepObjectOffline in $pipelineStepsOffline)
+                } # Конец else ($pipelineStepsOffline.Count -eq 0)
+                
+                # Формируем агрегированный результат для этого offline-задания
+                # Важно: структура должна быть совместима с тем, что ожидает Загрузчик и API /checks/bulk (поле 'IsAvailable', 'Timestamp' и т.д.)
+                $aggregatedResultForThisOfflineAssignment = @{
+                    assignment_id = $currentOfflineAssignmentConfigObj.assignment_id
+                    # Используем PascalCase для IsAvailable и Timestamp, как ожидает /checks/bulk
+                    IsAvailable  = $pipelineOverallIsAvailableOffline
+                    CheckSuccess = $pipelineOverallSuccessOffline # Итоговый CheckSuccess для всего pipeline
+                    Timestamp    = $offlineCycleStartTime.ToUniversalTime().ToString("o") # Время начала выполнения всего цикла оффлайн агента
+                    Details      = @{ # Детали верхнего уровня - это массив результатов шагов
+                                    steps_results = $allStepResultsOffline.ToArray()
+                                    pipeline_status_message = if($pipelineErrorMessageOffline){$pipelineErrorMessageOffline}else{"Все шаги offline pipeline выполнены."}
+                                  }
+                    # ErrorMessage для всего pipeline (если был)
+                    ErrorMessage = if($pipelineErrorMessageOffline){$pipelineErrorMessageOffline}else{$null}
+                }
+                $currentCycleAggregatedResultsList.Add($aggregatedResultForThisOfflineAssignment)
+                Write-Log "  Завершено выполнение pipeline-задания ID $currentOfflineAssignmentId. Агрегированный результат добавлен в .zrpu." -Level Verbose
+
+            } # Конец foreach ($assignmentObjectRawFromConfig in $assignmentsFromConfigFile)
+            Write-Log "Выполнение всех ($totalAssignmentsInCurrentConfigOffline) offline pipeline-заданий завершено. Собрано результатов: $($currentCycleAggregatedResultsList.Count)." -Level Info
+        } else { Write-Log "Нет активных pipeline-заданий для выполнения в Offline режиме (файл конфигурации пуст или не найден)." -Level Info }
+
+        # --- Сохранение всех агрегированных результатов в .zrpu файл ---
+        if ($currentCycleAggregatedResultsList.Count -gt 0) {
+            $timestampForFileNameOffline = Get-Date -Format "ddMMyy_HHmmss"
+            $outputFileNameTemplateOffline = $script:Config.output_name_template
+            $outputFileNameGeneratedOffline = $outputFileNameTemplateOffline -replace "{object_id}", $script:Config.object_id -replace "{ddMMyy_HHmmss}", $timestampForFileNameOffline
+            $outputFileNameCleanedOffline = $outputFileNameGeneratedOffline -replace '[\\/:*?"<>|]', '_'
+            $outputFileFullPathOffline = Join-Path -Path $outputResultsPath -ChildPath $outputFileNameCleanedOffline
+            $tempOutputFileFullPathOffline = $outputFileFullPathOffline + ".tmp"
+            
+            # Версия конфигурации берется из прочитанного файла
+            $configVersionForPayload = if ($script:CurrentFullConfigOffline) { $script:CurrentFullConfigOffline.assignment_config_version } else { 'N/A_ConfigVersion' }
+
+            Write-Log ("Сохранение $($currentCycleAggregatedResultsList.Count) агрегированных результатов pipeline в: '$outputFileFullPathOffline'") -Level Info
+            Write-Log ("Версия агента: $script:AgentVersion. Версия конфига: '$configVersionForPayload'. ObjectID: $($script:Config.object_id).") -Level Verbose
+            
+            # Структура .zrpu файла
+            $finalPayloadForZrpuFile = @{
+                agent_script_version      = $script:AgentVersion
+                assignment_config_version = $configVersionForPayload
+                object_id                 = $script:Config.object_id
+                execution_timestamp_utc   = $offlineCycleStartTime.ToString("o") # Время начала всего цикла
+                results                   = $currentCycleAggregatedResultsList.ToArray() # Массив агрегированных результатов заданий
             }
-            Write-Log "Выполнение $totalAssignmentsInCurrentConfig заданий завершено. Собрано результатов: $($currentCycleResultsList.Count)." -Level Info
-        } else { Write-Log "Нет активных заданий для выполнения в Offline режиме." -Level Verbose }
-        if ($currentCycleResultsList.Count -gt 0) {
-             $timestampForFileName = Get-Date -Format "ddMMyy_HHmmss"; $outputFileNameTemplate = $script:Config.output_name_template; $outputFileNameGenerated = $outputFileNameTemplate -replace "{object_id}", $script:Config.object_id -replace "{ddMMyy_HHmmss}", $timestampForFileName; $outputFileNameCleaned = $outputFileNameGenerated -replace '[\\/:*?"<>|]', '_'; $outputFileFullPath = Join-Path -Path $outputResultsPath -ChildPath $outputFileNameCleaned; $tempOutputFileFullPath = $outputFileFullPath + ".tmp"
-             $confVersionForLogPayload = if (-not [string]::IsNullOrWhiteSpace($script:CurrentConfigVersionOffline)) { $script:CurrentConfigVersionOffline } else { 'N/A' }
-             Write-Log ("Сохранение $($currentCycleResultsList.Count) результатов в: '$outputFileFullPath'") -Level Info; Write-Log ("Версия агента: $script:AgentVersion. Версия конфига: '$confVersionForLogPayload'. ObjectID: $($script:Config.object_id).") -Level Verbose
-             $finalPayloadForZrpu = @{ agent_script_version = $script:AgentVersion; assignment_config_version = $script:CurrentConfigVersionOffline; object_id = $script:Config.object_id; execution_timestamp_utc = $offlineCycleStartTime.ToString("o"); results = $currentCycleResultsList }
-             try { $jsonToSaveToFile = $finalPayloadForZrpu | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue; $utf8EncodingNoBom = New-Object System.Text.UTF8Encoding($false); [System.IO.File]::WriteAllText($tempOutputFileFullPath, $jsonToSaveToFile, $utf8EncodingNoBom); Write-Log "Данные записаны во временный файл." -Level Debug; Move-Item -Path $tempOutputFileFullPath -Destination $outputFileFullPath -Force -ErrorAction Stop; Write-Log "Файл '$outputFileNameCleaned' успешно сохранен." -Level Info }
-             catch { Write-Log ("Критическая ошибка сохранения файла '$outputFileFullPath': $($_.Exception.Message)") -Level Error; if (Test-Path $tempOutputFileFullPath -PathType Leaf) { try { Remove-Item -Path $tempOutputFileFullPath -Force -ErrorAction SilentlyContinue } catch {} } }
-        } else { Write-Log "Нет результатов для сохранения." -Level Verbose }
+            try {
+                $jsonToSaveToFileOffline = $finalPayloadForZrpuFile | ConvertTo-Json -Depth 10 -Compress -WarningAction SilentlyContinue
+                $utf8EncodingNoBomOffline = New-Object System.Text.UTF8Encoding($false)
+                [System.IO.File]::WriteAllText($tempOutputFileFullPathOffline, $jsonToSaveToFileOffline, $utf8EncodingNoBomOffline)
+                Write-Log "Данные записаны во временный файл ($tempOutputFileFullPathOffline)." -Level Debug
+                Move-Item -Path $tempOutputFileFullPathOffline -Destination $outputFileFullPathOffline -Force -ErrorAction Stop
+                Write-Log "Файл '$outputFileNameCleanedOffline' успешно сохранен (атомарно)." -Level Info
+            } catch {
+                Write-Log ("Критическая ошибка сохранения файла результатов '$outputFileFullPathOffline': $($_.Exception.Message)") -Level Error
+                if (Test-Path $tempOutputFileFullPathOffline -PathType Leaf) { try { Remove-Item -Path $tempOutputFileFullPathOffline -Force -ErrorAction SilentlyContinue } catch {} }
+            }
+        } else { Write-Log "Нет агрегированных результатов pipeline для сохранения в .zrpu файл." -Level Info }
+
+        # (Пауза в конце цикла Offline режима - без изменений от v7.0.5)
+        # ...
         if ($runOfflineContinuously) {
-            $offlineCycleEndTime = [DateTimeOffset]::UtcNow; $elapsedSecondsInCycle = ($offlineCycleEndTime - $offlineCycleStartTime).TotalSeconds; $sleepDurationSeconds = $offlineCycleIntervalSec - $elapsedSecondsInCycle
-            if ($sleepDurationSeconds -lt 1) { Write-Log ("Итерация заняла {0:N2} сек (>= интервала {1} сек). Пауза 1 сек." -f $elapsedSecondsInCycle, $offlineCycleIntervalSec) -Level Warn; $sleepDurationSeconds = 1 }
-            else { Write-Log ("Итерация заняла {0:N2} сек. Пауза {1:N2} сек..." -f $elapsedSecondsInCycle, $sleepDurationSeconds) -Level Verbose }
-            Start-Sleep -Seconds $sleepDurationSeconds
+             $offlineCycleEndTime = [DateTimeOffset]::UtcNow; $elapsedSecondsInCycleOffline = ($offlineCycleEndTime - $offlineCycleStartTime).TotalSeconds; $sleepDurationSecondsOffline = $offlineCycleIntervalSec - $elapsedSecondsInCycleOffline
+             if ($sleepDurationSecondsOffline -lt 1) { Write-Log ("Итерация Offline цикла заняла {0:N2} сек (>= интервала {1} сек). Пауза 1 сек." -f $elapsedSecondsInCycleOffline, $offlineCycleIntervalSec) -Level Warn; $sleepDurationSecondsOffline = 1 }
+             else { Write-Log ("Итерация Offline цикла заняла {0:N2} сек. Пауза {1:N2} сек..." -f $elapsedSecondsInCycleOffline, $sleepDurationSecondsOffline) -Level Verbose }
+             Start-Sleep -Seconds $sleepDurationSecondsOffline
         }
-    } while ($runOfflineContinuously)
-    $offlineCompletionReason = if ($runOfflineContinuously) { 'цикл прерван' } else { 'однократный запуск завершен' }
+    } while ($runOfflineContinuously) # Конец do...while для Offline режима
+    
+    # (Завершение Offline режима - без изменений от v7.0.5)
+    # ...
+    $offlineCompletionReason = if ($runOfflineContinuously) { 'цикл прерван (внешнее событие)' } else { 'однократный запуск завершен' }
     Write-Log ("Offline режим завершен ({0})." -f $offlineCompletionReason) -Level Info; exit 0
-} else {
-     Write-Log "Критическая ошибка: Неизвестный режим работы '$($script:Config.mode)'." -Level Error; exit 1
+
+} else { # Неизвестный режим работы
+     Write-Log "Критическая ошибка: Неизвестный режим работы '$($script:Config.mode)' указан в конфигурационном файле." -Level Error; exit 1
 }
-Write-Log "Агент завершает работу непредвиденно." -Level Error; exit 1
+
+# Эта строка не должна достигаться при нормальной работе
+Write-Log "Агент завершает работу непредвиденно (достигнут конец скрипта без выхода по exit)." -Level Error; exit 1

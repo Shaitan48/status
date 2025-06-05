@@ -1,17 +1,18 @@
 ﻿# status/requirements.txt
-# Список зависимостей Python для Flask-приложения
+# Список зависимостей Python для Flask-приложения (v5.0.1)
 
 Flask==2.3.3
 psycopg2-binary==2.9.9 # Для работы с PostgreSQL
-#psycopg2==2.9.9
 gunicorn==21.2.0       # WSGI сервер для production
 python-dateutil==2.8.2 # Для парсинга дат ISO 8601 от PowerShell
-Flask-SocketIO==5.3.6  # <<< Добавлено для WebSockets
+Flask-SocketIO==5.3.6
+Flask-CORS==4.0.1
+python-dotenv==0.21.1  # <<< ДОБАВЛЕНО для явной загрузки .env (версия для примера, можно последнюю)
 
 # Выберите один из асинхронных режимов и раскомментируйте:
 eventlet==0.33.3    # <<< Для async_mode='eventlet'
 # gevent==23.9.1      # <<< Для async_mode='gevent'
 # gevent-websocket==0.10.1 # <<< Зависимость для gevent
 
-Flask-Login==0.6.3  # <<< ДОБАВЛЕНО
-Werkzeug>=2.3.0     # <<< УБЕДИТЕСЬ, что Werkzeug достаточно новый для хеширования
+Flask-Login==0.6.3
+Werkzeug>=2.3.0     # Для хеширования паролей и др.

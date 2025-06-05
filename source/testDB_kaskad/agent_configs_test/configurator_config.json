@@ -1,12 +1,12 @@
 {
   "api_base_url": "http://status_nginx_e2e_test:80/api",
-  "api_key": "ЗДЕСЬ_КЛЮЧ_КОНФИГУРАТОРА_ДЛЯ_OID_9999",
+  "api_key": "9RPIFSm2ZuOed7DicwD1RXvAMK3YcyMQ6AqRhilC7gM", 
   "output_path_base": "/opt/agent_configs/generated_assignments", 
   "delivery_path_base": "/opt/agent_configs/assignments_for_9999", 
   "log_file": "/opt/agent_logs/configurator_e2e.log",
   "log_level": "Debug",
-  "subdivision_ids_to_process": [9999], 
-  "output_filename_template": "{version_tag}_assignments.json.status.{transport_code}",
-  "delivery_subdir_template": "{transport_code}", 
+  "subdivision_ids_to_process": [9999],
+  "output_filename_template": "{version_tag}_assignments.json.status.{transport_code}", 
+  "delivery_subdir_template": "{transport_code}",
   "api_timeout_sec": 20
 }

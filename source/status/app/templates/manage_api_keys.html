@@ -17,11 +17,12 @@
     .form-section { position: sticky; top: 80px; }
     /* Заголовки секций */
     .form-section h3, .list-section h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 0.8rem; margin-bottom: 1rem; }
+
     /* --- Стили для элементов формы --- */
     .form-group { margin-bottom: 1rem; } /* Отступ между группами полей */
     .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.95em; } /* Лейблы */
     .form-group input[type="text"],
-    .form-group input[type="number"],
+    .form-group input[type="number"], /* Добавлено для единообразия, если понадобится */
     .form-group select {
         width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1em;
     } /* Поля ввода и селекты */
@@ -34,7 +35,9 @@
     .filter-controls { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 1.5rem; padding: 1rem; background-color: #f8f9fa; border: 1px solid var(--border-color); border-radius: 4px; }
     .filter-group { display: flex; flex-direction: column; } /* Группа: лейбл + поле */
     .filter-group label { margin-bottom: 5px; font-size: 0.9em; font-weight: 500; }
-    .filter-controls select, .filter-controls input { padding: 6px 8px; font-size: 0.95em; border-radius: 3px; border: 1px solid #ccc; min-width: 150px; }
+    .filter-controls select, .filter-controls input[type="number"] { /* Уточнено для object_id */
+        padding: 6px 8px; font-size: 0.95em; border-radius: 3px; border: 1px solid #ccc; min-width: 150px;
+    }
     #apply-filters-btn { align-self: flex-end; padding: 6px 15px; } /* Кнопка Применить */
 
     /* --- Стили для таблицы ключей --- */
@@ -48,38 +51,37 @@
     .keys-table .delete-btn { background-color: var(--danger-color); }
     .keys-table .delete-btn:hover { background-color: #c82333; }
 
-    /* Переключатель статуса "Активен" */
-    .active-switch { display: inline-block; position: relative; width: 40px; height: 20px; }
-    .active-switch input { opacity: 0; width: 0; height: 0; } /* Скрываем стандартный чекбокс */
+    /* Переключатель статуса "Активен" (как в примере) */
+    .active-switch { display: inline-block; position: relative; width: 40px; height: 20px; vertical-align: middle; }
+    .active-switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
-    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; } /* Круглый ползунок */
-    input:checked + .slider { background-color: var(--success-color); } /* Цвет включенного состояния */
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: var(--success-color); }
     input:focus + .slider { box-shadow: 0 0 1px var(--success-color); }
-    input:checked + .slider:before { transform: translateX(20px); } /* Сдвигаем ползунок вправо */
+    input:checked + .slider:before { transform: translateX(20px); }
 
     /* --- Стили для секции показа сгенерированного ключа --- */
     #generated-key-section { margin-top: 1.5rem; padding: 1rem; border: 1px solid var(--warning-color); background-color: #fff9e6; border-radius: 5px; display: none; /* Изначально скрыто */ }
     #generated-key-section h4 { margin-top: 0; color: #856404; }
-    #generated-api-key { font-family: monospace; font-size: 1.1em; word-break: break-all; background-color: #fff; padding: 8px; border: 1px dashed #ccc; border-radius: 3px; display: inline-block; margin-right: 10px; user-select: all; } /* Поле с ключом */
-    .copy-key-btn { padding: 5px 10px; font-size: 0.9em; vertical-align: middle;} /* Кнопка копирования */
+    #generated-api-key { font-family: monospace; font-size: 1.1em; word-break: break-all; background-color: #fff; padding: 8px; border: 1px dashed #ccc; border-radius: 3px; display: inline-block; margin-right: 10px; user-select: all; }
+    .copy-key-btn { padding: 5px 10px; font-size: 0.9em; vertical-align: middle;}
 
-    /* --- Стили пагинации --- */
+    /* --- Стили пагинации (общие) --- */
     .pagination-controls { margin-top: 1.5rem; text-align: center; }
     .pagination-controls button, .pagination-controls span { display: inline-block; padding: 5px 10px; margin: 0 3px; border: 1px solid #ccc; border-radius: 3px; background-color: #fff; cursor: pointer; font-size: 0.9em; }
     .pagination-controls button:disabled { background-color: #eee; color: #aaa; cursor: not-allowed; }
     .pagination-controls span.current-page { background-color: var(--primary-color); color: white; border-color: var(--primary-color); cursor: default; }
 
-    /* --- Общие стили для сообщений (feedback) --- */
+    /* --- Общие стили для сообщений (feedback) и ошибок валидации --- */
     .feedback-area { min-height: 1.5em; margin-top: 1rem; font-weight: 500; padding: 5px; border-radius: 3px; text-align: center; }
     .feedback-area.error-feedback { color: var(--danger-color); background-color: #f8d7da; border: 1px solid #f5c6cb; }
     .feedback-area.success-feedback { color: var(--success-color); background-color: #d4edda; border: 1px solid #c3e6cb;}
-    /* Стили для ошибок валидации конкретных полей */
-    .error-feedback { color: var(--danger-color); font-size: 0.9em; margin-top: 5px; display: block; /* Чтобы занимало всю ширину */ min-height: 1em; }
-
+    .error-feedback { /* Для ошибок под конкретными полями */
+        color: var(--danger-color); font-size: 0.9em; margin-top: 5px; display: block; min-height: 1em;
+    }
     /* Сообщение о загрузке в таблице */
     .loading-message { text-align: center; padding: 1em; color: var(--secondary-color); font-style: italic; }
     .error-message { color: var(--danger-color); font-weight: bold; text-align: center; padding: 1em;}
-
 </style>
 {% endblock %}
 
@@ -97,15 +99,12 @@
             {# Скрытое поле для хранения ID ключа в режиме редактирования #}
             <input type="hidden" id="edit-key-id">
 
-            {# Поле для ввода описания ключа #}
             <div class="form-group">
                 <label for="description">Описание *</label>
                 <input type="text" id="description" required placeholder="Например, Онлайн агент для ПУ">
-                {# Область для вывода ошибки валидации этого поля #}
                 <div class="error-feedback" id="description-error"></div>
             </div>
 
-            {# Выпадающий список для выбора роли ключа #}
             <div class="form-group">
                 <label for="role">Роль *</label>
                 <select id="role" required>
@@ -118,92 +117,83 @@
                  <div class="error-feedback" id="role-error"></div>
             </div>
 
-            {# Выпадающий список для привязки к подразделению (по ObjectID) #}
             <div class="form-group">
-                <label for="object-id">Привязать к подразделению (опционально)</label>
+                <label for="object-id">Привязать к подразделению (по ObjectID, опционально)</label>
                 <select id="object-id">
                     <option value="">-- Не привязывать --</option>
-                    {# Опции будут загружены динамически с помощью JavaScript #}
+                    {# Опции для этого селекта будут загружены динамически с помощью JavaScript #}
                 </select>
                  <div class="error-feedback" id="object-id-error"></div>
             </div>
 
-            {# Чекбокс "Активен", видимый только при редактировании #}
+            {# Чекбокс "Активен", отображается только при редактировании существующего ключа #}
              <div class="form-group" id="is-active-group" style="display: none;">
                 <label class="checkbox-label">
                     <input type="checkbox" id="is-active"> Активен
                 </label>
              </div>
 
-            {# Область для вывода общих ошибок формы (например, от API) #}
+            {# Область для вывода общих ошибок формы (например, от API) или сообщений об успехе #}
             <div id="form-feedback" class="feedback-area"></div>
 
             {# Кнопки действий формы #}
             <div class="form-actions">
-                {# Кнопка "Отмена", видимая только при редактировании #}
                 <button type="button" id="cancel-edit-btn" style="display: none; background-color: var(--secondary-color);">Отмена</button>
-                {# Основная кнопка (Создать/Сохранить) #}
                 <button type="submit" id="submit-key-btn">Создать Ключ</button>
             </div>
         </form>
 
-        <!-- Область для показа сгенерированного ключа после успешного создания -->
+        <!-- Секция для отображения сгенерированного API-ключа после успешного создания -->
         <div id="generated-key-section">
             <h4>✅ API Ключ Успешно Создан!</h4>
-            <p style="color: #dc3545; font-weight: bold;">
+            <p style="color: var(--danger-color); font-weight: bold;">
                 Пожалуйста, скопируйте ключ сейчас. Он больше не будет показан.
             </p>
             <div style="margin-bottom: 10px;">
-                 <code id="generated-api-key"></code> {# Сюда будет вставлен ключ #}
-                 <button type="button" class="copy-key-btn" id="copy-key-btn" title="Копировать в буфер">Копировать</button>
+                 <code id="generated-api-key"></code> {# Сюда JavaScript вставит сгенерированный ключ #}
+                 <button type="button" class="copy-key-btn" id="copy-key-btn" title="Копировать в буфер обмена">Копировать</button>
             </div>
             <button type="button" id="close-generated-key-btn">Закрыть</button>
         </div>
-
     </section>
 
-    <!-- Правая колонка: Список существующих ключей -->
+    <!-- Правая колонка: Список существующих API-ключей -->
     <section class="list-section">
         <h3>Список Существующих Ключей</h3>
 
-        <!-- Блок с фильтрами для таблицы -->
+        <!-- Блок с элементами управления фильтрацией таблицы -->
         <div class="filter-controls">
-             {# Фильтр по роли #}
              <div class="filter-group">
-                 <label for="filter-role">Роль:</label>
+                 <label for="filter-role">Фильтр по роли:</label>
                  <select id="filter-role">
-                     <option value="">Все</option>
+                     <option value="">Все роли</option>
                      <option value="agent">agent</option>
                      <option value="loader">loader</option>
                      <option value="configurator">configurator</option>
                      <option value="admin">admin</option>
                  </select>
              </div>
-             {# Фильтр по Object ID подразделения #}
              <div class="filter-group">
-                 <label for="filter-object-id">Подразделение (Object ID):</label>
-                 <select id="filter-object-id">
-                     <option value="">Все</option>
-                     {# Опции будут загружены динамически #}
+                 <label for="filter-object-id">Фильтр по Object ID:</label>
+                 <select id="filter-object-id"> {# Изменен input на select для выбора из существующих #}
+                     <option value="">Все объекты</option>
+                     {# Опции для этого селекта будут загружены динамически #}
                  </select>
              </div>
-             {# Фильтр по статусу активности #}
              <div class="filter-group">
-                 <label for="filter-is-active">Статус:</label>
+                 <label for="filter-is-active">Фильтр по статусу:</label>
                  <select id="filter-is-active">
-                     <option value="">Все</option>
-                     <option value="true">Активные</option>
-                     <option value="false">Неактивные</option>
+                     <option value="">Все статусы</option>
+                     <option value="true">Только активные</option>
+                     <option value="false">Только неактивные</option>
                  </select>
              </div>
-             {# Кнопка применения фильтров #}
-             <button id="apply-filters-btn">Применить</button>
+             <button id="apply-filters-btn">Применить фильтры</button>
         </div>
 
-        {# Область для сообщений над списком (успех/ошибка удаления/обновления) #}
+        {# Область для сообщений над списком (например, об успехе удаления) #}
         <div id="list-feedback" class="feedback-area"></div>
 
-        {# Таблица для отображения ключей #}
         <table class="keys-table">
             <thead>
                 <tr>
@@ -217,13 +207,13 @@
                     <th>Действия</th>
                 </tr>
             </thead>
-            {# Тело таблицы, заполняется динамически JavaScript #}
             <tbody id="key-list">
-                <tr><td colspan="8" class="loading-message">Загрузка ключей...</td></tr>
+                <!-- Начальное сообщение о загрузке -->
+                <tr><td colspan="8" class="loading-message">Загрузка списка API ключей...</td></tr>
             </tbody>
         </table>
 
-        {# Элементы управления пагинацией, изначально скрыты #}
+        <!-- Элементы управления пагинацией, по умолчанию скрыты -->
         <div class="pagination-controls" id="pagination-controls" style="display: none;">
             <button id="prev-page" disabled>« Назад</button>
             <span id="page-info">Страница - из -</span>
@@ -233,622 +223,705 @@
 </div>
 {% endblock %}
 
-{# Блок для JavaScript кода #}
+{# Блок для JavaScript кода, специфичного для этой страницы #}
 {% block scripts %}
 <script>
-    // --- Получение ссылок на элементы DOM ---
-    // Элементы формы
-    const form = document.getElementById('api-key-form');
-    const formTitle = document.getElementById('form-title');
-    const submitBtn = document.getElementById('submit-key-btn');
-    const cancelBtn = document.getElementById('cancel-edit-btn');
-    const editKeyIdInput = document.getElementById('edit-key-id');
-    const descriptionInput = document.getElementById('description');
-    const roleSelect = document.getElementById('role');
-    const objectIdSelect = document.getElementById('object-id'); // Селект для Object ID
-    const isActiveGroup = document.getElementById('is-active-group');
-    const isActiveCheckbox = document.getElementById('is-active');
-    const formFeedback = document.getElementById('form-feedback');
-    // Элементы секции сгенерированного ключа
-    const generatedKeySection = document.getElementById('generated-key-section');
-    const generatedApiKeyElement = document.getElementById('generated-api-key');
-    const copyKeyBtn = document.getElementById('copy-key-btn');
-    const closeGeneratedKeyBtn = document.getElementById('close-generated-key-btn');
-    // Элементы списка и фильтров
-    const keyList = document.getElementById('key-list');
-    const listFeedback = document.getElementById('list-feedback');
-    const filterRoleSelect = document.getElementById('filter-role');
-    const filterObjectIdSelect = document.getElementById('filter-object-id'); // Селект для фильтра
-    const filterIsActiveSelect = document.getElementById('filter-is-active');
-    const applyFiltersBtn = document.getElementById('apply-filters-btn');
-    // Элементы пагинации
-    const paginationControls = document.getElementById('pagination-controls');
-    const prevPageBtn = document.getElementById('prev-page');
-    const nextPageBtn = document.getElementById('next-page');
-    const pageInfoSpan = document.getElementById('page-info');
+    // --- Получение ссылок на основные элементы DOM ---
+    // Элементы формы создания/редактирования
+    const apiKeyForm = document.getElementById('api-key-form');
+    const formTitleElement = document.getElementById('form-title');
+    const submitButton = document.getElementById('submit-key-btn');
+    const cancelButton = document.getElementById('cancel-edit-btn');
+    const hiddenEditKeyIdInput = document.getElementById('edit-key-id');
+    const descriptionInputElement = document.getElementById('description');
+    const roleSelectElement = document.getElementById('role');
+    const objectIdSelectElement = document.getElementById('object-id'); // Селект для выбора Object ID
+    const isActiveGroupElement = document.getElementById('is-active-group');
+    const isActiveCheckboxElement = document.getElementById('is-active');
+    const formFeedbackElement = document.getElementById('form-feedback');
 
-    // --- URL API эндпоинтов ---
-    const API_URL_KEYS = "{{ url_for('api_keys.get_api_keys_route') }}"; // Для GET (список) и POST (создание)
-    const API_URL_KEY_DETAIL_TPL = "{{ url_for('api_keys.update_api_key_route', key_id=0) }}"; // Для PUT (обновление) и DELETE
-    const API_URL_SUBDIVISIONS = "{{ url_for('subdivisions.api_get_subdivisions') }}"; // Для загрузки подразделений в селекты
+    // Элементы секции для отображения сгенерированного ключа
+    const generatedKeySectionElement = document.getElementById('generated-key-section');
+    const generatedApiKeyDisplayElement = document.getElementById('generated-api-key');
+    const copyKeyButton = document.getElementById('copy-key-btn');
+    const closeGeneratedKeyButton = document.getElementById('close-generated-key-btn');
+
+    // Элементы списка ключей и управления фильтрами/пагинацией
+    const keyListTableBody = document.getElementById('key-list');
+    const listFeedbackElement = document.getElementById('list-feedback');
+    const filterRoleSelectElement = document.getElementById('filter-role');
+    const filterObjectIdSelectElement = document.getElementById('filter-object-id'); // Селект для фильтра по Object ID
+    const filterIsActiveSelectElement = document.getElementById('filter-is-active');
+    const applyFiltersButton = document.getElementById('apply-filters-btn');
+    const paginationControlsElement = document.getElementById('pagination-controls');
+    const prevPageButton = document.getElementById('prev-page');
+    const nextPageButton = document.getElementById('next-page');
+    const pageInfoSpanElement = document.getElementById('page-info');
+
+    // --- URL API эндпоинтов (генерируются Flask) ---
+    const API_URL_KEYS_CRUD = "{{ url_for('api_keys.get_api_keys_route') }}"; // Для GET (список) и POST (создание)
+    const API_URL_KEY_DETAIL_TEMPLATE = "{{ url_for('api_keys.update_api_key_route', key_id=0) }}"; // Шаблон для PUT/DELETE по ID
+    const API_URL_SUBDIVISIONS_LIST = "{{ url_for('subdivisions.api_get_subdivisions') }}"; // Для загрузки списка подразделений
 
     // --- Переменные состояния приложения ---
-    let apiKeysCache = []; // Кэш ключей для текущей страницы (для редактирования)
-    let subdivisionsCache = []; // Кэш ВСЕХ подразделений для заполнения селектов
-    let currentEditKeyId = null; // ID ключа, который редактируется в данный момент
-    let currentPage = 1;         // Текущая страница пагинации
-    let itemsPerPage = 15;       // Количество ключей на одной странице
-    let totalKeys = 0;           // Общее количество ключей (с учетом фильтров)
+    let currentApiKeysCache = [];    // Кэш ключей, отображаемых на текущей странице (для быстрого доступа при редактировании)
+    let allSubdivisionsCache = [];   // Кэш всех подразделений (для заполнения селектов)
+    let currentEditingKeyId = null;  // ID ключа, который редактируется в данный момент (null, если создается новый)
+    let listCurrentPage = 1;         // Текущая страница для пагинации списка ключей
+    let listItemsPerPage = 15;       // Количество ключей, отображаемых на одной странице
+    let listTotalKeys = 0;           // Общее количество ключей (с учетом текущих фильтров)
 
     // --- Вспомогательные функции ---
 
     /**
-     * Асинхронно выполняет запрос к API, обрабатывает ошибки сети и API.
-     * @param {string} url - URL эндпоинта.
-     * @param {object} options - Опции для fetch (method, headers, body).
-     * @returns {Promise<object|null>} - Promise с распарсенным JSON-ответом или null при успехе без контента (204).
-     * @throws {Error} - Кастомная ошибка с полями message, details, code, status при ошибке.
+     * Асинхронно выполняет запрос к API.
+     * Обрабатывает стандартные HTTP-ошибки и ошибки формата JSON.
+     * @param {string} url - URL API-эндпоинта.
+     * @param {object} [options={}] - Опции для `fetch` (method, headers, body).
+     * @returns {Promise<object|null>} - Promise, который разрешается с распарсенным JSON-ответом
+     *                                   или `null` (например, для ответа 204 No Content).
+     * @throws {Error} - Кастомный объект ошибки с полями `message`, `details`, `code`, `status`
+     *                   в случае ошибки сети, HTTP-ошибки или ошибки парсинга JSON.
      */
-     async function fetchData(url, options = {}) {
-        // Показываем индикатор загрузки над списком ТОЛЬКО если это не POST/PUT/DELETE
+    async function fetchDataApi(url, options = {}) {
         const method = options.method ? options.method.toUpperCase() : 'GET';
-        if (method === 'GET') {
-            showListFeedback('Загрузка...'); // Показываем только для GET
+        // Показываем индикатор загрузки над списком только для GET-запросов к основному списку ключей
+        if (method === 'GET' && url.startsWith(API_URL_KEYS_CRUD)) {
+            showListFeedbackMessage('Загрузка данных...');
         }
         try {
             const response = await fetch(url, options);
-            if (!response.ok) {
-                // ... (обработка ошибок как раньше) ...
-                 let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
-                 let errorDetails = null; let errorCode = 'NETWORK_ERROR';
-                 try {
-                      const errorData = await response.json();
-                      if (errorData && errorData.error) {
-                         errorCode = errorData.error.code || 'API_ERROR';
-                         if (errorData.error.message) errorText += ` - ${errorData.error.message}`;
-                         else if (typeof errorData.error === 'string') errorText += ` - ${errorData.error}`;
-                         errorDetails = errorData.error.details || errorData.error.message || errorData.error;
-                      } else if (errorData && typeof errorData === 'string') { errorText += ` - ${errorData}`; errorDetails = errorData; }
-                      else { errorDetails = errorData; }
-                 } catch (e) {
-                     try { const rawErrorText = await response.text(); errorText += ` - ${rawErrorText}`; errorDetails = rawErrorText; } catch (e2) {}
-                 }
-                 const error = new Error(errorText); error.details = errorDetails; error.code = errorCode; error.status = response.status; throw error;
+            if (!response.ok) { // Обработка HTTP-ошибок (статусы 4xx, 5xx)
+                let errorText = `Ошибка API: ${response.status} ${response.statusText}`;
+                let errorDetails = null;
+                let errorCode = 'NETWORK_ERROR'; // Код ошибки по умолчанию
+                try { // Пытаемся извлечь детали ошибки из JSON-ответа сервера
+                    const errorData = await response.json();
+                    if (errorData && errorData.error) {
+                        errorCode = errorData.error.code || 'API_ERROR_UNKNOWN_CODE';
+                        errorText = errorData.error.message || errorText; // Используем сообщение от сервера, если есть
+                        errorDetails = errorData.error.details || errorData.error.message || errorData.error;
+                    } else if (errorData && typeof errorData === 'string') { // Если ошибка - просто строка
+                        errorText = errorData; errorDetails = errorData;
+                    } else { errorDetails = errorData; }
+                } catch (e_json) { /* Ошибка парсинга JSON-ответа с ошибкой - игнорируем, используем базовый errorText */
+                    try { const rawText = await response.text(); if(rawText) errorDetails = rawText; } catch(e_text){}
+                }
+                const error = new Error(errorText);
+                error.details = errorDetails; error.code = errorCode; error.status = response.status;
+                throw error; // Выбрасываем кастомную ошибку
             }
-            // Успешный ответ
-            if (method === 'GET') {
-                 showListFeedback(''); // Очищаем статус загрузки при успехе GET
+
+            // Если запрос GET к основному списку был успешным, очищаем сообщение о загрузке
+            if (method === 'GET' && url.startsWith(API_URL_KEYS_CRUD)) {
+                showListFeedbackMessage('');
             }
-            if (response.status === 204) return null;
-            const text = await response.text();
-            try { return text ? JSON.parse(text) : null; }
-            catch (e) { console.warn("Не удалось распарсить JSON:", text); return { rawText: text }; }
-        } catch (error) {
-             console.error("Ошибка fetchData:", error);
-             showListFeedback(`Ошибка: ${error.message}`, true); // Показываем ошибку над списком
-             throw error;
+
+            if (response.status === 204) return null; // Успешный ответ без тела (например, DELETE)
+
+            const responseText = await response.text(); // Сначала получаем текст
+            try { // Пытаемся распарсить как JSON
+                return responseText ? JSON.parse(responseText) : null;
+            } catch (e_parse) {
+                console.warn("fetchDataApi: Не удалось распарсить JSON из успешного ответа. Текст ответа:", responseText, e_parse);
+                return { _rawResponseText: responseText }; // Возвращаем как есть, если не JSON
+            }
+        } catch (error) { // Перехватываем как кастомные ошибки, так и ошибки сети (fetch rejected)
+            console.error(`Ошибка fetchDataApi для URL: ${url}`, error);
+            // Отображаем ошибку в общем фидбеке над списком
+            showListFeedbackMessage(`Ошибка: ${error.message || 'Неизвестная ошибка сети.'}`, true);
+            throw error; // Передаем ошибку дальше для обработки в вызывающей функции
         }
     }
 
     /**
      * Отображает ошибки валидации полей формы.
      * @param {object|string} errors - Объект {field_name: message} или строка с общей ошибкой.
-     * @param {string} prefix - Префикс ID элементов формы (по умолчанию пустой).
+     * @param {string} [formFeedbackElementId='form-feedback'] - ID элемента для общих ошибок формы.
+     * @param {string} [fieldErrorSuffix='-error'] - Суффикс для ID элементов ошибок полей.
      */
-    function displayValidationErrors(errors, prefix = '') {
-         clearValidationErrors(prefix); // Очищаем предыдущие ошибки
-         let firstErrorField = null; // Для установки фокуса
-         const feedbackEl = document.getElementById(`${prefix}form-feedback`); // Область для общих ошибок
-         if (!feedbackEl) { console.error("Feedback element not found for prefix:", prefix); return; }
+    function displayFormValidationErrors(errors, formFeedbackElementId = 'form-feedback', fieldErrorSuffix = '-error') {
+        clearFormValidationErrors(formFeedbackElementId, fieldErrorSuffix); // Очищаем предыдущие
+        const generalFeedbackElement = document.getElementById(formFeedbackElementId);
+        let firstInvalidFieldElement = null;
 
-         if (errors && typeof errors === 'object') {
-             // Перебираем ошибки по полям
-             for (const field in errors) {
-                  // Генерируем ID поля и элемента ошибки (e.g., object_id -> object-id)
-                  const fieldId = field.replace(/_([a-z])/g, (match, p1) => p1.toUpperCase());
-                  const errorElementId = `${prefix}${fieldId}-error`;
-                  const inputElementId = `${prefix}${fieldId}`; // ID самого поля ввода/селекта
-
-                  const errorElement = document.getElementById(errorElementId);
-                  const inputElement = document.getElementById(inputElementId);
-
-                  if (errorElement) { // Если есть специальный div для ошибки поля
-                      errorElement.textContent = errors[field];
-                      if (inputElement && !firstErrorField) firstErrorField = inputElement; // Запоминаем первое поле для фокуса
-                      if (inputElement) inputElement.classList.add('invalid'); // Можно добавить класс для подсветки поля
-                  } else { // Если нет, показываем в общей области под формой
-                      console.warn(`Element with id ${errorElementId} not found for field ${field}.`);
-                      feedbackEl.textContent += ` ${field}: ${errors[field]}`;
-                  }
-             }
-             if (feedbackEl.textContent) { // Если были общие ошибки
-                  feedbackEl.className = 'feedback-area error-feedback';
-             } else if (Object.keys(errors).length > 0 && !firstErrorField) {
-                  // Если ошибки были, но для них не нашлось полей, покажем общее сообщение
-                  feedbackEl.textContent = "Пожалуйста, исправьте ошибки в форме.";
-                  feedbackEl.className = 'feedback-area error-feedback';
-             }
-         } else if (typeof errors === 'string') { // Если передана строка с общей ошибкой
-             feedbackEl.textContent = errors;
-             feedbackEl.className = 'feedback-area error-feedback';
-         }
-         // Устанавливаем фокус на первое поле с ошибкой
-         if (firstErrorField) { firstErrorField.focus(); }
+        if (typeof errors === 'string') { // Если передана одна строка с общей ошибкой
+            if (generalFeedbackElement) showFeedback(generalFeedbackElement, errors, true);
+        } else if (errors && typeof errors === 'object') { // Если передан объект {поле: сообщение}
+            let hasFieldSpecificErrors = false;
+            for (const fieldName in errors) {
+                const errorDisplayElement = document.getElementById(`${fieldName}${fieldErrorSuffix}`);
+                const fieldInputElement = document.getElementById(fieldName); // Ищем само поле ввода
+                if (errorDisplayElement) {
+                    errorDisplayElement.textContent = errors[fieldName];
+                    if (fieldInputElement) {
+                        fieldInputElement.classList.add('invalid'); // Добавляем класс для подсветки
+                        if (!firstInvalidFieldElement) firstInvalidFieldElement = fieldInputElement; // Запоминаем первое поле
+                    }
+                    hasFieldSpecificErrors = true;
+                } else { // Если нет специального элемента для ошибки поля, выводим в общий фидбек
+                    console.warn(`displayFormValidationErrors: Элемент ошибки для поля '${fieldName}' (ID: ${fieldName}${fieldErrorSuffix}) не найден.`);
+                    if (generalFeedbackElement) {
+                        const p = document.createElement('p'); p.textContent = `${fieldName}: ${errors[fieldName]}`;
+                        generalFeedbackElement.appendChild(p);
+                        generalFeedbackElement.classList.add('error-feedback');
+                    }
+                }
+            }
+            // Если были ошибки, но не для всех нашлись поля, или были только общие
+            if (generalFeedbackElement && !hasFieldSpecificErrors && Object.keys(errors).length > 0 && !generalFeedbackElement.textContent) {
+                showFeedback(generalFeedbackElement, "Пожалуйста, исправьте ошибки в форме.", true);
+            }
+        }
+        if (firstInvalidFieldElement) firstInvalidFieldElement.focus(); // Фокус на первом поле с ошибкой
     }
 
-    /** Очищает ошибки валидации для указанной формы. */
-    function clearValidationErrors(prefix = '') {
-        const feedbackEl = document.getElementById(`${prefix}form-feedback`);
-        if (feedbackEl) { feedbackEl.textContent = ''; feedbackEl.className = 'feedback-area'; }
-        document.querySelectorAll(`#${prefix}api-key-form .error-feedback`).forEach(el => el.textContent = '');
-        document.querySelectorAll(`#${prefix}api-key-form input.invalid, #${prefix}api-key-form select.invalid`)
+    /** Очищает все сообщения об ошибках валидации в форме и убирает подсветку полей. */
+    function clearFormValidationErrors(formFeedbackElementId = 'form-feedback', fieldErrorSuffix = '-error') {
+        const generalFeedbackElement = document.getElementById(formFeedbackElementId);
+        if (generalFeedbackElement) showFeedback(generalFeedbackElement, ''); // Очищаем общий фидбек
+        // Очищаем сообщения под конкретными полями
+        document.querySelectorAll(`#${apiKeyForm.id} .error-feedback`).forEach(el => el.textContent = '');
+        // Убираем класс 'invalid' с полей
+        document.querySelectorAll(`#${apiKeyForm.id} input.invalid, #${apiKeyForm.id} select.invalid`)
                 .forEach(el => el.classList.remove('invalid'));
     }
 
-    /** Отображает сообщение в указанном элементе (listFeedback или formFeedback). */
+    /** Отображает сообщение в указанном элементе (для фидбека над списком или в форме). */
     function showFeedback(element, message, isError = false) {
          if (!element) return;
          element.textContent = message;
          element.className = 'feedback-area'; // Сбрасываем классы
-         if (message) { element.classList.add(isError ? 'error-feedback' : 'success-feedback'); }
+         if (message) { // Если есть сообщение, добавляем соответствующий класс
+             element.classList.add(isError ? 'error-feedback' : 'success-feedback');
+         }
     }
     /** Показывает сообщение над списком ключей. */
-    function showListFeedback(message, isError = false) { showFeedback(listFeedback, message, isError); }
-    /** Показывает сообщение под формой создания/редактирования. */
-    function showFormFeedback(message, isError = false) { showFeedback(formFeedback, message, isError); }
+    function showListFeedbackMessage(message, isError = false) { showFeedback(listFeedbackElement, message, isError); }
+    /** Показывает сообщение под формой создания/редактирования ключа. */
+    function showFormFeedbackMessage(message, isError = false) { showFeedback(formFeedbackElement, message, isError); }
 
     /**
-     * Форматирует дату в строку локального времени.
-     * @param {string|Date} dateStr - Строка даты ISO или объект Date.
-     * @returns {string} - Отформатированная строка или 'N/A'.
+     * Копирует предоставленный текст в буфер обмена пользователя.
+     * @param {string} textToCopy - Текст, который нужно скопировать.
      */
-    function formatDateTime(dateStr) {
-        if (!dateStr) return 'N/A';
-        try {
-            const date = new Date(dateStr);
-            if (isNaN(date.getTime())) return 'Неверная дата';
-            // Отображаем время в локальной таймзоне пользователя
-            return date.toLocaleString('ru-RU', {
-                year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-        } catch (e) { console.error("Ошибка форматирования даты:", dateStr, e); return 'Ошибка даты'; }
+    function copyTextToClipboard(textToCopy) {
+        if (!navigator.clipboard) { // Fallback для старых браузеров (менее надежно)
+            const textArea = document.createElement("textarea");
+            textArea.value = textToCopy;
+            textArea.style.position = "fixed"; // Скрываем от пользователя
+            document.body.appendChild(textArea);
+            textArea.focus(); textArea.select();
+            try {
+                document.execCommand('copy');
+                showFormFeedbackMessage('Ключ скопирован в буфер обмена!', false);
+            } catch (err) {
+                console.error('Fallback: Ошибка копирования в буфер:', err);
+                showFormFeedbackMessage('Не удалось скопировать ключ. Пожалуйста, скопируйте вручную.', true);
+            }
+            document.body.removeChild(textArea);
+            return;
+        }
+        navigator.clipboard.writeText(textToCopy).then(function() {
+            showFormFeedbackMessage('Ключ скопирован в буфер обмена!', false);
+        }, function(err) {
+            console.error('Async: Ошибка копирования в буфер:', err);
+            showFormFeedbackMessage('Не удалось скопировать ключ. Пожалуйста, скопируйте вручную.', true);
+        });
     }
-
-    /**
-     * Копирует текст в буфер обмена.
-     * @param {string} text - Текст для копирования.
-     */
-    function copyToClipboard(text) { /* ... (код без изменений из предыдущего ответа) ... */ }
 
     /**
      * Заполняет HTMLSelectElement опциями из массива данных.
-     * Поддерживает иерархию для подразделений (если addHierarchy=true).
-     * @param {HTMLSelectElement} selectElement - Целевой select.
-     * @param {Array<Object>} items - Массив объектов данных.
-     * @param {string} valueField - Имя поля для значения option ('id' или 'object_id').
-     * @param {string} textField - Имя поля для текста option ('short_name' или 'name').
-     * @param {string} placeholder - Текст для дефолтной пустой опции.
-     * @param {boolean} addHierarchy - Строить ли иерархию (использует parent_id и priority)?
-     * @param {number|null} excludeId - ID элемента (по 'id'), который и чьих потомков нужно исключить.
+     * @param {HTMLSelectElement} selectEl - Целевой select-элемент.
+     * @param {Array<Object>} dataItems - Массив объектов данных для опций.
+     * @param {string} valueKey - Имя поля в объекте dataItems для `option.value`.
+     * @param {string} textKey - Имя поля в объекте dataItems для `option.textContent`.
+     * @param {string} placeholderText - Текст для первой (пустой) опции.
+     * @param {boolean} [useHierarchy=false] - Флаг, указывающий, нужно ли строить иерархию (для подразделений).
+     *                                          Предполагает наличие `parent_id` и `priority` в объектах `dataItems`.
+     * @param {number|null} [excludeItemId=null] - ID элемента (по `valueKey`), который и всех его потомков нужно исключить (для иерархии).
      */
-     function populateSelect(selectElement, items, valueField, textField, placeholder, addHierarchy = false, excludeId = null) {
-        const currentSelectedValue = selectElement.value; // Запоминаем текущее значение
-        selectElement.innerHTML = `<option value="">${placeholder}</option>`; // Очищаем и добавляем плейсхолдер
+    function populateSelectWithOptions(selectEl, dataItems, valueKey, textKey, placeholderText, useHierarchy = false, excludeItemId = null) {
+        const currentSelectedVal = selectEl.value; // Сохраняем текущее выбранное значение
+        selectEl.innerHTML = `<option value="">${placeholderText}</option>`; // Очищаем и добавляем плейсхолдер
 
-        if (!items || items.length === 0) {
-            console.warn(`populateSelect для ${selectElement.id}: нет данных`);
+        if (!dataItems || dataItems.length === 0) {
+            console.warn(`populateSelectWithOptions для ${selectEl.id}: нет данных для заполнения.`);
             return;
         }
 
-        if (addHierarchy) { // Логика для иерархического селекта (например, выбор родителя)
-            const map = {}; const roots = []; const descendantIds = new Set();
-            function getDescendants(itemId) { if (!map[itemId]?.rawChildren) return; map[itemId].rawChildren.forEach(childId => { if (!descendantIds.has(childId)) { descendantIds.add(childId); getDescendants(childId); } }); }
-            items.forEach(item => { map[item.id] = { ...item, rawChildren: [] }; }); // Используем ID как ключ карты
-            items.forEach(item => { if (item.parent_id !== null && map[item.parent_id]) { map[item.parent_id].rawChildren.push(item.id); } });
-            if (excludeId !== null) { descendantIds.add(excludeId); getDescendants(excludeId); }
-
-            const selectMap = {};
-            items.forEach(item => { if (!descendantIds.has(item.id)) { selectMap[item.id] = { ...item, children: [] }; if (item.parent_id === null || !selectMap[item.parent_id]) { if (!roots.includes(item.id)) roots.push(item.id); } else if (selectMap[item.parent_id]) { selectMap[item.parent_id].children.push(item.id); } } });
-
-            function addOption(itemId, level) {
-                const item = selectMap[itemId]; if (!item) return;
-                const option = document.createElement('option');
-                option.value = item[valueField]; // valueField здесь обычно 'id'
-                const name = item.short_name || item[textField];
-                option.textContent = '\u00A0'.repeat(level * 3) + name + ` (ID: ${item.id})`;
-                selectElement.appendChild(option);
-                item.children.map(id => selectMap[id]).filter(child => child)
-                    .sort((a, b) => (a.priority || 999) - (b.priority || 999) || (a.short_name || a[textField]).localeCompare(b.short_name || b[textField]))
-                    .forEach(child => addOption(child.id, level + 1));
+        if (useHierarchy) { // Логика для иерархического списка (например, подразделения)
+            const itemMap = {}; const rootItems = []; const excludedDescendantIds = new Set();
+            // Функция для рекурсивного получения ID всех потомков исключаемого элемента
+            function findDescendants(itemId) {
+                if (!itemMap[itemId] || !itemMap[itemId].rawChildren) return;
+                itemMap[itemId].rawChildren.forEach(childId => {
+                    if (!excludedDescendantIds.has(childId)) { // Предотвращение бесконечного цикла
+                        excludedDescendantIds.add(childId);
+                        findDescendants(childId);
+                    }
+                });
             }
-            roots.map(id => selectMap[id]).filter(root => root)
-                .sort((a, b) => (a.priority || 999) - (b.priority || 999) || (a.short_name || a[textField]).localeCompare(b.short_name || b[textField]))
-                .forEach(root => addOption(root.id, 0));
+            // Строим карту элементов и первичные связи родитель-ребенок
+            dataItems.forEach(item => { itemMap[item[valueKey]] = { ...item, rawChildren: [] }; });
+            dataItems.forEach(item => {
+                if (item.parent_id !== null && itemMap[item.parent_id]) {
+                    itemMap[item.parent_id].rawChildren.push(item[valueKey]);
+                }
+            });
 
-        } else { // Плоский список (для фильтра и выбора ObjectID в форме)
-            items
-                .filter(item => item[valueField] !== null && item[valueField] !== undefined) // Отфильтровываем элементы без нужного значения (особенно для object_id)
-                .sort((a, b) => (a[textField] || '').localeCompare(b[textField] || '')) // Сортируем по тексту
+            // Если нужно исключить элемент и его потомков (например, при редактировании, чтобы нельзя было выбрать себя или своего потомка в качестве родителя)
+            if (excludeItemId !== null) {
+                excludedDescendantIds.add(excludeItemId); // Добавляем сам исключаемый элемент
+                findDescendants(excludeItemId);          // И всех его потомков
+            }
+
+            // Строим дерево для select'а, исключая ненужные элементы
+            const selectTreeItemMap = {};
+            dataItems.forEach(item => {
+                const currentItemId = item[valueKey];
+                if (!excludedDescendantIds.has(currentItemId)) { // Добавляем, только если элемент не в списке исключенных
+                    selectTreeItemMap[currentItemId] = { ...item, children: [] }; // Копируем данные и создаем пустой массив детей
+                    if (item.parent_id === null || !selectTreeItemMap[item.parent_id]) { // Если родителя нет или он сам исключен
+                         if (!rootItems.includes(currentItemId)) rootItems.push(currentItemId); // Добавляем в корень
+                    } else if (selectTreeItemMap[item.parent_id]) { // Если родитель есть в нашем дереве
+                         selectTreeItemMap[item.parent_id].children.push(currentItemId); // Добавляем как ребенка
+                    }
+                }
+            });
+
+            // Рекурсивная функция добавления опций в select
+            function addOptionRecursive(itemId, indentLevel) {
+                const itemData = selectTreeItemMap[itemId]; if (!itemData) return;
+                const option = document.createElement('option');
+                option.value = itemData[valueKey];
+                const displayName = itemData.short_name || itemData[textKey]; // Используем short_name для подразделений
+                // Добавляем отступы для визуализации иерархии
+                option.textContent = '\u00A0'.repeat(indentLevel * 3) + displayName +
+                                     ` (ID: ${itemData.id}, OID: ${itemData.object_id || 'N/A'})`;
+                selectEl.appendChild(option);
+                // Сортируем дочерние элементы (по приоритету, затем по имени) и рекурсивно добавляем их
+                itemData.children
+                    .map(id => selectTreeItemMap[id]).filter(child => child) // Получаем объекты и отфильтровываем null
+                    .sort((a, b) => (a.priority || 999) - (b.priority || 999) || (a.short_name || a[textKey]).localeCompare(b.short_name || b[textKey]))
+                    .forEach(child => addOptionRecursive(child.id, indentLevel + 1));
+            }
+            // Сортируем корневые элементы и запускаем рендеринг
+            rootItems
+                .map(id => selectTreeItemMap[id]).filter(root => root)
+                .sort((a, b) => (a.priority || 999) - (b.priority || 999) || (a.short_name || a[textKey]).localeCompare(b.short_name || b[textKey]))
+                .forEach(root => addOptionRecursive(root.id, 0));
+        } else { // Плоский список (для фильтра по Object ID)
+            dataItems
+                .filter(item => item[valueKey] !== null && item[valueKey] !== undefined) // Убеждаемся, что есть значение
+                .sort((a, b) => (a[textKey] || '').localeCompare(b[textKey] || '')) // Сортируем по тексту
                 .forEach(item => {
                     const option = document.createElement('option');
-                    option.value = item[valueField]; // valueField тут может быть 'object_id'
-                    option.textContent = item[textField];
-                    // Добавляем ObjectID в текст опции для ясности, если он есть
-                    if (item.object_id !== null && item.object_id !== undefined) {
-                         option.textContent += ` (OID: ${item.object_id})`;
-                    } else {
-                         option.textContent += ` (ID: ${item.id})`;
-                    }
-                    selectElement.appendChild(option);
+                    option.value = item[valueKey]; // Здесь valueKey будет 'object_id' для фильтра
+                    option.textContent = `${item[textKey]} (OID: ${item.object_id})`; // Показываем имя и ObjectID
+                    selectEl.appendChild(option);
                 });
         }
-
-        // Восстанавливаем выбор
-        if (currentSelectedValue && selectElement.querySelector(`option[value="${currentSelectedValue}"]`)) {
-            selectElement.value = currentSelectedValue;
+        // Восстанавливаем ранее выбранное значение, если оно все еще валидно
+        if (currentSelectedVal && selectEl.querySelector(`option[value="${currentSelectedVal}"]`)) {
+            selectEl.value = currentSelectedVal;
         } else {
-            selectElement.value = "";
+            selectEl.value = ""; // Сбрасываем на плейсхолдер, если старое значение невалидно
         }
     }
 
+    // --- Функции рендеринга таблицы и UI ---
 
-    // --- Функции рендеринга и UI ---
-
-    /** Рендерит таблицу API ключей */
-    function renderKeyTable(keys) {
+    /** Рендерит строки в таблице API-ключей. */
+    function renderApiKeyTable(keys) {
+         // Проверка входных данных
          if (!Array.isArray(keys)) {
-             keyList.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка: Некорректные данные ключей.</td></tr>`;
+             keyListTableBody.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка: Некорректные данные для отображения ключей.</td></tr>`;
+             console.error("renderApiKeyTable: Ожидался массив, получен:", keys);
              return;
          }
-         // <<< ИСПРАВЛЕНО: Убрали проверку `keys.length === 0` здесь, т.к. она ниже >>>
+         keyListTableBody.innerHTML = ''; // Очищаем предыдущее содержимое
 
-         // <<< ИСПРАВЛЕНО: Очищаем ЛЮБОЕ предыдущее содержимое, включая "Загрузка..." >>>
-         keyList.innerHTML = '';
-
-         // Если массив пустой, показываем сообщение
-         if (keys.length === 0) {
-             const filtersActive = filterRoleSelect.value || filterObjectIdSelect.value || filterIsActiveSelect.value;
-             keyList.innerHTML = `<tr><td colspan="8" style="text-align: center;">API ключи не найдены${filtersActive ? ' (с учетом фильтров)' : ''}.</td></tr>`;
+         if (keys.length === 0) { // Если массив ключей пуст
+             const filtersAreActive = filterRoleSelectElement.value || filterObjectIdSelectElement.value || filterIsActiveSelectElement.value;
+             keyListTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center;">API-ключи не найдены${filtersAreActive ? ' (с учетом выбранных фильтров)' : ''}.</td></tr>`;
              return;
          }
 
-        // <<< ИСПРАВЛЕНО: Отображаем ObjectID, если он есть, из данных ключа напрямую >>>
          keys.forEach(key => {
-             const created = formatDateTime(key.created_at);
-             const lastUsed = formatDateTime(key.last_used_at);
-             const activeChecked = key.is_active ? 'checked' : '';
-             const objIdText = key.object_id !== null ? key.object_id : '---'; // Используем данные ключа
+             const createdDateStr = formatDateTime(key.created_at);
+             const lastUsedDateStr = formatDateTime(key.last_used_at);
+             const isActiveCheckedAttr = key.is_active ? 'checked' : '';
+             const objectIdDisplay = key.object_id !== null ? key.object_id : '---'; // Отображаем --- если null
 
-             const activeSwitch = `
-                 <label class="active-switch">
-                     <input type="checkbox" class="active-toggle" data-id="${key.id}" ${activeChecked}>
+             // HTML для переключателя активности
+             const activeToggleHtml = `
+                 <label class="active-switch" title="${key.is_active ? 'Ключ активен' : 'Ключ неактивен'}">
+                     <input type="checkbox" class="active-toggle" data-id="${key.id}" ${isActiveCheckedAttr}>
                      <span class="slider"></span>
                  </label>
              `;
 
-             const row = keyList.insertRow();
-             row.dataset.id = key.id;
-             row.innerHTML = `
+             const tableRow = keyListTableBody.insertRow(); // Добавляем новую строку в таблицу
+             tableRow.dataset.keyId = key.id; // Сохраняем ID ключа в data-атрибуте строки
+             // Заполняем ячейки строки
+             tableRow.innerHTML = `
                  <td>${key.id}</td>
                  <td>${key.description || '---'}</td>
                  <td>${key.role}</td>
-                 <td>${objIdText}</td>
-                 <td>${activeSwitch}</td>
-                 <td title="${key.created_at || ''}">${created}</td>
-                 <td title="${key.last_used_at || ''}">${lastUsed}</td>
+                 <td>${objectIdDisplay}</td>
+                 <td>${activeToggleHtml}</td>
+                 <td title="${key.created_at || ''}">${createdDateStr}</td>
+                 <td title="${key.last_used_at || ''}">${lastUsedDateStr}</td>
                  <td class="actions">
-                      <button class="edit-btn" data-id="${key.id}" title="Редактировать">✏️</button>
-                      <button class="delete-btn" data-id="${key.id}" data-description="${key.description || `ID ${key.id}`}" title="Удалить ключ">🗑️</button>
+                      <button class="edit-btn" data-id="${key.id}" title="Редактировать ключ ID ${key.id}">✏️</button>
+                      <button class="delete-btn" data-id="${key.id}" data-description="${key.description || `ключ ID ${key.id}`}" title="Удалить ключ ID ${key.id}">🗑️</button>
                  </td>
              `;
          });
     }
 
-    /** Обновляет элементы управления пагинацией */
-    function renderPagination() {
-        // ... (код рендеринга пагинации без изменений)
-         if (!paginationControls || !pageInfoSpan || !prevPageBtn || !nextPageBtn) return;
-         const totalPages = Math.ceil(totalKeys / itemsPerPage);
-         pageInfoSpan.textContent = `Страница ${currentPage} из ${totalPages} (Всего: ${totalKeys})`;
-         prevPageBtn.disabled = currentPage <= 1;
-         nextPageBtn.disabled = currentPage >= totalPages;
-         paginationControls.style.display = totalKeys > 0 && totalPages > 1 ? 'block' : 'none';
-    }
-
-    /** Загружает и рендерит ключи с учетом фильтров и пагинации */
-    async function loadAndRenderKeys(page = 1) {
-        // Показываем "Загрузка..." в ТАБЛИЦЕ, а не в общем фидбеке
-        keyList.innerHTML = `<tr><td colspan="8" class="loading-message">Загрузка ключей...</td></tr>`;
-        // Очищаем общий фидбек
-        showListFeedback('');
-        currentPage = page;
-        const offset = (currentPage - 1) * itemsPerPage;
-
-        const params = new URLSearchParams();
-        params.append('limit', itemsPerPage);
-        params.append('offset', offset);
-        if (filterRoleSelect.value) params.append('role', filterRoleSelect.value);
-        if (filterObjectIdSelect.value) params.append('object_id', filterObjectIdSelect.value);
-        if (filterIsActiveSelect.value) params.append('is_active', filterIsActiveSelect.value);
-
-        try {
-            const url = `${API_URL_KEYS}?${params.toString()}`;
-            // Вызываем fetchData без показа "Загрузка..." в listFeedback
-            const result = await fetchData(url); // fetchData сама очистит listFeedback при успехе GET
-            apiKeysCache = (result && result.items) ? result.items : [];
-            totalKeys = (result && result.total_count !== undefined) ? result.total_count : apiKeysCache.length;
-            renderKeyTable(apiKeysCache); // Рендерим таблицу (она обработает пустой массив)
-            renderPagination();
-            // showListFeedback(''); // Уже очищено в fetchData
-        } catch (error) {
-            console.error("Ошибка загрузки API ключей:", error);
-            // Сообщение об ошибке покажется в listFeedback из fetchData
-            keyList.innerHTML = `<tr><td colspan="8" class="error-message">Не удалось загрузить ключи.</td></tr>`;
-            renderPagination(); // Показываем пагинацию с 0 записей
-        }
-    }
-
-    /** Показывает секцию с сгенерированным ключом */
-    function displayGeneratedKey(apiKey) {
-        generatedApiKeyElement.textContent = apiKey;
-        generatedKeySection.style.display = 'block';
-        generatedKeySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    // --- Функции формы ---
-    /** Сбрасывает форму в состояние добавления нового ключа */
-    function resetForm() {
-        form.reset(); // Сбрасывает значения полей
-        editKeyIdInput.value = ''; currentEditKeyId = null; // Сбрасываем ID редактирования
-        formTitle.textContent = 'Создать Новый API Ключ'; // Возвращаем заголовок
-        submitBtn.textContent = 'Создать Ключ'; // Возвращаем текст кнопки
-        submitBtn.disabled = false; // Разблокируем кнопку
-        cancelBtn.style.display = 'none'; // Скрываем кнопку Отмена
-        isActiveGroup.style.display = 'none'; // Скрываем чекбокс Active
-        // objectIdSelect.disabled = false; // Разблокируем селект, если блокировали
-        clearValidationErrors(); // Очищаем ошибки валидации
-        showFormFeedback(''); // Очищаем общие сообщения формы
-        generatedKeySection.style.display = 'none'; // Скрываем секцию с ключом
+    /** Обновляет элементы управления пагинацией (кнопки "Назад"/"Вперед", информация о странице). */
+    function renderTablePagination() {
+         if (!paginationControlsElement || !pageInfoSpanElement || !prevPageButton || !nextPageButton) {
+             console.error("Элементы пагинации не найдены на странице.");
+             return;
+         }
+         const totalPages = Math.ceil(listTotalKeys / listItemsPerPage);
+         pageInfoSpanElement.textContent = `Страница ${listCurrentPage} из ${totalPages} (Всего: ${listTotalKeys})`;
+         prevPageButton.disabled = listCurrentPage <= 1; // Блокируем "Назад" на первой странице
+         nextPageButton.disabled = listCurrentPage >= totalPages; // Блокируем "Вперед" на последней
+         // Показываем пагинацию, только если страниц больше одной
+         paginationControlsElement.style.display = listTotalKeys > 0 && totalPages > 1 ? 'block' : 'none';
     }
 
     /**
-     * Заполняет форму данными ключа для редактирования.
-     * @param {object} apiKeyData - Объект с данными ключа (из API или кэша).
+     * Загружает данные API-ключей с сервера (с учетом фильтров и пагинации)
+     * и вызывает их рендеринг в таблице.
+     * @param {number} [page=1] - Номер страницы для загрузки.
      */
-    function fillFormForEdit(apiKeyData) {
-        resetForm(); // Сначала сбрасываем форму
-        currentEditKeyId = apiKeyData.id;
-        editKeyIdInput.value = apiKeyData.id; // Заполняем скрытое поле ID
-        formTitle.textContent = `Редактировать API Ключ ID: ${apiKeyData.id}`;
-        submitBtn.textContent = 'Сохранить';
-        cancelBtn.style.display = 'inline-block'; // Показываем кнопку Отмена
-        isActiveGroup.style.display = 'block'; // Показываем чекбокс Active
+    async function loadAndRenderApiKeys(page = 1) {
+        // Показываем сообщение "Загрузка..." в ТАБЛИЦЕ, а не в общем фидбеке над списком
+        keyListTableBody.innerHTML = `<tr><td colspan="8" class="loading-message">Загрузка API-ключей...</td></tr>`;
+        showListFeedbackMessage(''); // Очищаем общий фидбек над списком
+        listCurrentPage = page; // Устанавливаем текущую страницу
+        const offset = (listCurrentPage - 1) * listItemsPerPage; // Рассчитываем смещение
 
-        // Заполняем поля формы
-        descriptionInput.value = apiKeyData.description || '';
-        roleSelect.value = apiKeyData.role || '';
-        objectIdSelect.value = apiKeyData.object_id !== null ? apiKeyData.object_id : ''; // Устанавливаем селект
-        isActiveCheckbox.checked = apiKeyData.is_active === true;
+        // Собираем параметры для API-запроса из фильтров
+        const queryParams = new URLSearchParams();
+        queryParams.append('limit', listItemsPerPage);
+        queryParams.append('offset', offset);
+        if (filterRoleSelectElement.value) queryParams.append('role', filterRoleSelectElement.value);
+        if (filterObjectIdSelectElement.value) queryParams.append('object_id', filterObjectIdSelectElement.value);
+        if (filterIsActiveSelectElement.value) queryParams.append('is_active', filterIsActiveSelectElement.value);
 
-        // Можно заблокировать изменение роли/object_id, если нужно
-        // roleSelect.disabled = true;
-        // objectIdSelect.disabled = true;
+        try {
+            const apiUrlWithParams = `${API_URL_KEYS_CRUD}?${queryParams.toString()}`;
+            // fetchDataApi сама обработает показ "Загрузка..." и его очистку для GET-запросов
+            const resultData = await fetchDataApi(apiUrlWithParams);
 
-        generatedKeySection.style.display = 'none'; // Скрываем секцию с ключом
-        form.scrollIntoView({ behavior: 'smooth', block: 'start' }); // Прокрутка к форме
+            currentApiKeysCache = (resultData && resultData.items) ? resultData.items : [];
+            listTotalKeys = (resultData && resultData.total_count !== undefined) ? resultData.total_count : currentApiKeysCache.length;
+
+            renderApiKeyTable(currentApiKeysCache); // Рендерим полученные данные в таблицу
+            renderTablePagination(); // Обновляем элементы управления пагинацией
+        } catch (error) {
+            // Ошибка уже была показана в fetchDataApi в listFeedbackElement
+            console.error("Ошибка загрузки списка API-ключей:", error);
+            // Отображаем сообщение об ошибке прямо в таблице
+            keyListTableBody.innerHTML = `<tr><td colspan="8" class="error-message">Не удалось загрузить список API-ключей.</td></tr>`;
+            renderTablePagination(); // Показываем пагинацию с информацией о 0 записей
+        }
+    }
+
+    /** Показывает секцию с сгенерированным API-ключом. */
+    function displayGeneratedApiKey(newApiKey) {
+        generatedApiKeyDisplayElement.textContent = newApiKey; // Отображаем сам ключ
+        generatedKeySectionElement.style.display = 'block';  // Показываем секцию
+        // Плавная прокрутка к секции с ключом
+        generatedKeySectionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // --- Функции для управления формой ---
+    /** Сбрасывает форму создания/редактирования в начальное состояние (для создания нового ключа). */
+    function resetApiKeyForm() {
+        apiKeyForm.reset(); // Стандартный сброс значений полей формы
+        hiddenEditKeyIdInput.value = ''; // Очищаем скрытое поле с ID редактируемого ключа
+        currentEditingKeyId = null;    // Сбрасываем флаг режима редактирования
+        formTitleElement.textContent = 'Создать Новый API Ключ'; // Возвращаем заголовок формы
+        submitButton.textContent = 'Создать Ключ'; // Возвращаем текст кнопки
+        submitButton.disabled = false; // Разблокируем кнопку
+        cancelButton.style.display = 'none'; // Скрываем кнопку "Отмена"
+        isActiveGroupElement.style.display = 'none'; // Скрываем группу с чекбоксом "Активен"
+        // objectIdSelectElement.disabled = false; // Разблокируем селект подразделений (если блокировали)
+        clearFormValidationErrors('form-feedback', 'api-key-form-'); // Очищаем ошибки валидации
+        showFormFeedbackMessage(''); // Очищаем общие сообщения формы
+        generatedKeySectionElement.style.display = 'none'; // Скрываем секцию с отображением сгенерированного ключа
+    }
+
+    /**
+     * Заполняет форму данными API-ключа для редактирования.
+     * @param {object} apiKeyDataObject - Объект с данными ключа (из API или кэша).
+     */
+    function fillFormForEditing(apiKeyDataObject) {
+        if (!apiKeyDataObject) {
+            console.error("fillFormForEditing: Передан пустой объект данных ключа.");
+            showFormFeedbackMessage("Не удалось загрузить данные ключа для редактирования.", true);
+            return;
+        }
+        resetApiKeyForm(); // Сначала сбрасываем форму в начальное состояние
+
+        currentEditingKeyId = apiKeyDataObject.id; // Устанавливаем ID редактируемого ключа
+        hiddenEditKeyIdInput.value = apiKeyDataObject.id; // Заполняем скрытое поле
+        formTitleElement.textContent = `Редактировать API Ключ ID: ${apiKeyDataObject.id}`;
+        submitButton.textContent = 'Сохранить изменения';
+        cancelButton.style.display = 'inline-block'; // Показываем кнопку "Отмена"
+        isActiveGroupElement.style.display = 'block'; // Показываем группу с чекбоксом "Активен"
+
+        // Заполняем поля формы данными ключа
+        descriptionInputElement.value = apiKeyDataObject.description || '';
+        roleSelectElement.value = apiKeyDataObject.role || '';
+        // Устанавливаем значение для селекта object_id. Пустая строка, если object_id is null.
+        objectIdSelectElement.value = apiKeyDataObject.object_id !== null ? String(apiKeyDataObject.object_id) : '';
+        isActiveCheckboxElement.checked = apiKeyDataObject.is_active === true; // Устанавливаем состояние чекбокса
+
+        // При редактировании можно заблокировать изменение некоторых полей, если это требуется бизнес-логикой
+        // Например, роль или object_id после создания менять нельзя:
+        // roleSelectElement.disabled = true;
+        // objectIdSelectElement.disabled = true;
+
+        generatedKeySectionElement.style.display = 'none'; // Скрываем секцию с ключом (она только для новых)
+        apiKeyForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); // Прокручиваем страницу к форме
     }
 
     // --- Обработчики событий ---
 
-    /** Обрабатывает отправку формы (создание или обновление) */
-    async function handleFormSubmit(event) {
-        event.preventDefault();
-        clearValidationErrors();
-        showFormFeedback('');
-        generatedKeySection.style.display = 'none'; // Скрываем на случай, если была открыта
-        submitBtn.disabled = true;
-        submitBtn.textContent = currentEditKeyId ? 'Сохранение...' : 'Создание...';
+    /** Обрабатывает отправку формы (создание нового или обновление существующего API-ключа). */
+    async function handleApiKeyFormSubmit(event) {
+        event.preventDefault(); // Предотвращаем стандартную отправку формы
+        clearFormValidationErrors('form-feedback', 'api-key-form-'); // Очищаем предыдущие ошибки валидации
+        showFormFeedbackMessage(''); // Очищаем предыдущие общие сообщения формы
+        generatedKeySectionElement.style.display = 'none'; // Скрываем секцию с ключом на случай, если она была открыта
 
-        // Собираем данные из формы
-        const formData = {
-            description: descriptionInput.value.trim(),
-            role: roleSelect.value, // Роль берем из селекта
-            object_id: objectIdSelect.value ? parseInt(objectIdSelect.value, 10) : null // ObjectID берем из селекта
+        // Блокируем кнопку и меняем текст на время выполнения запроса
+        submitButton.disabled = true;
+        submitButton.textContent = currentEditingKeyId ? 'Сохранение...' : 'Создание...';
+
+        // Собираем данные из полей формы
+        const formDataPayload = {
+            description: descriptionInputElement.value.trim(),
+            role: roleSelectElement.value, // Роль берется из селекта
+            // Преобразуем значение objectIdSelect в число или null
+            object_id: objectIdSelectElement.value ? parseInt(objectIdSelectElement.value, 10) : null
         };
 
-        // Добавляем статус активности только при редактировании
-        if (currentEditKeyId) {
-            formData.is_active = isActiveCheckbox.checked;
+        // При редактировании добавляем поле is_active
+        if (currentEditingKeyId) {
+            formDataPayload.is_active = isActiveCheckboxElement.checked;
         }
 
-        // Валидация на клиенте
-        let clientErrors = {};
-        if (!formData.description) clientErrors.description = 'Описание обязательно.';
-        if (!currentEditKeyId && !formData.role) clientErrors.role = 'Роль обязательна при создании.';
-        // Проверка object_id не нужна, т.к. используем select
+        // Простая клиентская валидация (серверная валидация более полная)
+        let clientSideErrors = {};
+        if (!formDataPayload.description) clientSideErrors.description = 'Описание ключа является обязательным.';
+        if (!currentEditingKeyId && !formDataPayload.role) clientSideErrors.role = 'Роль обязательна при создании нового ключа.';
+        // Проверка object_id не так критична на клиенте, если селект заполняется с сервера.
+        // Сервер все равно проверит существование подразделения.
 
-        if (Object.keys(clientErrors).length > 0) {
-            displayValidationErrors(clientErrors);
-            submitBtn.disabled = false; submitBtn.textContent = currentEditKeyId ? 'Сохранить' : 'Создать Ключ';
-            return;
+        if (Object.keys(clientSideErrors).length > 0) {
+            displayFormValidationErrors(clientSideErrors, 'form-feedback', ''); // Используем пустой префикс для полей
+            submitButton.disabled = false;
+            submitButton.textContent = currentEditingKeyId ? 'Сохранить изменения' : 'Создать Ключ';
+            return; // Прерываем, если есть ошибки на клиенте
         }
 
-        // Определяем URL и метод
-        const url = currentEditKeyId ? API_URL_KEY_DETAIL_TPL.replace('/0', `/${currentEditKeyId}`) : API_URL_KEYS;
-        const method = currentEditKeyId ? 'PUT' : 'POST';
+        // Определяем URL и HTTP-метод в зависимости от режима (создание или редактирование)
+        const apiUrl = currentEditingKeyId ? API_URL_KEY_DETAIL_TEMPLATE.replace('/0', `/${currentEditingKeyId}`) : API_URL_KEYS_CRUD;
+        const httpMethod = currentEditingKeyId ? 'PUT' : 'POST';
 
-        // При редактировании удаляем роль из отправляемых данных, если она пустая (чтобы не сбросить случайно)
-        if (currentEditKeyId && !formData.role) {
-            delete formData.role;
+        // При редактировании, если роль не выбрана (пустая строка), не отправляем ее, чтобы не сбросить на сервере
+        if (currentEditingKeyId && !formDataPayload.role) {
+            delete formDataPayload.role;
         }
 
         try {
-            const result = await fetchData(url, {
-                method: method,
+            // Отправляем запрос на сервер
+            const resultData = await fetchDataApi(apiUrl, {
+                method: httpMethod,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(formDataPayload)
             });
 
-            // Обработка результата
-            if (method === 'POST' && result && result.api_key) { // Успешное создание
-                 displayGeneratedKey(result.api_key);
-                 form.reset(); // Очищаем форму
-                 showListFeedback('Ключ успешно создан! Не забудьте его сохранить.', false);
-                 await loadAndRenderKeys(1); // Обновляем таблицу (переходим на 1 страницу)
-            } else if (method === 'PUT') { // Успешное обновление
-                 showListFeedback(`Ключ ID ${currentEditKeyId} успешно обновлен.`, false);
-                 resetForm(); // Сбрасываем форму после редактирования
-                 await loadAndRenderKeys(currentPage); // Обновляем ТЕКУЩУЮ страницу
-            } else if (method === 'POST') { // Ошибка создания (API не вернул ключ)
-                 throw new Error("API не вернул сгенерированный ключ.");
+            // Обработка успешного ответа
+            if (httpMethod === 'POST' && resultData && resultData.api_key) { // Успешное создание нового ключа
+                 displayGeneratedApiKey(resultData.api_key); // Показываем сгенерированный ключ
+                 apiKeyForm.reset(); // Очищаем форму после успешного создания
+                 showListFeedbackMessage('API-ключ успешно создан! Не забудьте скопировать его.', false);
+                 await loadAndRenderApiKeys(1); // Обновляем таблицу ключей (переходим на первую страницу)
+            } else if (httpMethod === 'PUT' && resultData) { // Успешное обновление существующего ключа
+                 showListFeedbackMessage(`API-ключ ID ${currentEditingKeyId} успешно обновлен.`, false);
+                 resetApiKeyForm(); // Сбрасываем форму (выходим из режима редактирования)
+                 await loadAndRenderApiKeys(listCurrentPage); // Обновляем ТЕКУЩУЮ страницу списка
+            } else if (httpMethod === 'POST') { // Ошибка создания (API не вернул ключ, хотя статус был OK - маловероятно)
+                 throw new Error("API-сервер не вернул сгенерированный ключ после создания.");
             }
-
-        } catch (error) {
-            console.error(`Ошибка ${method} API ключа:`, error);
-            displayValidationErrors(error.details); // Показываем ошибки валидации от сервера
-            showFormFeedback(`Ошибка: ${error.message}`, true); // Общая ошибка формы
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.textContent = currentEditKeyId ? 'Сохранить' : 'Создать Ключ';
+        } catch (error) { // Обработка ошибок от fetchDataApi (сеть, HTTP, парсинг JSON)
+            console.error(`Ошибка ${httpMethod} для API-ключа:`, error);
+            // Отображаем ошибки валидации от сервера или общую ошибку в форме
+            displayFormValidationErrors(error.details || error.message, 'form-feedback', '');
+            // Дополнительно показываем общую ошибку в фидбеке формы
+            showFormFeedbackMessage(`Ошибка: ${error.message || 'Не удалось выполнить операцию.'}`, true);
+        } finally { // В любом случае разблокируем кнопку и восстанавливаем ее текст
+            submitButton.disabled = false;
+            submitButton.textContent = currentEditingKeyId ? 'Сохранить изменения' : 'Создать Ключ';
         }
     }
 
-    /** Обрабатывает изменение статуса активности ключа */
-    async function handleToggleActive(keyId, isActive) {
-        showListFeedback(`Обновление статуса ключа ID ${keyId}...`);
-        const url = API_URL_KEY_DETAIL_TPL.replace('/0', `/${keyId}`);
+    /** Обрабатывает изменение состояния чекбокса/переключателя "Активен" в таблице. */
+    async function handleToggleActiveStatus(keyId, newIsActiveStatus) {
+        showListFeedbackMessage(`Обновление статуса активности для ключа ID ${keyId}...`);
+        const apiUrlUpdate = API_URL_KEY_DETAIL_TEMPLATE.replace('/0', `/${keyId}`);
         try {
-            // Отправляем только изменение статуса
-            await fetchData(url, {
+            // Отправляем на сервер только изменение статуса 'is_active'
+            await fetchDataApi(apiUrlUpdate, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_active: isActive })
+                body: JSON.stringify({ is_active: newIsActiveStatus })
             });
-            showListFeedback(`Статус ключа ID ${keyId} успешно обновлен.`, false);
-            // Обновляем кэш локально для консистентности
-            const keyInCache = apiKeysCache.find(k => k.id === keyId);
-            if (keyInCache) keyInCache.is_active = isActive;
+            showListFeedbackMessage(`Статус активности ключа ID ${keyId} успешно обновлен на '${newIsActiveStatus ? 'Активен' : 'Неактивен'}'.`, false);
+            // Обновляем кэш данных локально для консистентности отображения (опционально, но хорошо для UX)
+            const keyInLocalCache = currentApiKeysCache.find(k => k.id === keyId);
+            if (keyInLocalCache) keyInLocalCache.is_active = newIsActiveStatus;
+            // Перерисовка не нужна, если только этот класс не влияет на что-то еще кроме переключателя
         } catch (error) {
-            console.error("Ошибка обновления статуса ключа:", error);
-            showListFeedback(`Ошибка обновления статуса: ${error.message}`, true);
-            // Откатываем чекбокс
-            const checkbox = keyList.querySelector(`.active-toggle[data-id="${keyId}"]`);
-            if (checkbox) checkbox.checked = !isActive;
+            console.error("Ошибка обновления статуса активности ключа:", error);
+            // Сообщение об ошибке уже было показано в fetchDataApi в listFeedbackElement
+            // Откатываем состояние чекбокса/переключателя обратно в UI
+            const checkboxElement = keyListTableBody.querySelector(`.active-toggle[data-id="${keyId}"]`);
+            if (checkboxElement) checkboxElement.checked = !newIsActiveStatus; // Возвращаем предыдущее состояние
         }
     }
 
-    /** Обрабатывает удаление ключа */
-    async function handleDeleteClick(keyId, description) {
-        if (!confirm(`Вы уверены, что хотите удалить API ключ "${description}" (ID: ${keyId})? Это действие необратимо.`)) return;
-        showListFeedback(`Удаление ключа ID ${keyId}...`);
-        const url = API_URL_KEY_DETAIL_TPL.replace('/0', `/${keyId}`);
+    /** Обрабатывает клик по кнопке удаления API-ключа в таблице. */
+    async function handleDeleteButtonClick(keyId, keyDescription) {
+        // Запрашиваем подтверждение у пользователя
+        if (!confirm(`Вы уверены, что хотите удалить API-ключ "${keyDescription}" (ID: ${keyId})? Это действие необратимо.`)) {
+            return; // Пользователь отменил удаление
+        }
+        showListFeedbackMessage(`Удаление API-ключа ID ${keyId}...`);
+        const apiUrlDelete = API_URL_KEY_DETAIL_TEMPLATE.replace('/0', `/${keyId}`);
         try {
-            await fetchData(url, { method: 'DELETE' }); // Ожидаем 204 No Content
-            showListFeedback(`Ключ ID ${keyId} "${description}" успешно удален.`, false);
-            // Если удалили редактируемый ключ, сбрасываем форму
-            if (currentEditKeyId === keyId) { resetForm(); }
-            // Перезагружаем ТЕКУЩУЮ страницу (или первую, если на текущей не осталось элементов?)
-            // Простой вариант: перезагрузить текущую
-            await loadAndRenderKeys(currentPage);
+            await fetchDataApi(apiUrlDelete, { method: 'DELETE' }); // Ожидаем 204 No Content
+            showListFeedbackMessage(`API-ключ ID ${keyId} ("${keyDescription}") успешно удален.`, false);
+            // Если удаляемый ключ был в режиме редактирования, сбрасываем форму
+            if (currentEditingKeyId === keyId) {
+                resetApiKeyForm();
+            }
+            // Перезагружаем ТЕКУЩУЮ страницу списка.
+            // Если на текущей странице не осталось элементов после удаления,
+            // возможно, стоит перейти на предыдущую (если это не первая).
+            // Пока просто перезагружаем текущую.
+            await loadAndRenderApiKeys(listCurrentPage);
         } catch (error) {
-            console.error("Ошибка удаления ключа:", error);
-            // Сообщение об ошибке уже показано в fetchData
+            // Ошибка уже была показана в fetchDataApi в listFeedbackElement
+            console.error("Ошибка удаления API-ключа:", error);
+            // Сообщение об ошибке (например, "ключ не найден" или "ошибка сервера") уже отображено.
         }
     }
 
-     /** Обрабатывает клик на кнопку редактирования в таблице */
-     function handleEditClick(keyId) {
-         const keyData = apiKeysCache.find(k => k.id === keyId); // Ищем в кэше текущей страницы
-         if (keyData) {
-             fillFormForEdit(keyData); // Заполняем форму
+     /** Обрабатывает клик на кнопку редактирования ключа в таблице. */
+     function handleEditButtonClick(keyId) {
+         const apiKeyDataToEdit = currentApiKeysCache.find(k => k.id === keyId); // Ищем ключ в кэше текущей страницы
+         if (apiKeyDataToEdit) {
+             fillFormForEditing(apiKeyDataToEdit); // Заполняем форму данными ключа
          } else {
-             // Если данных нет в кэше (например, после фильтрации/пагинации),
-             // нужно запросить их отдельно (можно добавить эту логику при необходимости)
-             console.error(`Данные для ключа ${keyId} не найдены в кэше текущей страницы.`);
-             showListFeedback(`Не удалось найти данные для редактирования ключа ${keyId}. Попробуйте обновить список.`, true);
+             // Если данных нет в кэше (например, после фильтрации/пагинации или если кэш устарел),
+             // можно было бы запросить их с сервера по ID.
+             // Но для простоты пока считаем, что данные должны быть в кэше.
+             console.error(`Данные для API-ключа с ID ${keyId} не найдены в кэше текущей страницы.`);
+             showListFeedbackMessage(`Не удалось найти данные для редактирования ключа ID ${keyId}. Попробуйте обновить список.`, true);
          }
      }
 
-     // <<< Функция для начальной загрузки данных для селектов >>>
-    async function loadSelectData() {
-        showListFeedback("Загрузка данных для фильтров...");
+    /** Загружает список подразделений для использования в селектах (в форме и фильтре). */
+    async function loadSubdivisionsForSelects() {
+        showListFeedbackMessage("Загрузка списка подразделений для фильтров...");
         try {
-            const subdivisionsRes = await fetchData(API_URL_SUBDIVISIONS + '?limit=1000'); // Загружаем все подразделения
-            subdivisionsCache = (subdivisionsRes && subdivisionsRes.items) ? subdivisionsRes.items : [];
+            // Загружаем все подразделения (предполагаем, что их не слишком много для одного запроса)
+            const subdivisionsResponse = await fetchDataApi(API_URL_SUBDIVISIONS_LIST + '?limit=10000'); // Увеличиваем лимит
+            allSubdivisionsCache = (subdivisionsResponse && subdivisionsResponse.items) ? subdivisionsResponse.items : [];
 
-            console.log("Subdivisions loaded for selects:", subdivisionsCache); // Лог загруженных подразделений
+            // Заполняем селект для привязки ключа к подразделению в форме (иерархический)
+            populateSelectWithOptions(objectIdSelectElement, allSubdivisionsCache, 'object_id', 'short_name', '-- Не привязывать --', true);
+            // Заполняем селект для фильтра по подразделению (плоский список, значение - object_id)
+            populateSelectWithOptions(filterObjectIdSelectElement, allSubdivisionsCache, 'object_id', 'short_name', 'Все объекты');
 
-            // Заполняем селект в форме (значение - object_id, текст - short_name + OID)
-            // Используем textField='short_name' и valueField='object_id'
-            // Третий параметр textfield не используется для иерархии, она берет short_name
-            populateSelect(objectIdSelect, subdivisionsCache, 'object_id', 'short_name', '-- Не привязывать --', true);
-
-            // Заполняем селект в фильтре (значение - object_id, текст - short_name + OID)
-            // Без иерархии
-            populateSelect(filterObjectIdSelect, subdivisionsCache, 'object_id', 'short_name', 'Все объекты', false);
-
-            showListFeedback(""); // Очищаем сообщение о загрузке
+            showListFeedbackMessage(""); // Очищаем сообщение о загрузке, если все успешно
         } catch (error) {
-             console.error("Ошибка загрузки данных для селектов:", error);
-             // Ошибка уже показана в fetchData
-             // Можно добавить специфичное сообщение, если нужно
-             // showListFeedback("Ошибка загрузки справочников для фильтров.", true);
+             console.error("Ошибка загрузки списка подразделений для селектов:", error);
+             // Сообщение об ошибке уже показано в fetchDataApi в listFeedbackElement
+             // Можно дополнительно указать, что именно не загрузилось
+             objectIdSelectElement.innerHTML = '<option value="">Ошибка загрузки подразделений</option>';
+             filterObjectIdSelectElement.innerHTML = '<option value="">Ошибка загрузки подразделений</option>';
         }
     }
 
-
     // --- Инициализация страницы ---
-    /** Загружает начальные данные (подразделения) и первую страницу ключей */
-    async function initializePage() {
-         // Сначала покажем сообщение в таблице
-         keyList.innerHTML = `<tr><td colspan="8" class="loading-message">Инициализация...</td></tr>`;
+    /**
+     * Инициализирует страницу: загружает начальные данные (подразделения для селектов)
+     * и первую страницу списка API-ключей.
+     */
+    async function initializeManageApiKeysPage() {
+         // Показываем начальное сообщение о загрузке в таблице
+         keyListTableBody.innerHTML = `<tr><td colspan="8" class="loading-message">Инициализация страницы...</td></tr>`;
          try {
-             await loadSelectData(); // Загружаем данные для селектов
-             await loadAndRenderKeys(1); // Затем первую страницу ключей
+             await loadSubdivisionsForSelects(); // Сначала загружаем данные для селектов
+             await loadAndRenderApiKeys(1);    // Затем загружаем первую страницу API-ключей
          } catch(e) {
-              // Ошибки уже обработаны и выведены в loadSelectData и loadAndRenderKeys
-              console.error("Критическая ошибка во время инициализации:", e);
-              // Убедимся, что в таблице сообщение об ошибке, а не "Инициализация"
-              if (!keyList.querySelector('.error-message')) {
-                   keyList.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка инициализации страницы.</td></tr>`;
+              // Ошибки уже были обработаны и выведены в listFeedbackElement функциями loadSubdivisionsForSelects и loadAndRenderApiKeys
+              console.error("Критическая ошибка во время инициализации страницы управления API-ключами:", e);
+              // Убеждаемся, что в таблице отображается сообщение об ошибке, а не "Инициализация..."
+              if (!keyListTableBody.querySelector('.error-message')) {
+                   keyListTableBody.innerHTML = `<tr><td colspan="8" class="error-message">Ошибка инициализации страницы. Не удалось загрузить данные.</td></tr>`;
               }
          }
     }
 
     // --- Назначение обработчиков событий ---
-    form.addEventListener('submit', handleFormSubmit);
-    copyKeyBtn.addEventListener('click', () => copyToClipboard(generatedApiKeyElement.textContent));
-    closeGeneratedKeyBtn.addEventListener('click', () => generatedKeySection.style.display = 'none');
-    // Кнопка Применить фильтры
-    applyFiltersBtn.addEventListener('click', () => loadAndRenderKeys(1));
-    // Кнопка отмены редактирования
-    cancelBtn.addEventListener('click', resetForm);
+    // Отправка формы создания/редактирования
+    apiKeyForm.addEventListener('submit', handleApiKeyFormSubmit);
+    // Кнопка копирования сгенерированного ключа
+    copyKeyButton.addEventListener('click', () => copyTextToClipboard(generatedApiKeyDisplayElement.textContent));
+    // Кнопка закрытия секции с сгенерированным ключом
+    closeGeneratedKeyButton.addEventListener('click', () => { generatedKeySectionElement.style.display = 'none'; showFormFeedbackMessage(''); });
+    // Кнопка "Применить фильтры"
+    applyFiltersButton.addEventListener('click', () => loadAndRenderApiKeys(1)); // Загружаем с первой страницы
+    // Кнопка "Отмена" в форме редактирования
+    cancelButton.addEventListener('click', resetApiKeyForm);
 
-    // Делегирование событий для таблицы
-    keyList.addEventListener('change', (event) => {
+    // Делегирование событий для таблицы ключей (для переключателей активности и кнопок действий)
+    keyListTableBody.addEventListener('change', (event) => { // Для чекбоксов/переключателей
         if (event.target.classList.contains('active-toggle')) {
             const keyId = parseInt(event.target.dataset.id, 10);
-            const isActive = event.target.checked;
-            handleToggleActive(keyId, isActive);
+            const newIsActive = event.target.checked;
+            handleToggleActiveStatus(keyId, newIsActive);
         }
     });
-    keyList.addEventListener('click', (event) => {
-        const deleteBtn = event.target.closest('.delete-btn');
-        const editBtn = event.target.closest('.edit-btn');
-        if (deleteBtn) {
-            handleDeleteClick(parseInt(deleteBtn.dataset.id, 10), deleteBtn.dataset.description);
-        } else if (editBtn) {
-             handleEditClick(parseInt(editBtn.dataset.id, 10));
+    keyListTableBody.addEventListener('click', (event) => { // Для кнопок
+        const deleteButtonTarget = event.target.closest('.delete-btn');
+        const editButtonTarget = event.target.closest('.edit-btn');
+        if (deleteButtonTarget) {
+            handleDeleteButtonClick(parseInt(deleteButtonTarget.dataset.id, 10), deleteButtonTarget.dataset.description);
+        } else if (editButtonTarget) {
+             handleEditButtonClick(parseInt(editButtonTarget.dataset.id, 10));
         }
     });
 
-    // Обработчики пагинации
-    prevPageBtn.addEventListener('click', () => { if (currentPage > 1) loadAndRenderKeys(currentPage - 1); });
-    nextPageBtn.addEventListener('click', () => { if (currentPage * itemsPerPage < totalKeys) loadAndRenderKeys(currentPage + 1); });
+    // Обработчики для кнопок пагинации
+    prevPageButton.addEventListener('click', () => { if (listCurrentPage > 1) loadAndRenderApiKeys(listCurrentPage - 1); });
+    nextPageButton.addEventListener('click', () => { if (listCurrentPage * listItemsPerPage < listTotalKeys) loadAndRenderApiKeys(listCurrentPage + 1); });
 
-    // Начальная загрузка данных
-    document.addEventListener('DOMContentLoaded', initializePage);
+    // Начальная загрузка данных при полной загрузке DOM
+    document.addEventListener('DOMContentLoaded', initializeManageApiKeysPage);
 
 </script>
 {% endblock %}

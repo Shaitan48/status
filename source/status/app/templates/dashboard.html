@@ -1,63 +1,90 @@
 ﻿<!-- status/app/templates/dashboard.html -->
-{% extends "base.html" %}
-{% block title %}Сводка - Мониторинг ПТК{% endblock %}
+{% extends "base.html" %} <!-- Наследование от базового шаблона -->
+
+{% block title %}Сводка - Мониторинг ПТК{% endblock %} <!-- Заголовок страницы -->
 
 {% block content %}
 <h2>Сводка состояния узлов</h2>
+<!-- 
+    Контейнер для сетки дашборда.
+    Сюда будут динамически (с помощью JavaScript) добавляться карточки подразделений,
+    каждая из которых будет содержать иконки состояния своих узлов.
+-->
 <div id="dashboard-grid" class="dashboard-grid">
-    <!-- Начальное сообщение -->
+    <!-- 
+        Начальное сообщение, которое отображается пользователю
+        во время первоначальной загрузки данных с сервера.
+    -->
     <p class="loading-message">Загрузка данных...</p>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Получение ссылки на DOM-элемент контейнера дашборда
     const dashboardContainer = document.getElementById('dashboard-grid');
-    const API_URL_DASHBOARD = "{{ url_for('data.api_dashboard_data') }}";
-    const ICONS_BASE_URL_JS = "{{ url_for('static', filename='icons/') }}";
-    const SUBDIVISION_IMAGES_BASE_URL_JS = "{{ url_for('static', filename='images/subdivisions/') }}";
 
-    let dashboardDataCache = null; // Кэш для предыдущих данных
+    // URL для API-запросов, генерируются Flask'ом для корректных путей
+    const API_URL_DASHBOARD = "{{ url_for('data.api_dashboard_data') }}"; // Эндпоинт для получения данных дашборда
+    const ICONS_BASE_URL_JS = "{{ url_for('static', filename='icons/') }}"; // Базовый путь к иконкам типов узлов
+    const SUBDIVISION_IMAGES_BASE_URL_JS = "{{ url_for('static', filename='images/subdivisions/') }}"; // Базовый путь к иконкам подразделений
 
-    // --- Функция для создания HTML элемента узла ---
+    let dashboardDataCache = null; // Кэш для хранения предыдущих загруженных данных. Используется для "умного" обновления DOM.
+
+    /**
+     * Создает HTML-элемент (span) для отображения одного узла в виде иконки.
+     * @param {object} node - Объект с данными узла. Должен содержать 'id', 'name', 'status_class', 'status_text', 'icon_filename' и др.
+     * @returns {HTMLElement|null} - Сконструированный span-элемент или null, если данные узла некорректны.
+     */
     function createNodeElement(node) {
-        if (!node || typeof node.name !== 'string' || typeof node.status_class !== 'string') {
-            console.warn(`createNodeElement: Пропущен некорректный узел:`, node);
-            return null; // Возвращаем null, если узел некорректен
+        // Проверка на корректность обязательных полей в объекте узла
+        if (!node || typeof node.id !== 'number' || typeof node.name !== 'string' || typeof node.status_class !== 'string') {
+            console.warn(`createNodeElement: Пропущен некорректный узел (отсутствуют или неверный тип полей id, name или status_class):`, node);
+            return null;
         }
         const span = document.createElement('span');
-        span.className = `node-icon-display ${node.status_class}`;
-        span.dataset.nodeId = node.id; // Уникальный ID для поиска
+        span.className = `node-icon-display ${node.status_class}`; // CSS-классы для стилизации и цвета статуса
+        span.dataset.nodeId = node.id; // Сохраняем ID узла в data-атрибуте для легкого доступа
 
+        // Формируем текст для всплывающей подсказки (атрибут title)
         const titleParts = [
             `Узел: ${node.name || 'N/A'}`,
             `IP: ${node.ip_address || 'N/A'}`,
             `Статус: ${node.status_text || 'N/A'}`,
-            `Тип: ${node.node_type_path || 'N/A'}`,
-            `Проверка (агент): ${formatDateTime(node.check_timestamp)}`,
-            `Проверка (БД): ${formatDateTime(node.last_checked)}`
+            `Тип: ${node.node_type_path || 'N/A'}`, // Иерархический путь типа узла
+            `Проверка (агент): ${formatDateTime(node.check_timestamp)}`, // Время последней проверки на агенте
+            `Проверка (БД): ${formatDateTime(node.last_checked)}`      // Время записи последней проверки в БД сервером
         ];
-        span.title = titleParts.join('\n');
+        span.title = titleParts.join('\n'); // Объединяем строки для многострочной подсказки
 
-        const iconFilename = node.icon_filename || 'other.svg';
-        const iconUrl = `${ICONS_BASE_URL_JS}${encodeURIComponent(iconFilename)}`;
-        // Используем CSS переменные или напрямую стили для маски
-        span.style.webkitMaskImage = `url(${iconUrl})`;
-        span.style.maskImage = `url(${iconUrl})`;
-        // Цвет фона уже задается классом status_class
+        // Устанавливаем иконку типа узла через CSS mask-image
+        const iconFilename = node.icon_filename || 'other.svg'; // Иконка по умолчанию, если не указана
+        const iconUrl = `${ICONS_BASE_URL_JS}${encodeURIComponent(iconFilename)}`; // Формируем полный URL к иконке
+        span.style.webkitMaskImage = `url(${iconUrl})`; // Для Safari/Chrome
+        span.style.maskImage = `url(${iconUrl})`;       // Стандартное свойство
+        // Цвет фона иконки определяется CSS-классом, заданным через node.status_class (например, .available, .warning)
 
         return span;
     }
 
-    // --- Функция для обновления существующего элемента узла ---
+    /**
+     * Обновляет существующий HTML-элемент узла новыми данными, минимизируя изменения DOM.
+     * @param {HTMLElement} element - Существующий DOM-элемент узла (span).
+     * @param {object} node - Новый объект с данными узла для обновления.
+     */
     function updateNodeElement(element, node) {
-         if (!element || !node) return;
+         if (!element || !node) { // Проверка входных данных
+            console.warn("updateNodeElement: Передан некорректный элемент или отсутствуют данные узла.");
+            return;
+         }
 
+         // Обновляем CSS-класс статуса, только если он действительно изменился
          const newStatusClass = `node-icon-display ${node.status_class}`;
          if (element.className !== newStatusClass) {
              element.className = newStatusClass;
          }
 
+         // Обновляем всплывающую подсказку (title), только если она изменилась
          const titleParts = [
             `Узел: ${node.name || 'N/A'}`,
             `IP: ${node.ip_address || 'N/A'}`,
@@ -71,189 +98,237 @@
             element.title = newTitle;
         }
 
-        // Обновляем иконку, если она изменилась (маловероятно, но возможно)
+        // Обновляем иконку типа узла, если имя файла иконки изменилось
         const iconFilename = node.icon_filename || 'other.svg';
         const iconUrl = `${ICONS_BASE_URL_JS}${encodeURIComponent(iconFilename)}`;
-        const currentMask = element.style.webkitMaskImage || element.style.maskImage;
-        if (currentMask !== `url("${iconUrl}")`) { // Сравниваем строки URL
+        // Получаем текущий URL маски (может быть в разных форматах в зависимости от браузера)
+        const currentMaskStyle = element.style.webkitMaskImage || element.style.maskImage;
+        const expectedMaskUrl = `url("${iconUrl}")`; // Формат, который обычно устанавливается
+        const expectedMaskUrlNoQuotes = `url(${iconUrl})`;
+
+        if (currentMaskStyle !== expectedMaskUrl && currentMaskStyle !== expectedMaskUrlNoQuotes) {
              element.style.webkitMaskImage = `url(${iconUrl})`;
              element.style.maskImage = `url(${iconUrl})`;
         }
     }
 
-
-    // --- Функция для создания HTML элемента подразделения ---
+    /**
+     * Создает HTML-элемент (карточку) для отображения одного подразделения и его узлов.
+     * @param {object} subdivision - Объект с данными подразделения. Должен содержать 'id', 'short_name' и массив 'nodes'.
+     * @returns {HTMLElement|null} - Сконструированный div-элемент (карточка) или null, если данные некорректны.
+     */
     function createSubdivisionElement(subdivision) {
-        if (!subdivision || typeof subdivision.short_name !== 'string' || !Array.isArray(subdivision.nodes)) {
-            console.warn("createSubdivisionElement: Пропущено некорректное подразделение:", subdivision);
+        // Проверка корректности входных данных подразделения
+        if (!subdivision || typeof subdivision.id !== 'number' || typeof subdivision.short_name !== 'string' || !Array.isArray(subdivision.nodes)) {
+            console.warn("createSubdivisionElement: Пропущено некорректное подразделение (отсутствуют id, short_name или nodes):", subdivision);
             return null;
         }
 
         const card = document.createElement('div');
-        card.className = 'group-card';
-        card.dataset.subdivisionId = subdivision.id; // Уникальный ID
+        card.className = 'group-card'; // CSS-класс для стилизации карточки
+        card.dataset.subdivisionId = subdivision.id; // Сохраняем ID подразделения в data-атрибуте
 
-        const onlineNodes = subdivision.nodes.filter(n => n.status_class === 'available').length;
-        const totalNodes = subdivision.nodes.length;
+        // Рассчитываем статистику по узлам (количество онлайн / общее количество)
+        const onlineNodesCount = subdivision.nodes.filter(n => n && n.status_class === 'available').length;
+        const totalNodesCount = subdivision.nodes.length;
 
+        // Формируем HTML для иконки подразделения, если она указана в данных
         const subdivisionIconHtml = subdivision.icon_filename
-          ? `<img src="${SUBDIVISION_IMAGES_BASE_URL_JS}${encodeURIComponent(subdivision.icon_filename)}" alt="" style="width: 24px; height: 24px; margin-right: 8px; vertical-align: middle;" title="${subdivision.icon_filename}">`
-          : '';
+          ? `<img src="${SUBDIVISION_IMAGES_BASE_URL_JS}${encodeURIComponent(subdivision.icon_filename)}"
+                 alt="Иконка для ${subdivision.short_name}"
+                 style="width: 24px; height: 24px; margin-right: 8px; vertical-align: middle;"
+                 title="Иконка: ${subdivision.icon_filename}">`
+          : ''; // Пустая строка, если иконки нет
 
+        // Создаем заголовок карточки с именем подразделения и статистикой
         const header = document.createElement('h3');
-        header.innerHTML = `${subdivisionIconHtml}${subdivision.short_name} (<span class="subdivision-stats">${onlineNodes}/${totalNodes}</span>)`; // Добавляем span для статистики
+        header.innerHTML = `${subdivisionIconHtml}${subdivision.short_name} (<span class="subdivision-stats">${onlineNodesCount}/${totalNodesCount}</span>)`;
 
-        const grid = document.createElement('div');
-        grid.className = 'node-status-grid';
+        // Создаем контейнер (сетку) для отображения иконок узлов внутри карточки
+        const nodeGridContainer = document.createElement('div');
+        nodeGridContainer.className = 'node-status-grid';
 
-        subdivision.nodes.forEach(node => {
-            const nodeElement = createNodeElement(node);
-            if (nodeElement) {
-                grid.appendChild(nodeElement);
-            }
-        });
+        // Создаем и добавляем HTML-элементы для каждого узла в этом подразделении
+        if (subdivision.nodes.length > 0) {
+            subdivision.nodes.forEach(node => {
+                const nodeElement = createNodeElement(node); // Создаем элемент узла
+                if (nodeElement) { // Добавляем, только если элемент узла успешно создан
+                    nodeGridContainer.appendChild(nodeElement);
+                }
+            });
+        } else {
+            // Если в подразделении нет узлов, отображаем сообщение
+            nodeGridContainer.innerHTML = '<p style="font-size:0.9em; color: #777; margin-top: 5px;">Нет узлов в этом подразделении.</p>';
+        }
 
-        card.appendChild(header);
-        card.appendChild(grid);
+        card.appendChild(header); // Добавляем заголовок в карточку
+        card.appendChild(nodeGridContainer); // Добавляем сетку узлов в карточку
         return card;
     }
 
-     // --- Основная функция получения и рендеринга/обновления ---
+    /**
+     * Основная функция для получения данных с API и обновления/рендеринга дашборда.
+     * Выполняет "умное" обновление DOM, чтобы избежать полного перерендеринга страницы
+     * и минимизировать "мигание" контента.
+     */
     async function fetchAndUpdateDashboard() {
-        if (!dashboardContainer) { console.error("Элемент dashboard-grid не найден!"); return; }
-        console.debug("Запрос данных для сводки...");
-        // Не очищаем контейнер сразу, чтобы избежать мигания при ошибке
+        if (!dashboardContainer) { // Проверка наличия основного контейнера
+            console.error("Критическая ошибка: Элемент dashboard-grid не найден на странице! Обновление невозможно.");
+            return;
+        }
+        console.debug("Dashboard: Начало запроса данных для сводки...");
+        // Не очищаем контейнер dashboardContainer сразу,
+        // чтобы в случае ошибки обновления пользователь видел старые данные, а не пустую страницу.
 
-        let newSubdivisionsData = null;
+        let newSubdivisionsDataFromServer = null; // Данные, полученные от сервера
         try {
-            const response = await fetch(API_URL_DASHBOARD);
-            if (!response.ok) { /* ... (обработка ошибки сети/API как раньше) ... */
-                 let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
-                 try { const errorData = await response.json(); if (errorData.error) errorText += ` - ${JSON.stringify(errorData.error)}`; } catch (e) {}
-                 throw new Error(errorText);
+            const response = await fetch(API_URL_DASHBOARD); // Выполняем GET-запрос к API
+            if (!response.ok) { // Проверка на HTTP ошибки (4xx, 5xx)
+                 let errorText = `Ошибка сети или сервера: ${response.status} ${response.statusText}`;
+                 try { // Пытаемся извлечь сообщение об ошибке из JSON-ответа API
+                    const errorData = await response.json();
+                    if (errorData && errorData.error && errorData.error.message) errorText += ` - ${errorData.error.message}`;
+                    else if (errorData && errorData.error) errorText += ` - ${JSON.stringify(errorData.error)}`;
+                 } catch (e) { /* Ошибка парсинга JSON ответа с ошибкой - игнорируем, используем базовый текст */ }
+                 throw new Error(errorText); // Выбрасываем ошибку для обработки в catch
             }
-            newSubdivisionsData = await response.json();
-            console.debug("Данные для сводки получены:", newSubdivisionsData);
+            newSubdivisionsDataFromServer = await response.json(); // Парсим успешный JSON-ответ
+            console.debug("Dashboard: Данные для сводки успешно получены:", newSubdivisionsDataFromServer);
 
-            if (!Array.isArray(newSubdivisionsData)) {
-                 throw new Error("API вернул некорректные данные (не массив).");
+            // Проверка, что API вернул массив (ожидаемый формат)
+            if (!Array.isArray(newSubdivisionsDataFromServer)) {
+                 console.error("Dashboard: API вернул некорректные данные (ожидался массив, получен:", typeof newSubdivisionsDataFromServer, newSubdivisionsDataFromServer);
+                 throw new Error("API для дашборда вернул данные в некорректном формате (ожидался массив).");
             }
-
-        } catch (error) {
-            console.error("Ошибка загрузки данных сводки:", error);
-            // Показываем ошибку только если данных еще не было
+        } catch (error) { // Обработка ошибок сети или парсинга JSON
+            console.error("Dashboard: Ошибка загрузки данных для сводки:", error);
+            // Показываем сообщение об ошибке пользователю, только если это первая загрузка (кэш пуст)
             if (!dashboardDataCache) {
                  dashboardContainer.innerHTML = `<p class="error-message">Ошибка загрузки данных: ${error.message}</p>`;
             } else {
-                 // Можно показать временное сообщение об ошибке обновления где-то еще
-                 console.warn("Не удалось обновить данные сводки, используются предыдущие.");
-                 showGlobalError(`Ошибка обновления сводки: ${error.message}`); // Показываем глобальную ошибку
+                 // Если данные уже были отображены ранее, просто логируем ошибку обновления
+                 // и, возможно, показываем временное глобальное уведомление (если функция showGlobalError определена)
+                 console.warn("Dashboard: Не удалось обновить данные сводки. Используются предыдущие данные из кэша.");
+                 if (typeof showGlobalError === 'function') {
+                    showGlobalError(`Ошибка обновления данных сводки: ${error.message}`);
+                 }
             }
-            return; // Прерываем выполнение при ошибке
+            return; // Прерываем выполнение функции при ошибке загрузки
         }
 
-        // --- Логика обновления DOM ---
-        const currentCards = dashboardContainer.querySelectorAll('.group-card[data-subdivision-id]');
+        // --- Логика "умного" обновления DOM ---
+        // 1. Собираем существующие на странице карточки подразделений в Map для быстрого доступа по ID
+        const currentCardsOnPage = dashboardContainer.querySelectorAll('.group-card[data-subdivision-id]');
         const currentCardMap = new Map();
-        currentCards.forEach(card => card.dataset.subdivisionId && currentCardMap.set(parseInt(card.dataset.subdivisionId, 10), card));
+        currentCardsOnPage.forEach(card => {
+            const subId = card.dataset.subdivisionId;
+            if (subId) currentCardMap.set(parseInt(subId, 10), card);
+        });
 
-        const newSubdivisionIds = new Set();
-        const fragment = document.createDocumentFragment(); // Используем фрагмент для эффективности
+        const newSubdivisionIdsFromServer = new Set(); // Множество ID подразделений, пришедших от сервера
+        const fragmentForNewCards = document.createDocumentFragment(); // Используем DocumentFragment для эффективности DOM-операций
 
-        newSubdivisionsData.forEach(subData => {
-            if (!subData || subData.id === null || subData.id === undefined) {
-                 console.warn("Пропущено подразделение без ID:", subData);
-                 return; // Пропускаем подразделения без ID
+        // 2. Итерируем по данным, полученным от сервера
+        newSubdivisionsDataFromServer.forEach(subdivisionData => {
+            // Пропускаем подразделения без валидного ID
+            if (!subdivisionData || typeof subdivisionData.id !== 'number') {
+                 console.warn("Dashboard: Пропущено подразделение без числового ID в полученных данных:", subdivisionData);
+                 return;
             }
-            newSubdivisionIds.add(subData.id);
-            const existingCard = currentCardMap.get(subData.id);
+            newSubdivisionIdsFromServer.add(subdivisionData.id); // Добавляем ID в множество для отслеживания
+            const existingCardElement = currentCardMap.get(subdivisionData.id); // Ищем карточку на странице
 
-            if (existingCard) {
-                // --- Обновляем существующую карточку ---
-                console.debug(`Обновление карточки для subdivision ID: ${subData.id}`);
-                // Обновляем заголовок (статистику)
-                const onlineNodes = subData.nodes.filter(n => n.status_class === 'available').length;
-                const totalNodes = subData.nodes.length;
-                const statsSpan = existingCard.querySelector('h3 span.subdivision-stats');
-                if (statsSpan) { statsSpan.textContent = `${onlineNodes}/${totalNodes}`; }
-                // Можно обновить иконку подразделения, если нужно
+            if (existingCardElement) {
+                // Если карточка уже существует на странице - ОБНОВЛЯЕМ ее содержимое
+                console.debug(`Dashboard: Обновление существующей карточки для подразделения ID: ${subdivisionData.id}`);
+                // Обновляем заголовок карточки (в частности, статистику узлов)
+                const onlineNodes = subdivisionData.nodes.filter(n => n && n.status_class === 'available').length;
+                const totalNodes = subdivisionData.nodes.length;
+                const statsSpan = existingCardElement.querySelector('h3 span.subdivision-stats');
+                if (statsSpan && statsSpan.textContent !== `${onlineNodes}/${totalNodes}`) {
+                    statsSpan.textContent = `${onlineNodes}/${totalNodes}`;
+                }
+                // TODO: Можно добавить логику обновления иконки самого подразделения, если она может меняться.
 
-                // Обновляем узлы внутри карточки
-                const nodeGrid = existingCard.querySelector('.node-status-grid');
-                if (nodeGrid) {
-                    const currentNodeSpans = nodeGrid.querySelectorAll('.node-icon-display[data-node-id]');
-                    const currentNodeMap = new Map();
-                    currentNodeSpans.forEach(span => span.dataset.nodeId && currentNodeMap.set(parseInt(span.dataset.nodeId, 10), span));
-                    const newNodeIds = new Set();
+                // Обновляем список узлов внутри этой карточки
+                const nodeGridElement = existingCardElement.querySelector('.node-status-grid');
+                if (nodeGridElement) {
+                    const currentNodeSpanElements = nodeGridElement.querySelectorAll('.node-icon-display[data-node-id]');
+                    const currentNodeMap = new Map(); // Карта текущих узлов в этой карточке
+                    currentNodeSpanElements.forEach(span => {
+                        const nodeId = span.dataset.nodeId;
+                        if (nodeId) currentNodeMap.set(parseInt(nodeId, 10), span);
+                    });
+                    const newNodeIdsInSubdivision = new Set(); // Узлы, которые должны быть в этом подразделении
 
-                    subData.nodes.forEach(nodeData => {
-                        if (!nodeData || nodeData.id === null || nodeData.id === undefined) {
-                            console.warn("Пропущен узел без ID в подразделении", subData.id, ":", nodeData);
+                    // Итерируем по узлам из новых данных для этого подразделения
+                    subdivisionData.nodes.forEach(nodeData => {
+                        if (!nodeData || typeof nodeData.id !== 'number') {
+                            console.warn("Dashboard: Пропущен узел без числового ID в подразделении", subdivisionData.id, ":", nodeData);
                             return;
                         }
-                        newNodeIds.add(nodeData.id);
-                        const existingNodeSpan = currentNodeMap.get(nodeData.id);
-                        if (existingNodeSpan) {
-                            // Обновляем существующий узел
-                            updateNodeElement(existingNodeSpan, nodeData);
+                        newNodeIdsInSubdivision.add(nodeData.id);
+                        const existingNodeSpanElement = currentNodeMap.get(nodeData.id); // Ищем узел на странице
+                        if (existingNodeSpanElement) {
+                            updateNodeElement(existingNodeSpanElement, nodeData); // Узел есть - обновляем
                         } else {
-                            // Добавляем новый узел
-                            const newNodeElement = createNodeElement(nodeData);
-                            if (newNodeElement) nodeGrid.appendChild(newNodeElement);
+                            const newNodeElement = createNodeElement(nodeData); // Узла нет - создаем и добавляем
+                            if (newNodeElement) nodeGridElement.appendChild(newNodeElement);
                         }
                     });
 
-                    // Удаляем узлы, которых больше нет в этом подразделении
-                    currentNodeSpans.forEach(span => {
+                    // Удаляем DOM-элементы узлов, которых больше нет в данных этого подразделения
+                    currentNodeSpanElements.forEach(span => {
                         const nodeId = parseInt(span.dataset.nodeId, 10);
-                        if (!newNodeIds.has(nodeId)) {
-                             console.debug(`Удаление узла ID ${nodeId} из подразделения ${subData.id}`);
+                        if (!newNodeIdsInSubdivision.has(nodeId)) { // Если узла нет в новых данных
+                             console.debug(`Dashboard: Удаление узла ID ${nodeId} из DOM подразделения ${subdivisionData.id}`);
                              span.remove();
                         }
                     });
                 }
-                currentCardMap.delete(subData.id); // Удаляем из карты обработанные
-
+                currentCardMap.delete(subdivisionData.id); // Удаляем из карты, т.к. эта карточка обработана
             } else {
-                // --- Создаем новую карточку ---
-                console.debug(`Создание новой карточки для subdivision ID: ${subData.id}`);
-                const newCardElement = createSubdivisionElement(subData);
-                 if (newCardElement) {
-                     fragment.appendChild(newCardElement); // Добавляем во фрагмент
+                // Если карточки для подразделения нет на странице - СОЗДАЕМ новую
+                console.debug(`Dashboard: Создание новой карточки для подразделения ID: ${subdivisionData.id}`);
+                const newCardElement = createSubdivisionElement(subdivisionData);
+                 if (newCardElement) { // Если карточка успешно создана
+                     fragmentForNewCards.appendChild(newCardElement); // Добавляем во временный DocumentFragment
                  }
             }
         });
 
-        // Удаляем карточки подразделений, которых больше нет
+        // 3. Удаляем карточки подразделений, которые были на странице, но отсутствуют в новых данных от сервера
         currentCardMap.forEach((cardToRemove, idToRemove) => {
-             console.debug(`Удаление карточки для subdivision ID: ${idToRemove}`);
+             console.debug(`Dashboard: Удаление карточки для подразделения ID: ${idToRemove} (подразделение больше не существует или отфильтровано).`);
              cardToRemove.remove();
         });
 
-        // Добавляем новые карточки из фрагмента
-        if (fragment.childElementCount > 0) {
-            dashboardContainer.appendChild(fragment);
+        // 4. Добавляем все новые карточки из DocumentFragment в DOM (одна операция вставки для производительности)
+        if (fragmentForNewCards.childElementCount > 0) {
+            dashboardContainer.appendChild(fragmentForNewCards);
         }
 
-        // Если после всех манипуляций контейнер пуст (например, все подразделения удалены)
-        if (dashboardContainer.childElementCount === 0 && newSubdivisionsData.length === 0) {
-             dashboardContainer.innerHTML = "<p>Нет данных подразделений для отображения.</p>";
-        } else if (dashboardContainer.querySelector('.loading-message')) {
-            // Убираем сообщение "Загрузка", если оно там было и появились карточки
-            dashboardContainer.querySelector('.loading-message').remove();
+        // 5. Обработка случая, когда дашборд пуст (или стал пустым после обновления)
+        const loadingMessageElement = dashboardContainer.querySelector('.loading-message');
+        if (loadingMessageElement) { // Если было сообщение "Загрузка...", удаляем его
+            loadingMessageElement.remove();
+        }
+        // Если после всех операций на дашборде нет дочерних элементов (карточек)
+        // и сервер действительно вернул пустой список подразделений, показываем сообщение "Нет данных".
+        if (dashboardContainer.childElementCount === 0 && newSubdivisionsDataFromServer.length === 0) {
+             dashboardContainer.innerHTML = "<p>Нет данных для отображения на сводке.</p>";
         }
 
-
-        // Обновляем кэш
-        dashboardDataCache = newSubdivisionsData;
-        console.debug("Обновление DOM завершено.");
+        // 6. Обновляем кэш данных последними полученными данными
+        dashboardDataCache = newSubdivisionsDataFromServer;
+        console.debug("Dashboard: Обновление DOM завершено.");
     }
 
-    // --- Инициализация ---
+    // --- Инициализация страницы ---
     document.addEventListener('DOMContentLoaded', () => {
-        fetchAndUpdateDashboard(); // Первая загрузка
-        setInterval(fetchAndUpdateDashboard, 15000); // Автообновление
+        fetchAndUpdateDashboard(); // Выполняем первую загрузку данных при загрузке DOM
+        // Устанавливаем интервал для автоматического периодического обновления данных дашборда
+        setInterval(fetchAndUpdateDashboard, 15000); // Обновление каждые 15 секунд (15000 мс)
     });
-
 </script>
 {% endblock %}

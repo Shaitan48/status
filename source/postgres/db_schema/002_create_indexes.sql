@@ -123,21 +123,9 @@ COMMENT ON INDEX idx_node_check_assignments_node IS 'Ускоряет поиск
 CREATE INDEX IF NOT EXISTS idx_node_check_assignments_method ON node_check_assignments(method_id);
 COMMENT ON INDEX idx_node_check_assignments_method IS 'Ускоряет поиск заданий, использующих определенный метод проверки.';
 
--- Индекс по флагу is_enabled (используется при выборке активных заданий для агентов).
-CREATE INDEX IF NOT EXISTS idx_node_check_assignments_enabled ON node_check_assignments(is_enabled);
-COMMENT ON INDEX idx_node_check_assignments_enabled IS 'Оптимизирует выборку активных (is_enabled = TRUE) заданий.';
-
--- GIN-индекс для поля parameters (JSONB) для возможности поиска по содержимому JSON.
-CREATE INDEX IF NOT EXISTS idx_node_check_assignments_params ON node_check_assignments USING gin (parameters);
-COMMENT ON INDEX idx_node_check_assignments_params IS 'Позволяет эффективно искать задания по содержимому поля parameters (JSONB).';
-
--- Индекс для внешнего ключа last_node_check_id (ускоряет JOIN с node_checks для получения последнего статуса).
-CREATE INDEX IF NOT EXISTS idx_node_check_assignments_last_check ON node_check_assignments(last_node_check_id);
-COMMENT ON INDEX idx_node_check_assignments_last_check IS 'Ускоряет JOIN с таблицей node_checks для получения последнего результата проверки по заданию.';
-
--- GIN-индекс для поля success_criteria (JSONB).
-CREATE INDEX IF NOT EXISTS idx_node_check_assignments_criteria ON node_check_assignments USING gin (success_criteria);
-COMMENT ON INDEX idx_node_check_assignments_criteria IS 'Позволяет эффективно искать задания по содержимому поля success_criteria (JSONB).';
+-- Индекс по pipeline для ускорения поиска по JSONB-полям pipeline-задания
+CREATE INDEX IF NOT EXISTS idx_node_check_assignments_pipeline ON node_check_assignments USING gin (pipeline);
+COMMENT ON INDEX idx_node_check_assignments_pipeline IS 'GIN-индекс для поиска по pipeline (JSONB) в заданиях проверки.';
 
 -- -----------------------------------------------------------------------------
 -- Индексы для таблицы: node_checks
@@ -169,10 +157,18 @@ CREATE INDEX IF NOT EXISTS idx_node_checks_agent_script_version ON node_checks(a
 COMMENT ON INDEX idx_node_checks_agent_script_version IS 'Ускоряет поиск результатов, полученных с определенной версией скрипта агента.';
 
 -- Индекс для предотвращения дублирования базовых заданий (без параметров и критериев) для одного узла и метода
-CREATE UNIQUE INDEX IF NOT EXISTS idx_assignment_unique_basic
-    ON node_check_assignments (node_id, method_id)
-    WHERE parameters IS NULL AND success_criteria IS NULL;
-COMMENT ON INDEX idx_assignment_unique_basic IS 'Обеспечивает уникальность базовых назначений (без JSON-параметров/критериев) для пары узел+метод.';
+-- Уникальность по хэшу pipeline (для длинных или неканоничных JSON)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assignment_unique_pipeline_hash
+    ON node_check_assignments (
+        node_id,
+        method_id,
+        md5(pipeline::text)
+    );
+COMMENT ON INDEX idx_assignment_unique_pipeline_hash IS 'Уникальность назначения по хэшу pipeline JSON.';
+
+-- Уникальный индекс на задания одного и того же типа для одного узла с одинаковым pipeline
+CREATE UNIQUE INDEX unique_node_method_pipeline ON node_check_assignments (node_id, method_id, pipeline);
+COMMENT ON INDEX unique_node_method_pipeline IS 'Гарантирует уникальность сочетания node_id, method_id и pipeline.';
 
 -- -----------------------------------------------------------------------------
 -- Индексы для таблицы: node_check_details

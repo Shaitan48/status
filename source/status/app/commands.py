@@ -1,122 +1,124 @@
 # status/app/commands.py
+"""
+Модуль для определения кастомных команд Flask CLI.
+Версия 5.0.4: API-ключи теперь хешируются с использованием Werkzeug (generate_password_hash).
+"""
 import logging
 import click
+from flask.cli import AppGroup
+import secrets
 import psycopg2
-import secrets # Для генерации безопасных ключей
-import hashlib # Для хеширования
-from flask.cli import with_appcontext
+from psycopg2.extras import RealDictCursor
+
+# <<< ИЗМЕНЕНО: Используем generate_password_hash для API-ключей тоже >>>
 from werkzeug.security import generate_password_hash
-from .db_connection import get_connection # Импортируем функцию получения соединения
+# Убираем from .auth_utils import hash_api_key, если он там больше не нужен
+
+from .db_connection import get_connection
+from .repositories import user_repository, api_key_repository, subdivision_repository
+# Старая функция auth_utils.hash_api_key больше не нужна, если мы перешли на Werkzeug
 
 logger = logging.getLogger(__name__)
 
-@click.command('create-user')
+user_cli = AppGroup('user', help='Команды для управления пользователями UI.')
+api_key_cli = AppGroup('apikey', help='Команды для управления API-ключами.')
+
+# --- Команда для создания пользователя UI ---
+@user_cli.command('create')
 @click.argument('username')
 @click.argument('password')
-@with_appcontext # Обеспечивает доступ к контексту приложения (для БД)
-def create_user_command(username, password):
-    """Создает нового пользователя системы."""
-    conn = None
+@click.option('--active/--inactive', default=True, help='Сделать пользователя активным (по умолчанию) или неактивным.')
+def create_user_command(username, password, active):
+    """ Создает нового пользователя для доступа к веб-интерфейсу. """
+    logger.info(f"CLI: Попытка создания пользователя '{username}' (активен: {active}).")
+    if not username or not password:
+        click.echo(click.style("Ошибка: Имя пользователя и пароль не могут быть пустыми.", fg="red"))
+        logger.warning("CLI create-user: Имя пользователя или пароль не указаны.")
+        return
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        # 1. Проверяем, существует ли пользователь
-        cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
-        existing_user = cursor.fetchone()
-        if existing_user:
-            click.echo(click.style(f"Ошибка: Пользователь '{username}' уже существует.", fg='red'))
-            return # Выходим, если пользователь есть
-
-        # 2. Хешируем пароль
-        # Убедитесь, что метод хеширования совпадает с тем, что используется
-        # при проверке пароля в модели User и маршруте login
-        hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
-
-        # 3. Вставляем нового пользователя
-        cursor.execute(
-            "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
-            (username, hashed_password)
-        )
-        # conn.commit() # Раскомментируйте, если autocommit=False в db_connection.py
-
-        click.echo(click.style(f"Пользователь '{username}' успешно создан.", fg='green'))
-
+        # Используем generate_password_hash из Werkzeug для паролей пользователей
+        password_hash = generate_password_hash(password, method='pbkdf2:sha256')
+        user_data_to_create = {
+            'username': username,
+            'password_hash': password_hash,
+            'is_active': active
+        }
+        with get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                new_user_id = user_repository.create_user(cursor, user_data_to_create)
+                if new_user_id:
+                    conn.commit()
+                    click.echo(click.style(f"Пользователь '{username}' (ID: {new_user_id}) успешно создан!", fg="green"))
+                    logger.info(f"CLI: Пользователь '{username}' (ID: {new_user_id}) создан.")
+                else:
+                    click.echo(click.style(f"Не удалось создать пользователя '{username}'. Репозиторий не вернул ID.", fg="red"))
+                    logger.error(f"CLI create-user: Репозиторий user_repository.create_user не вернул ID для '{username}'.")
+    except psycopg2.errors.UniqueViolation:
+        click.echo(click.style(f"Ошибка: Пользователь с именем '{username}' уже существует.", fg="yellow"))
+        logger.warning(f"CLI create-user: Пользователь '{username}' уже существует.")
     except psycopg2.Error as db_err:
-        # conn.rollback() # Раскомментируйте, если autocommit=False
-        logger.error(f"Ошибка БД при создании пользователя {username}: {db_err}", exc_info=True)
-        click.echo(click.style(f"Ошибка базы данных: {db_err}", fg='red'))
+        click.echo(click.style(f"Ошибка базы данных при создании пользователя: {db_err}", fg="red"))
+        logger.error(f"CLI create-user: Ошибка БД для пользователя '{username}': {db_err}", exc_info=True)
     except Exception as e:
-        # conn.rollback() # Раскомментируйте, если autocommit=False
-        logger.error(f"Неожиданная ошибка при создании пользователя {username}: {e}", exc_info=True)
-        click.echo(click.style(f"Неожиданная ошибка: {e}", fg='red'))
-    # finally:
-        # Соединение вернется в пул через teardown_appcontext, нет необходимости закрывать conn/cursor явно
-        # pass
+        click.echo(click.style(f"Непредвиденная ошибка при создании пользователя: {e}", fg="red"))
+        logger.exception(f"CLI create-user: Неожиданная ошибка для пользователя '{username}'.")
 
-# --- НОВАЯ Команда create-api-key ---
-@click.command('create-api-key')
-@click.option('--description', prompt='Описание ключа (например, "Online Agent - Object 1516")', help='Описание назначения ключа.')
-@click.option('--role', type=click.Choice(['agent', 'loader', 'configurator', 'admin'], case_sensitive=False), default='agent', help='Роль ключа.')
-@click.option('--object-id', type=int, default=None, help='(Опционально) ID объекта/подразделения (subdivisions.object_id), к которому привязан ключ.')
-@with_appcontext
-def create_api_key_command(description, role, object_id):
-    """Генерирует новый API ключ и сохраняет его хеш в БД."""
-    conn = None
+
+# --- Команда для создания API-ключа ---
+@api_key_cli.command('create')
+@click.option('--description', '-d', required=True, help='Описание назначения API-ключа.')
+@click.option('--role', '-r', required=True, type=click.Choice(['agent', 'loader', 'configurator', 'admin'], case_sensitive=False), help='Роль API-ключа.')
+@click.option('--object-id', '-o', type=int, default=None, help='ID объекта (подразделения), к которому привязан ключ.')
+@click.option('--length', '-l', type=int, default=32, show_default=True, help='Длина генерируемого ключа (до хеширования).')
+def create_api_key_command(description, role, object_id, length):
+    """ Создает новый API-ключ и выводит его в консоль. Хеш ключа создается с помощью Werkzeug. """
+    logger.info(f"CLI: Попытка создания API-ключа (Werkzeug). Описание: '{description}', Роль: '{role}', ObjectID: {object_id or 'N/A'}.")
+    if length < 24 or length > 64: # Длина самого токена до хеширования
+        click.echo(click.style("Ошибка: Длина ключа (до хеширования) должна быть от 24 до 64 символов.", fg="red")); return
+    
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        # Проверяем существование object_id, если он указан
-        if object_id is not None:
-            cursor.execute("SELECT EXISTS (SELECT 1 FROM subdivisions WHERE object_id = %s)", (object_id,))
-            if not cursor.fetchone()['exists']:
-                click.echo(click.style(f"Ошибка: Подразделение с object_id={object_id} не найдено.", fg='red'))
-                return
-
-        # 1. Генерируем сам ключ (достаточно длинный и случайный)
-        #    secrets.token_urlsafe(32) даст примерно 43 символа base64
-        api_key = secrets.token_urlsafe(32)
-
-        # 2. Хешируем ключ с помощью SHA-256
-        key_hash = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
-
-        # 3. Проверяем, не сгенерировался ли случайно уже существующий хеш (крайне маловероятно)
-        cursor.execute("SELECT id FROM api_keys WHERE key_hash = %s", (key_hash,))
-        if cursor.fetchone():
-            # Если коллизия (почти невозможно), просто просим повторить
-            click.echo(click.style("Произошла редкая коллизия хешей. Пожалуйста, повторите команду.", fg='yellow'))
-            return
-
-        # 4. Вставляем хеш и метаданные в базу
-        cursor.execute(
-            """
-            INSERT INTO api_keys (key_hash, description, role, object_id, is_active)
-            VALUES (%s, %s, %s, %s, %s)
-            RETURNING id
-            """,
-            (key_hash, description, role.lower(), object_id, True) # Роль в нижнем регистре
-        )
-        new_key_id = cursor.fetchone()['id']
-        # conn.commit() # Если не autocommit
-
-        click.echo("-----------------------------------------------------")
-        click.echo(click.style("API Ключ успешно создан!", fg='green'))
-        click.echo(f"ID ключа в БД: {new_key_id}")
-        click.echo(f"Описание: {description}")
-        click.echo(f"Роль: {role.lower()}")
-        if object_id is not None:
-            click.echo(f"Привязан к Object ID: {object_id}")
-        click.echo(click.style("ВАЖНО: Скопируйте и сохраните сам API ключ.", fg='yellow', bold=True))
-        click.echo("Он больше не будет показан:")
-        click.echo(click.style(api_key, fg='cyan')) # <<< Показываем сгенерированный ключ
-        click.echo("-----------------------------------------------------")
-
-    except psycopg2.Error as db_err:
-        # conn.rollback() # Если не autocommit
-        logger.error(f"Ошибка БД при создании API ключа: {db_err}", exc_info=True)
-        click.echo(click.style(f"Ошибка базы данных: {db_err}", fg='red'))
-    except Exception as e:
-        # conn.rollback() # Если не autocommit
-        logger.error(f"Неожиданная ошибка при создании API ключа: {e}", exc_info=True)
-        click.echo(click.style(f"Неожиданная ошибка: {e}", fg='red'))
+        if object_id is not None: # Проверка существования подразделения, если object_id указан
+            with get_connection() as conn_check_sub:
+                with conn_check_sub.cursor(cursor_factory=RealDictCursor) as cursor_check_sub:
+                    if not subdivision_repository.check_subdivision_exists_by_object_id(cursor_check_sub, object_id):
+                        click.echo(click.style(f"Ошибка: Подразделение с object_id={object_id} не найдено.", fg="red")); return
+        
+        # 1. Генерируем сам API-ключ в открытом виде (он будет показан пользователю)
+        api_key_plain_text = secrets.token_urlsafe(length)
+        
+        # 2. Хешируем этот ключ с помощью Werkzeug для безопасного хранения в БД
+        # <<< ИЗМЕНЕНО ЗДЕСЬ: Используем generate_password_hash >>>
+        # Метод можно выбрать, но pbkdf2:sha256 - хороший дефолт.
+        api_key_hashed_to_store = generate_password_hash(api_key_plain_text, method='pbkdf2:sha256')
+        
+        with get_connection() as conn_create_key:
+            with conn_create_key.cursor(cursor_factory=RealDictCursor) as cursor_create_key:
+                new_api_key_id = api_key_repository.create_api_key(
+                    cursor_create_key,
+                    key_hash=api_key_hashed_to_store, # Передаем хеш Werkzeug
+                    description=description,
+                    role=role.lower(),
+                    object_id=object_id
+                )
+                if new_api_key_id:
+                    conn_create_key.commit()
+                    click.echo(click.style("API Ключ успешно создан (с использованием Werkzeug хеширования)!", fg="green"))
+                    click.echo(click.style("ВАЖНО: Сохраните этот ключ. Он больше НЕ БУДЕТ ПОКАЗАН:", bold=True, fg="red"))
+                    click.echo(click.style(api_key_plain_text, fg="yellow", bold=True))
+                    click.echo(f"(ID ключа в базе: {new_api_key_id}. Хеш в БД (начало): {api_key_hashed_to_store[:20]}...)")
+                    logger.info(f"CLI: API-ключ ID={new_api_key_id} (роль: {role.lower()}) создан с хешем Werkzeug.")
+                else:
+                    click.echo(click.style("Не удалось создать API-ключ (репозиторий не вернул ID).", fg="red"))
+                    logger.error("CLI create-api-key: api_key_repository.create_api_key не вернул ID.")
+    except psycopg2.errors.UniqueViolation: # Этого не должно быть, если generate_password_hash используется, т.к. он соленый
+        click.echo(click.style(f"Критическая ошибка: Конфликт уникальности при создании API-ключа с Werkzeug хешем. Этого не должно было произойти.", fg="red"))
+        logger.critical("CLI create-api-key: Неожиданный UniqueViolation для Werkzeug хеша API-ключа.")
+    except psycopg2.Error as db_err_create_key:
+        click.echo(click.style(f"Ошибка базы данных при создании API-ключа: {db_err_create_key}", fg="red"))
+        logger.error(f"CLI create-api-key: Ошибка БД: {db_err_create_key}", exc_info=True)
+    except ValueError as val_err_create_key:
+        click.echo(click.style(f"Ошибка валидации при создании API-ключа: {val_err_create_key}", fg="red"))
+        logger.warning(f"CLI create-api-key: Ошибка валидации: {val_err_create_key}")
+    except Exception as e_create_key:
+        click.echo(click.style(f"Непредвиденная ошибка при создании API-ключа: {e_create_key}", fg="red"))
+        logger.exception("CLI create-api-key: Неожиданная ошибка.")

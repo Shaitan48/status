@@ -1,11 +1,11 @@
 {
-    "mode": "Online",
+    "mode": "Offline",
     "object_id": 1060,
     "log_file": "F:/status/builds/logs/hybrid-agent.log",
     "log_level": "Info",
     "agent_script_version": "hybrid_agent_v7.0",
     "api_base_url": "http://localhost:48030/api",
-    "api_key": "Ufv0vpIrgAdBcoF_D2FFu6dydCh-M19UvvNSICw6xio",
+    "api_key": "PQQVeqRAeoCGrdV5dMLOYzu5ArCdEfIMolkoveoqZTc",
     "api_poll_interval_seconds": 60,
     "default_check_interval_seconds": 300,
     "max_api_retries": 2,

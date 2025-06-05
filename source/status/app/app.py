@@ -1,195 +1,212 @@
 ﻿# status/app/app.py
+"""
+Основной файл Flask-приложения для Status Monitor.
+Версия 5.0.1: Исправлен импорт и регистрация CLI-команд.
+"""
 import os
 import logging
-from flask import Flask, g, request
+import logging.config
+from typing import Optional, Dict, Any
+
+from flask import Flask, g, request, jsonify # jsonify может понадобиться
+from flask_cors import CORS
 from flask_socketio import SocketIO
 from flask_login import LoginManager
 
-# Используем ОТНОСИТЕЛЬНЫЕ импорты из текущего пакета 'app'
-from .routes import init_routes
-from . import errors
-from . import db_connection
+# --- Импорт компонентов приложения ---
+from .db_connection import get_connection, close_db_pool, db_pool, psycopg2 # Добавил psycopg2 для user_loader
 from .models.user import User
-from .commands import create_user_command, create_api_key_command
+from .repositories import user_repository # Теперь user_repository используется
+from .errors import register_error_handlers
+from .commands import user_cli, api_key_cli # <<< ИЗМЕНЕНО: Импортируем группы команд
+from .routes import init_routes
 
-# --- Инициализация расширений ---
-# Инициализируем объекты расширений БЕЗ привязки к конкретному app
-# и БЕЗ указания async_mode здесь. Это будет сделано внутри create_app.
-socketio = SocketIO()
-login_manager = LoginManager()
+# --- Инициализация расширений Flask ---
+cors: Optional[CORS] = None
+socketio: Optional[SocketIO] = None
+login_manager: Optional[LoginManager] = None
 
-# --- Конфигурация Flask-Login ---
-
-# Функция загрузки пользователя, вызывается Flask-Login при каждом запросе
-# для получения объекта текущего пользователя из сессии.
-@login_manager.user_loader
-def load_user(user_id):
-    """Загружает пользователя по ID для Flask-Login."""
-    # Здесь мы должны получить пользователя из БД по ID.
-    # В реальном приложении лучше использовать UserRepository.
-    # Важно обрабатывать исключения и возвращать None, если пользователь не найден.
-    try:
-        # Получаем соединение БД из контекста запроса 'g'
-        conn = db_connection.get_connection()
-        cursor = conn.cursor()
-        # Выполняем запрос к таблице users
-        cursor.execute("SELECT id, username, password_hash, is_active FROM users WHERE id = %s", (int(user_id),))
-        user_data = cursor.fetchone()
-        # Если пользователь найден в БД
-        if user_data:
-            # Создаем объект User из модели
-            user = User(
-                id=user_data['id'],
-                username=user_data['username'],
-                password_hash=user_data['password_hash'],
-                is_active=user_data['is_active'] # Передаем статус активности
-            )
-            # Проверяем, активен ли пользователь (дополнительная проверка)
-            if user.is_active:
-                return user # Возвращаем объект User, если он активен
-            else:
-                # Пользователь найден, но неактивен
-                logging.getLogger(__name__).warning(f"Попытка загрузить неактивного пользователя ID: {user_id}")
-                return None
-        # Пользователь не найден в БД
-        return None
-    except Exception as e:
-        # Логируем ошибку при загрузке пользователя
-        logging.getLogger(__name__).error(f"Ошибка в user_loader для ID {user_id}: {e}", exc_info=True)
-        return None
-    # Соединение будет возвращено в пул автоматически через teardown_appcontext
-
-# Указываем эндпоинт (маршрут) для страницы входа.
-# Flask-Login будет перенаправлять сюда неаутентифицированных пользователей,
-# пытающихся получить доступ к защищенным через @login_required страницам.
-# 'auth.login' означает: функция 'login' в Blueprint с именем 'auth'.
-login_manager.login_view = 'auth.login'
-# Сообщение, которое будет показано пользователю при перенаправлении на логин.
-login_manager.login_message = "Пожалуйста, войдите для доступа к этой странице."
-# Категория flash-сообщения (используется, если вы показываете flash-сообщения в шаблоне).
-login_manager.login_message_category = "warning"
+module_logger = logging.getLogger(__name__)
 
 # --- Фабрика приложения Flask ---
-def create_app():
-    """
-    Создает и конфигурирует экземпляр приложения Flask.
-    Это основной паттерн "Application Factory".
-    """
-    # Создаем сам объект Flask.
-    # __name__ используется Flask для определения пути к шаблонам и статике.
-    # template_folder и static_folder указывают на папки относительно 'app'.
-    app = Flask(__name__, template_folder='templates', static_folder='static')
-    app.logger.info('Создание экземпляра Flask приложения...')
+def create_app(config_name: Optional[str] = None, test_config: Optional[Dict[str, Any]] = None) -> Flask:
+    global cors, socketio, login_manager
 
-    # --- Конфигурация приложения ---
-    # Загрузка SECRET_KEY из переменных окружения. КРИТИЧЕСКИ ВАЖНО для безопасности сессий!
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
-    if not app.config['SECRET_KEY']:
-        app.logger.critical("Критическая ошибка: Переменная окружения SECRET_KEY не установлена!")
-        # Прерываем запуск, если ключ не задан.
-        raise ValueError("Необходимо установить SECRET_KEY в переменных окружения")
+    app = Flask(__name__, instance_relative_config=True)
+    module_logger.info(f"Создание экземпляра Flask-приложения (PID: {os.getpid()}). Имя модуля: {app.name}")
 
-    # Установка флага TESTING из переменной окружения или значения по умолчанию
-    # Это значение будет использоваться в conftest.py для настройки тестов.
-    app.config['TESTING'] = os.environ.get('FLASK_ENV') == 'testing'
+    # --- Загрузка конфигурации ---
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-super-secret-key-for-dev-only')
+    if app.config['SECRET_KEY'] == 'default-super-secret-key-for-dev-only' and os.getenv('FLASK_ENV') == 'production':
+        module_logger.warning("КРИТИЧЕСКОЕ ПРЕДУПРЕЖДЕНИЕ: Используется SECRET_KEY по умолчанию в production-режиме!")
+    app.config['DATABASE_URL'] = os.getenv('DATABASE_URL')
+    app.config['FLASK_ENV'] = os.getenv('FLASK_ENV', 'production')
+    #app.config['DEBUG'] = app.config['FLASK_ENV'] == 'development'
 
-    # --- Настройка Логирования ---
-    # Определяем, как будет работать логирование в зависимости от режима.
-    if os.environ.get('FLASK_ENV') == 'production' or not app.debug:
-        # В production используем логгер WSGI-сервера (Gunicorn).
-        gunicorn_logger = logging.getLogger('gunicorn.error')
-        app.logger.handlers = gunicorn_logger.handlers
-        app.logger.setLevel(gunicorn_logger.level)
-        app.logger.info('Логирование настроено на использование логгера Gunicorn.')
+    app.config['DEBUG'] = os.getenv('FLASK_DEBUG', False)
+    if app.config['DEBUG']: # Которое должно быть True при FLASK_ENV=development
+        logging.basicConfig(level=logging.DEBUG) 
+        app.logger.setLevel(logging.DEBUG)
+        module_logger.setLevel(logging.DEBUG) # <<< ДОБАВЬ ЭТО ЯВНО ДЛЯ module_logger
+        module_logger.info("Уровень логирования app.app (module_logger) установлен в DEBUG.") # Проверка
+
+    if test_config:
+        app.config.from_mapping(test_config)
+        module_logger.info("Загружена тестовая конфигурация.")
+    module_logger.info(f"Режим работы Flask: {app.config['FLASK_ENV']}. DEBUG: {app.config['DEBUG']}")
+
+    # --- Настройка логирования Flask ---
+    if app.config['DEBUG']:
+        logging.basicConfig(level=logging.DEBUG)
+        app.logger.setLevel(logging.DEBUG)
+        module_logger.info("Уровень логирования Flask установлен в DEBUG.")
     else:
-        # В development или testing используем базовую конфигурацию с выводом в консоль.
-        log_level = logging.DEBUG if app.config['TESTING'] else logging.INFO
-        logging.basicConfig(level=log_level, format='%(asctime)s %(levelname)s %(name)s:%(lineno)d - %(message)s')
-        app.logger.info(f'Логирование настроено для разработки/тестирования (Уровень: {logging.getLevelName(log_level)}).')
+        logging.basicConfig(level=logging.INFO)
+        app.logger.setLevel(logging.INFO)
+        module_logger.info("Уровень логирования Flask установлен в INFO.")
 
-    # --- Регистрация Команд CLI ---
-    # Добавляем кастомные команды, которые можно будет вызывать через `flask <имя_команды>`.
-    app.cli.add_command(create_user_command)
-    app.logger.info('Flask CLI команда create-user зарегистрирована.')
-    app.cli.add_command(create_api_key_command)
-    app.logger.info('Flask CLI команда create-api-key зарегистрирована.')
+    # --- Инициализация расширений Flask ---
+    cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+    module_logger.info("Flask-CORS инициализирован.")
+    socketio = SocketIO(app, async_mode='eventlet', manage_session=True, cors_allowed_origins="*")
+    module_logger.info("Flask-SocketIO инициализирован с async_mode='eventlet'.")
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'auth.login'
+    login_manager.login_message = "Пожалуйста, войдите в систему для доступа к этой странице."
+    login_manager.login_message_category = "info"
+    module_logger.info(f"Flask-Login инициализирован. Страница входа: '{login_manager.login_view}'.")
 
-    # --- Инициализация Пула Соединений с БД ---
-    # Используем контекст приложения, чтобы убедиться, что конфиг загружен.
-    try:
-        with app.app_context():
-             db_connection.init_pool() # Вызываем функцию инициализации пула
-    except Exception as e:
-         # Если пул не создался - это критическая ошибка, приложение не сможет работать.
-         app.logger.critical(f"Не удалось инициализировать пул БД при старте приложения: {e}", exc_info=True)
-         raise # Прерываем запуск
-
-    # --- Регистрация обработчиков для управления соединением БД ---
-    # Эти функции будут вызываться Flask автоматически для каждого запроса.
-    @app.before_request
-    def before_request_func():
-        """Получает соединение из пула перед обработкой запроса."""
+    @login_manager.user_loader
+    def load_user_from_db(user_id_str: str) -> Optional[User]:
+        if not user_id_str: return None
         try:
-            # Попытка получить соединение и сохранить его в контексте запроса 'g'.
-            # 'g' - это специальный объект Flask, доступный только во время обработки одного запроса.
-            db_connection.get_connection()
-        except RuntimeError as e:
-            # Логируем ошибку, если не удалось получить соединение.
-            # Можно раскомментировать abort, чтобы прерывать запрос с ошибкой 503 Service Unavailable.
-            app.logger.error(f"Не удалось получить соединение с БД для запроса {request.path}: {e}")
-            # import flask; flask.abort(503, description="Database connection failed.")
+            user_id = int(user_id_str)
+            # Используем соединение из g или новое, если нужно
+            conn_for_loader = getattr(g, 'db_conn', None)
+            needs_new_conn = conn_for_loader is None or conn_for_loader.closed
+            
+            actual_conn_source = None
+            if needs_new_conn:
+                module_logger.debug(f"load_user_from_db: g.db_conn отсутствует/закрыто. Получаем новое соединение.")
+                actual_conn_source = get_connection() # Это контекстный менеджер
+            else:
+                actual_conn_source = conn_for_loader # Используем существующее (без with)
+
+            # Логика работы с соединением
+            user_data_dict: Optional[Dict] = None
+            if needs_new_conn:
+                with actual_conn_source as new_conn_ctx: # Используем with для нового соединения
+                    cursor = new_conn_ctx.cursor() # Предполагаем RealDictCursor из get_connection
+                    user_data_dict = user_repository.get_user_by_id(cursor, user_id)
+            else: # Используем существующее соединение из g (без with)
+                # Важно: курсор g.db_cursor должен быть уже создан в before_request
+                if hasattr(g, 'db_cursor') and g.db_cursor and not g.db_cursor.closed:
+                    user_data_dict = user_repository.get_user_by_id(g.db_cursor, user_id)
+                else: # Если курсора нет, создаем временный из g.db_conn
+                    module_logger.warning("load_user_from_db: g.db_cursor отсутствует или закрыт, создаем временный.")
+                    with conn_for_loader.cursor() as temp_cursor: # Временный курсор
+                         user_data_dict = user_repository.get_user_by_id(temp_cursor, user_id)
+
+            if user_data_dict:
+                module_logger .debug(f"load_user_from_db: Пользователь ID {user_id} найден (данные: {user_data_dict.get('username')}).")
+                return User(id=user_data_dict['id'], username=user_data_dict['username'],
+                            password_hash=user_data_dict['password_hash'], is_active=user_data_dict['is_active'])
+            else:
+                module_logger .debug(f"load_user_from_db: Пользователь ID {user_id} не найден.")
+                return None
+        except ValueError:
+            module_logger.warning(f"load_user_from_db: Неверный формат user_id: '{user_id_str}'.")
+            return None
+        except psycopg2.Error as e_load_user_db:
+            module_logger.error(f"load_user_from_db: Ошибка БД при загрузке user ID {user_id_str}: {e_load_user_db}", exc_info=True)
+            return None
+        except Exception as e_load_user:
+            module_logger.error(f"load_user_from_db: Неожиданная ошибка при загрузке user ID {user_id_str}: {e_load_user}", exc_info=True)
+            return None
+
+    # --- Регистрация обработчиков запросов ---
+    @app.before_request
+    def before_request_setup_db():
+        if not hasattr(g, 'db_conn') or g.db_conn is None or g.db_conn.closed:
+            try:
+                if db_pool is None:
+                    module_logger.critical("Пул db_pool не инициализирован в db_connection.py!")
+                    g.db_conn = None; g.db_cursor = None; return
+                
+                # Получаем соединение из пула. get_connection() теперь контекстный менеджер,
+                # но здесь нам нужно сохранить соединение в g на время запроса.
+                # Поэтому напрямую используем db_pool.getconn().
+                # Контекстный менеджер get_connection() сам вернет его в пул.
+                # Для before_request/teardown_appcontext лучше управлять соединением явно.
+                g.db_conn = db_pool.getconn()
+                g.db_cursor = g.db_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) # Используем RealDictCursor
+                module_logger.debug(f"Соединение с БД (ID: {id(g.db_conn)}) получено из пула и установлено в g.db_conn.")
+            except psycopg2.Error as e_getconn_before:
+                module_logger.error(f"Ошибка получения соединения из пула в before_request: {e_getconn_before}", exc_info=True)
+                g.db_conn = None; g.db_cursor = None
+            except Exception as e_setup_g: # Ловим другие возможные ошибки, если get_connection() изменился
+                module_logger.error(f"Неожиданная ошибка при установке g.db_conn в before_request: {e_setup_g}", exc_info=True)
+                g.db_conn = None; g.db_cursor = None
+
 
     @app.teardown_appcontext
-    def teardown_db(exception=None):
-        """Возвращает соединение обратно в пул после завершения обработки запроса."""
-        # Эта функция вызывается всегда, даже если во время запроса произошла ошибка.
-        db_connection.close_connection(exception)
+    def teardown_db_connection(exception=None):
+        cursor = g.pop('db_cursor', None)
+        if cursor is not None:
+            try:
+                if not cursor.closed: cursor.close()
+                module_logger.debug("Курсор БД успешно закрыт в teardown_appcontext.")
+            except psycopg2.Error as e_close_cur_tear:
+                module_logger.error(f"Ошибка при закрытии курсора БД в teardown: {e_close_cur_tear}", exc_info=True)
 
-    # --- Инициализация Расширений с приложением 'app' ---
+        conn = g.pop('db_conn', None)
+        if conn is not None:
+            if db_pool is None:
+                module_logger.warning("Пул db_pool не был инициализирован, не могу вернуть соединение из g.db_conn в teardown.")
+                try:
+                    if not conn.closed: conn.close()
+                except psycopg2.Error: pass
+                return
+            try:
+                # Если была ошибка, psycopg2 мог пометить соединение как "broken".
+                # putconn сам разберется с этим (не вернет сломанное соединение в пул или закроет его).
+                db_pool.putconn(conn)
+                module_logger.debug(f"Соединение с БД (ID: {id(conn)}) возвращено в пул в teardown_appcontext.")
+            except psycopg2.Error as e_putconn_tear:
+                module_logger.error(f"Ошибка при возврате соединения (ID: {id(conn)}) в пул в teardown: {e_putconn_tear}", exc_info=True)
 
-    # <<< ИЗМЕНЕНИЕ: Условная инициализация SocketIO в зависимости от режима TESTING >>>
-    testing = app.config.get('TESTING', False) # Получаем флаг TESTING
-    if testing:
-        # Для тестов используем 'threading'. Он не требует eventlet/gevent
-        # и лучше работает в разных окружениях, включая Windows.
-        # Это важно, чтобы тесты могли запускаться локально без Docker.
-        socketio_async_mode = 'threading'
-        app.logger.info("Инициализация SocketIO в режиме 'threading' для тестов.")
-    else:
-        # Для обычного запуска (в Docker) используем 'eventlet',
-        # т.к. он установлен в Dockerfile и указан в CMD для Gunicorn.
-        socketio_async_mode = 'eventlet'
-        app.logger.info("Инициализация SocketIO в режиме 'eventlet'.")
+    # --- Регистрация кастомных обработчиков ошибок API ---
+    register_error_handlers(app)
+    module_logger.info("Кастомные обработчики ошибок API зарегистрированы.")
 
-    # Инициализируем SocketIO с приложением и выбранным async_mode.
-    # cors_allowed_origins="*" разрешает подключения с любого источника (для простоты).
-    # В production лучше указать конкретный домен фронтенда.
-    socketio.init_app(app, async_mode=socketio_async_mode, cors_allowed_origins="*")
-    # <<< КОНЕЦ ИЗМЕНЕНИЯ >>>
-
-    # Инициализируем Flask-Login с приложением 'app'.
-    login_manager.init_app(app)
-    app.logger.info('Flask-Login инициализирован.')
-
-    # --- Регистрация Маршрутов (Blueprints) и Обработчиков Ошибок ---
-    # Вызываем функцию из routes/__init__.py, которая зарегистрирует все наши Blueprints.
+    # --- Регистрация Blueprints (маршрутов) ---
     init_routes(app)
-    # Регистрируем глобальные обработчики ошибок из errors.py.
-    errors.register_error_handlers(app)
+    module_logger.info("Blueprints (маршруты) успешно инициализированы и зарегистрированы.")
 
-    app.logger.info("Flask приложение создано и сконфигурировано.")
-    # Возвращаем готовый экземпляр приложения.
+    # --- Регистрация кастомных CLI-команд ---
+    if hasattr(app, 'cli'):
+        app.cli.add_command(user_cli) # <<< ИЗМЕНЕНО: Регистрируем группу user_cli
+        app.cli.add_command(api_key_cli) # <<< ИЗМЕНЕНО: Регистрируем группу api_key_cli
+        module_logger.info("Кастомные CLI-команды (группы: user, apikey) зарегистрированы.")
+    else:
+        module_logger.warning("Объект app.cli не найден, CLI-команды не будут зарегистрированы.")
+
+    # --- Регистрация функции закрытия пула при завершении приложения ---
+    import atexit
+    atexit.register(close_db_pool)
+    module_logger.info("Функция close_db_pool зарегистрирована для выполнения при завершении приложения.")
+
+    module_logger.info("Экземпляр Flask-приложения успешно создан и сконфигурирован.")
     return app
 
-# --- Точка входа для прямого запуска (не используется Gunicorn) ---
-# Этот блок выполняется, только если скрипт запущен напрямую (python app/app.py).
-# Полезно для локальной отладки БЕЗ Docker или Gunicorn.
-# if __name__ == '__main__':
-#     # Создаем приложение через фабрику
-#     app = create_app()
-#     # Запускаем сервер разработки Flask + SocketIO
-#     # host='0.0.0.0' делает сервер доступным по сети (не только localhost)
-#     # debug=True включает режим отладки Flask
-#     # use_reloader=True автоматически перезапускает сервер при изменении кода
-#     # ВАЖНО: Не используйте debug=True и use_reloader=True в production!
-#     socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=True)
+# --- Блок для прямого запуска (для отладки) ---
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(name)s %(threadName)s: %(message)s')
+    flask_app = create_app()
+    if socketio:
+        module_logger.info("Запуск Flask-приложения с Flask-SocketIO (eventlet) для разработки...")
+        socketio.run(flask_app, host='0.0.0.0', port=int(os.getenv('FLASK_RUN_PORT', 5000)), debug=flask_app.config['DEBUG'])
+    else:
+        module_logger.warning("Flask-SocketIO не инициализирован. Запуск стандартного сервера Flask.")
+        flask_app.run(host='0.0.0.0', port=int(os.getenv('FLASK_RUN_PORT', 5000)), debug=flask_app.config['DEBUG'])

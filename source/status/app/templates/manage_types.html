@@ -1,176 +1,249 @@
 <!-- status/app/templates/manage_types.html -->
-{% extends "base.html" %}
-{% block title %}Управление Типами Узлов - Мониторинг ПТК{% endblock %}
+{% extends "base.html" %} <!-- Наследование от базового шаблона -->
+{% block title %}Управление Типами Узлов - Мониторинг ПТК{% endblock %} <!-- Заголовок страницы -->
 
 {% block head_extra %}
+<!-- Дополнительные стили для этой страницы -->
 <style>
     /* --- Основные стили страницы --- */
-    .manage-container { display: grid; grid-template-columns: minmax(350px, 1fr) 2fr; gap: 2rem; align-items: start; margin-top: 1rem; }
-    .form-section { background-color: var(--card-bg); padding: 1.5rem; border-radius: 5px; box-shadow: var(--card-shadow); position: sticky; top: 80px; /* Липкая форма */ }
-    .form-section h3, .list-section h3 { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 0.8rem; margin-bottom: 1rem; }
-    .list-section { background-color: var(--card-bg); padding: 1.5rem; border-radius: 5px; box-shadow: var(--card-shadow); border: 1px solid var(--border-color); }
+    .manage-container {
+        display: grid;
+        grid-template-columns: minmax(380px, 1.2fr) 2fr; /* Колонка для формы чуть шире */
+        gap: 2rem;
+        align-items: start; /* Форма и список выравниваются по верху */
+        margin-top: 1rem;
+    }
+    .form-section { /* Секция с формой для типа узла и его свойств */
+        background-color: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: 5px;
+        box-shadow: var(--card-shadow);
+        position: sticky; /* Делаем форму "липкой" при прокрутке */
+        top: 80px; /* Отступ от верхнего края, чтобы не перекрывалась навбаром */
+        align-self: start; /* Чтобы не растягивалась по высоте списка */
+    }
+    .form-section h3, .form-section h4, .list-section h3 { /* Заголовки секций */
+        margin-top: 0;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 0.8rem;
+        margin-bottom: 1rem;
+        font-weight: 500;
+    }
+    .list-section { /* Секция со списком типов узлов */
+        background-color: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: 5px;
+        box-shadow: var(--card-shadow);
+        border: 1px solid var(--border-color);
+    }
 
-    /* --- Стили формы Типа Узла --- */
-    .form-grid-type { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.5rem; }
+    /* --- Стили формы для Типа Узла --- */
+    .form-grid-type { /* Сетка для полей формы типа узла */
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* Две равные колонки */
+        gap: 1rem 1.5rem; /* Отступы между ячейками */
+    }
     .form-group { margin-bottom: 1rem; }
     .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.95em; }
-    .form-group input[type="text"], .form-group input[type="number"], .form-group select, .form-group textarea {
-        width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1em;
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group select,
+    .form-group textarea {
+        width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px;
+        box-sizing: border-box; font-size: 1em;
     }
-    .form-group textarea { min-height: 60px; resize: vertical; grid-column: 1 / -1; } /* Описание на всю ширину */
-    .form-actions { margin-top: 1.5rem; text-align: right; display: flex; justify-content: flex-end; gap: 0.5rem; grid-column: 1 / -1; }
-    #cancel-edit-btn { background-color: var(--secondary-color); }
+    .form-group textarea#type-description { /* Описание типа узла на всю ширину */
+        min-height: 60px; resize: vertical; grid-column: 1 / -1;
+    }
+    .form-actions { /* Контейнер для кнопок формы типа */
+        margin-top: 1.5rem; text-align: right; display: flex;
+        justify-content: flex-end; gap: 0.5rem; grid-column: 1 / -1; /* Растягиваем на всю ширину сетки */
+    }
+    #cancel-edit-btn { background-color: var(--secondary-color); } /* Кнопка "Отмена" */
     #cancel-edit-btn:hover { background-color: #5a6268; }
 
-    /* --- Предпросмотр иконки в форме --- */
-    #icon-preview-section { margin-top: 1rem; grid-column: 1 / -1; }
-    #icon-preview-section h5 { margin-bottom: 0.5rem; font-size: 0.95em; color: #555; }
-    .icon-preview-container { display: flex; align-items: center; gap: 10px; padding: 8px; background-color: #f8f9fa; border: 1px solid #eee; border-radius: 4px;}
-    .icon-preview-element { /* Стили для самого блока иконки */
-        display: inline-block; width: 32px; height: 32px; background-color: grey; /* Цвет будет переопределен JS */
-        -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-        -webkit-mask-position: center; mask-position: center; border: 1px solid #ccc; flex-shrink: 0; border-radius: 3px;
+    /* --- Предпросмотр иконки в форме типа узла --- */
+    #icon-preview-section { margin-top: 1rem; grid-column: 1 / -1; /* На всю ширину сетки */ }
+    #icon-preview-section h5 { margin-bottom: 0.5rem; font-size: 0.95em; color: #555; font-weight: 500; }
+    .icon-preview-container {
+        display: flex; align-items: center; gap: 10px; padding: 8px;
+        background-color: #f8f9fa; border: 1px solid #eee; border-radius: 4px;
     }
-    .icon-preview-info { font-size: 0.9em; color: #555; }
+    .icon-preview-element { /* Элемент для отображения самой иконки */
+        display: inline-block; width: 32px; height: 32px;
+        background-color: grey; /* Цвет фона по умолчанию, будет переопределен JavaScript */
+        -webkit-mask-size: contain; mask-size: contain;
+        -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+        -webkit-mask-position: center; mask-position: center;
+        border: 1px solid #ccc; flex-shrink: 0; border-radius: 3px;
+    }
+    .icon-preview-info { font-size: 0.9em; color: #555; } /* Текстовая информация об иконке */
 
-    /* --- Стили списка Типов --- */
+    /* --- Стили для таблицы списка Типов Узлов --- */
     .types-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    .types-table th, .types-table td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; vertical-align: middle; }
+    .types-table th, .types-table td {
+        border: 1px solid var(--border-color); padding: 8px 12px;
+        text-align: left; vertical-align: middle;
+    }
     .types-table th { background-color: var(--light-grey); font-weight: 600; white-space: nowrap; }
-    .types-table .actions { text-align: center; white-space: nowrap; width: 90px; } /* Фикс. ширина для кнопок */
-    .types-table .actions button { padding: 4px 8px; font-size: 0.9em; margin-right: 5px; cursor: pointer; border: none; border-radius: 3px; color: white; }
+    .types-table .actions { text-align: center; white-space: nowrap; width: 90px; } /* Кнопки действий */
+    .types-table .actions button {
+        padding: 4px 8px; font-size: 0.9em; margin-right: 5px; cursor: pointer;
+        border: none; border-radius: 3px; color: white;
+    }
     .types-table .edit-btn { background-color: var(--warning-color); color: #333; }
     .types-table .delete-btn { background-color: var(--danger-color); }
-    .types-table tr.selected { background-color: #e2f3ff; }
-    .types-table tr:not(.selected):hover { background-color: #f8f9fa; cursor: pointer;}
-    .types-table .icon-cell { text-align: center; width: 60px; } /* Центрируем иконку */
+    .types-table tr.selected { background-color: #e2f3ff; } /* Подсветка выбранной строки */
+    .types-table tr:not(.selected):hover { background-color: #f8f9fa; cursor: pointer;} /* Подсветка при наведении */
+    .types-table .icon-cell { text-align: center; width: 60px; } /* Ячейка для иконки */
     .types-table .icon-cell img { max-width: 20px; max-height: 20px; vertical-align: middle; }
-    /* Иерархия в таблице */
-    .types-table .level-0 { font-weight: bold; }
-    .types-table .level-1 td:first-child { padding-left: 30px !important; }
-    .types-table .level-2 td:first-child { padding-left: 50px !important; }
-    .types-table .level-3 td:first-child { padding-left: 70px !important; }
+    /* Иерархия в таблице типов */
+    .types-table .level-0 { font-weight: bold; } /* Корневые типы - жирным */
+    .types-table .level-1 td:first-child { padding-left: 30px !important; } /* Отступ для 1-го уровня */
+    .types-table .level-2 td:first-child { padding-left: 50px !important; } /* Отступ для 2-го уровня */
+    .types-table .level-3 td:first-child { padding-left: 70px !important; } /* Отступ для 3-го уровня */
 
-    /* --- Стили секции Свойств (почти без изменений) --- */
-    #properties-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 2px solid var(--primary-color); }
-    #properties-section h4 { margin-top: 0; margin-bottom: 1rem; }
-    .properties-list { margin-bottom: 1.5rem; max-height: 300px; overflow-y: auto; border: 1px solid #eee; padding: 0.5rem; border-radius: 4px;}
-    .property-item { display: flex; align-items: center; gap: 10px; margin-bottom: 0.8rem; padding-bottom: 0.8rem; border-bottom: 1px dashed #eee; }
+    /* --- Стили для секции Свойств выбранного типа --- */
+    #properties-section { /* Секция для управления свойствами выбранного типа */
+        margin-top: 2rem; padding-top: 1.5rem;
+        border-top: 2px solid var(--primary-color); /* Разделительная линия */
+    }
+    #properties-section h4 { margin-top: 0; margin-bottom: 1rem; font-weight: 500;}
+    .properties-list { /* Контейнер для списка текущих свойств */
+        margin-bottom: 1.5rem; max-height: 300px; overflow-y: auto;
+        border: 1px solid #eee; padding: 0.8rem; border-radius: 4px; background-color: #fff;
+    }
+    .property-item { /* Один элемент (свойство) в списке */
+        display: flex; align-items: center; gap: 10px; margin-bottom: 0.8rem;
+        padding-bottom: 0.8rem; border-bottom: 1px dashed #eee;
+    }
     .property-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .property-item label { flex-basis: 180px; flex-shrink: 0; font-size: 0.9em; color: #333; text-align: right; }
-    .property-item input { flex-grow: 1; }
-    .property-item button { padding: 3px 7px; font-size: 0.85em; flex-shrink: 0; background-color: var(--danger-color);}
-    #add-property-form { display: flex; gap: 10px; align-items: flex-end; }
-    #add-property-form select { flex-basis: 200px; }
-    #add-property-form input { flex-grow: 1; }
-    #add-property-form button { flex-shrink: 0; }
+    .property-item label { /* Лейбл (имя свойства) */
+        flex-basis: 180px; flex-shrink: 0; font-size: 0.9em;
+        color: #333; text-align: right;
+    }
+    .property-item input[type="text"] { flex-grow: 1; } /* Поле для значения свойства */
+    .property-item button { /* Кнопки "Редактировать/Удалить" свойство */
+        padding: 3px 7px; font-size: 0.85em; flex-shrink: 0;
+    }
+    .property-item .delete-prop-btn { background-color: var(--danger-color); } /* Красная кнопка удаления */
 
-    /* --- Общие стили для фидбека --- */
-    .error-feedback { color: var(--danger-color); font-size: 0.9em; margin-top: 5px; }
-    .success-feedback { color: var(--success-color); font-size: 0.9em; margin-top: 5px; }
-    .feedback-area { min-height: 1.5em; margin-top: 1rem; font-weight: 500; text-align: center; padding: 5px; border-radius: 3px; }
-    .feedback-area.error-feedback { color: var(--danger-color); background-color: #f8d7da; border: 1px solid #f5c6cb; }
-    .feedback-area.success-feedback { color: var(--success-color); background-color: #d4edda; border: 1px solid #c3e6cb;}
-    #form-feedback, #list-feedback, #prop-feedback { min-height: 1.5em; margin-top: 1rem; font-weight: 500; text-align: center; }
+    #add-property-form { /* Форма для добавления нового свойства */
+        display: flex; gap: 10px; align-items: flex-end; /* Элементы в строку, выровнены по низу */
+    }
+    #add-property-form select#property-type-select { flex-basis: 200px; } /* Селект типа свойства */
+    #add-property-form input#property-value-input { flex-grow: 1; }    /* Поле для значения */
+    #add-property-form button[type="submit"] { flex-shrink: 0; }     /* Кнопка "Установить" */
+
+    /* --- Общие стили для сообщений (feedback) и ошибок валидации --- */
+    .feedback-area { /* ... (как в manage_api_keys.html) ... */ }
+    .error-feedback { /* ... (как в manage_api_keys.html) ... */ }
+    .loading-message { /* ... (как в manage_api_keys.html) ... */ }
+    .error-message { /* ... (как в manage_api_keys.html) ... */ }
+    /* ID для специфичных фидбеков */
+    #form-feedback { /* Общие ошибки/сообщения формы типа узла */ }
+    #list-feedback { /* Сообщения над списком типов */ }
+    #prop-feedback { /* Сообщения в секции свойств */ }
+    .validation-message { /* Сообщения валидации под полями JSON в панели свойств */
+        font-size: 0.85em; margin-top: 5px; display: block;
+    }
+    .validation-message.valid { color: var(--success-color); }
+    .validation-message.invalid { color: var(--danger-color); }
 </style>
 {% endblock %}
 
 {% block content %}
 <h2>Управление Типами Узлов и их Свойствами</h2>
 
-<div id="list-feedback"></div> <!-- Фидбек для списка -->
+<!-- Область для общих сообщений над списком (например, успех/ошибка CRUD типа) -->
+<div id="list-feedback" class="feedback-area"></div>
 
 <div class="manage-container">
 
-    <!-- Секция с формой для ТИПА УЗЛА -->
+    <!-- Секция с формой для создания/редактирования ТИПА УЗЛА -->
     <section class="form-section">
-        <h3 id="form-title">Добавить Тип Узла</h3>
+        <h3 id="form-title">Добавить Новый Тип Узла</h3>
         <form id="type-form">
-            <input type="hidden" id="type-id"> <!-- Скрытое поле для ID при редактировании -->
+            <input type="hidden" id="type-id"> <!-- Скрытое поле для ID типа при редактировании -->
 
-            <div class="form-grid-type">
-                <!-- Имя типа -->
+            <div class="form-grid-type"> <!-- Используем сетку для полей -->
                 <div class="form-group">
                     <label for="type-name">Имя типа *</label>
-                    <input type="text" id="type-name" required>
-                     <div class="error-feedback" id="type-name-error"></div> <!-- Ошибка валидации -->
+                    <input type="text" id="type-name" required placeholder="Например, Сервер Windows">
+                    <div class="error-feedback" id="type-name-error"></div>
                 </div>
-                <!-- Родительский тип -->
                  <div class="form-group">
                     <label for="type-parent">Родительский тип</label>
                     <select id="type-parent">
-                        <option value="">-- Нет (Корневой) --</option>
-                        <!-- Динамическая загрузка -->
+                        <option value="">-- Нет (Корневой тип) --</option>
+                        <!-- Опции для этого селекта будут загружены динамически JavaScript'ом -->
                     </select>
-                     <div class="error-feedback" id="type-parent-error"></div>
+                    <div class="error-feedback" id="type-parent-error"></div>
                 </div>
-                <!-- Приоритет -->
                  <div class="form-group">
-                    <label for="type-priority">Приоритет</label>
+                    <label for="type-priority">Приоритет (для сортировки)</label>
                     <input type="number" id="type-priority" value="10" min="0">
+                    <div class="error-feedback" id="type-priority-error"></div>
                 </div>
-                <!-- Имя файла иконки -->
                 <div class="form-group">
-                    <label for="type-icon-filename">Имя файла иконки (в /static/icons/)</label>
-                    <input type="text" id="type-icon-filename" placeholder="например, server.svg">
-                     <div class="error-feedback" id="type-icon-filename-error"></div>
+                    <label for="type-icon-filename">Имя файла иконки (из /static/icons/)</label>
+                    <input type="text" id="type-icon-filename" placeholder="Например, server.svg или chip.png">
+                    <div class="error-feedback" id="type-icon-filename-error"></div>
                 </div>
 
-                <!-- Описание -->
-                <div class="form-group">
+                <!-- Описание типа узла (на всю ширину сетки) -->
+                <div class="form-group" style="grid-column: 1 / -1;">
                     <label for="type-description">Описание</label>
-                    <textarea id="type-description"></textarea>
+                    <textarea id="type-description" placeholder="Краткое описание назначения этого типа узлов..."></textarea>
                 </div>
 
-                <!-- Предпросмотр иконки -->
-                <div id="icon-preview-section" style="display: none;">
+                <!-- Секция для предпросмотра иконки (появляется при вводе имени файла) -->
+                <div id="icon-preview-section" style="display: none; grid-column: 1 / -1;">
                      <h5>Предпросмотр иконки:</h5>
                      <div class="icon-preview-container">
                          <span class="icon-preview-element" id="icon-preview"></span>
-                         <span class="icon-preview-info" id="icon-preview-info"></span>
+                         <span class="icon-preview-info" id="icon-preview-info">(Имя файла и цвет будут здесь)</span>
                      </div>
                  </div>
 
-                <!-- Фидбек формы и кнопки -->
-                <div id="form-feedback" class="feedback-area error-feedback"></div> <!-- Общие ошибки формы -->
-                <div class="form-actions">
+                <!-- Область для общих ошибок формы типа или сообщений об успехе -->
+                <div id="form-feedback" class="feedback-area" style="grid-column: 1 / -1;"></div>
+                <!-- Кнопки действий для формы типа узла -->
+                <div class="form-actions" style="grid-column: 1 / -1;">
                     <button type="button" id="cancel-edit-btn" style="display: none;">Отмена</button>
                     <button type="submit" id="submit-btn">Добавить Тип</button>
                 </div>
-            </div> <!-- Конец form-grid-type -->
+            </div> <!-- Конец .form-grid-type -->
         </form>
 
-        <!-- Секция для управления свойствами ВЫБРАННОГО типа -->
-        <div id="properties-section" style="display: none;">
-            <h4 id="properties-title">Свойства для типа: </h4>
+        <!-- Секция для управления свойствами ВЫБРАННОГО типа узла -->
+        <div id="properties-section" style="display: none;"> <!-- Изначально скрыта -->
+            <h4 id="properties-title">Свойства для типа: <span style="font-style:italic;">(выберите тип из списка)</span></h4>
+            <!-- Фидбек для операций со свойствами -->
             <div id="prop-feedback" class="feedback-area"></div>
 
-            <!-- Текущие свойства -->
-            <h5>Текущие свойства:</h5>
+            <h5>Текущие назначенные свойства:</h5>
             <div class="properties-list" id="properties-list-container">
-                <p>Выберите тип узла из списка справа для управления его свойствами.</p>
+                <p>Выберите тип узла из списка справа, чтобы просмотреть или изменить его свойства.</p>
             </div>
 
-            <!-- Форма добавления/изменения свойства -->
-            <h5>Добавить/Изменить свойство:</h5>
+            <h5>Добавить или изменить свойство:</h5>
             <form id="add-property-form">
                 <div class="form-group" style="display: flex; gap: 10px; align-items: flex-end;">
-                    <!-- Выбор типа свойства -->
                     <div style="flex-grow: 1;">
                         <label for="property-type-select">Тип свойства *</label>
                         <select id="property-type-select" required>
                             <option value="">-- Выберите тип свойства --</option>
+                            <!-- Опции (типы свойств из node_property_types) загружаются JS -->
                         </select>
                     </div>
-                    <!-- Ввод значения -->
                     <div style="flex-grow: 2;">
                         <label for="property-value-input">Значение *</label>
-                        <input type="text" id="property-value-input" required>
+                        <input type="text" id="property-value-input" required placeholder="Введите значение свойства">
                     </div>
-                    <!-- Кнопка -->
                     <button type="submit" style="flex-shrink: 0;">Установить</button>
                 </div>
-                <div class="error-feedback" id="add-property-form-error"></div>
+                <div class="error-feedback" id="add-property-form-error"></div> <!-- Для ошибок этой мини-формы -->
             </form>
         </div>
     </section>
@@ -178,839 +251,678 @@
     <!-- Секция со списком ТИПОВ УЗЛОВ -->
     <section class="list-section">
         <h3>Список Типов Узлов</h3>
+        <p style="font-size:0.9em; color:#555;">Кликните на строку типа, чтобы управлять его свойствами в форме слева.</p>
         <table class="types-table">
             <thead>
                 <tr>
                     <th>Имя Типа</th>
-                    <th>Родитель</th>
-                    <th>Иконка</th> <!-- Колонка иконки -->
+                    <th>Родительский тип</th>
+                    <th>Иконка</th>
                     <th>Приоритет</th>
                     <th>Действия</th>
                 </tr>
             </thead>
-            <tbody id="type-list">
-                <tr><td colspan="5" class="loading-message">Загрузка списка типов...</td></tr>
+            <tbody id="type-list-table-body"> <!-- Изменен ID для уникальности -->
+                <!-- Начальное сообщение о загрузке -->
+                <tr><td colspan="5" class="loading-message">Загрузка списка типов узлов...</td></tr>
             </tbody>
         </table>
+        <!-- Пагинация для типов узлов здесь не используется, отображаем всё дерево -->
     </section>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // --- Получение элементов DOM ---
-    // Форма типа узла
-    const typeForm = document.getElementById('type-form');
-    const typeFormTitle = document.getElementById('form-title');
-    const typeSubmitBtn = document.getElementById('submit-btn');
-    const typeCancelBtn = document.getElementById('cancel-edit-btn');
-    const typeList = document.getElementById('type-list'); // tbody таблицы
-    const typeParentSelect = document.getElementById('type-parent');
-    const typeFormFeedback = document.getElementById('form-feedback');
-    const listFeedback = document.getElementById('list-feedback'); // Фидбек над таблицей
-    // Поля формы типа
-    const typeIdInput = document.getElementById('type-id');
-    const typeNameInput = document.getElementById('type-name');
-    const typePriorityInput = document.getElementById('type-priority');
-    const typeIconFilenameInput = document.getElementById('type-icon-filename'); // Поле для имени файла иконки
-    const typeDescriptionTextarea = document.getElementById('type-description');
-    // Предпросмотр иконки
-    const iconPreviewSection = document.getElementById('icon-preview-section');
-    const iconPreviewElement = document.getElementById('icon-preview');
-    const iconPreviewInfo = document.getElementById('icon-preview-info');
+    // --- Получение ссылок на DOM-элементы ---
+    // Элементы формы для управления Типом Узла
+    const typeFormElement = document.getElementById('type-form');
+    const typeFormTitleElement = document.getElementById('form-title');
+    const typeSubmitButton = document.getElementById('submit-btn');
+    const typeCancelButton = document.getElementById('cancel-edit-btn');
+    const typeListTableBody = document.getElementById('type-list-table-body'); // Обновленный ID
+    const typeParentSelectElement = document.getElementById('type-parent');
+    const typeFormFeedbackElement = document.getElementById('form-feedback'); // Для ошибок/успеха формы типа
+    const listFeedbackElement = document.getElementById('list-feedback');   // Для сообщений над списком типов
 
-    // Секция и форма свойств
-    const propsSection = document.getElementById('properties-section');
-    const propsTitle = document.getElementById('properties-title');
-    const propsListContainer = document.getElementById('properties-list-container');
-    const addPropForm = document.getElementById('add-property-form');
-    const propTypeSelect = document.getElementById('property-type-select');
-    const propValueInput = document.getElementById('property-value-input');
-    const propFeedback = document.getElementById('prop-feedback');
+    // Поля формы типа узла
+    const typeIdInputElement = document.getElementById('type-id'); // Скрытое поле для ID
+    const typeNameInputElement = document.getElementById('type-name');
+    const typePriorityInputElement = document.getElementById('type-priority');
+    const typeIconFilenameInputElement = document.getElementById('type-icon-filename');
+    const typeDescriptionTextareaElement = document.getElementById('type-description');
 
-    // --- API URL ---
-    const API_URL_NODE_TYPES = "{{ url_for('node_types.api_get_node_types') }}"; // GET (list), POST
-    const API_URL_NODE_TYPE_DETAIL_TPL = "{{ url_for('node_types.api_get_node_type', type_id=0) }}"; // GET, PUT, DELETE
-    const API_URL_NODE_PROPERTY_TYPES = "{{ url_for('node_properties.api_get_node_property_types') }}"; // GET list (без icon_filename)
-    const API_URL_NODE_TYPE_PROPERTIES_TPL = "{{ url_for('node_properties.api_get_node_properties', type_id=0) }}"; // GET, PUT (props)
-    const API_URL_NODE_TYPE_PROPERTY_DELETE_TPL = "{{ url_for('node_properties.api_delete_node_property', type_id=0, property_type_id=0) }}"; // DELETE prop
+    // Элементы для предпросмотра иконки
+    const iconPreviewSectionElement = document.getElementById('icon-preview-section');
+    const iconPreviewSpanElement = document.getElementById('icon-preview'); // Сам span для иконки
+    const iconPreviewInfoElement = document.getElementById('icon-preview-info'); // Текст под иконкой
 
-    // Базовый URL для иконок (для JS)
-    const ICONS_BASE_URL_JS = "{{ url_for('static', filename='icons/') }}";
+    // Элементы секции и формы для управления Свойствами выбранного Типа Узла
+    const propertiesSectionElement = document.getElementById('properties-section');
+    const propertiesTitleElement = document.getElementById('properties-title');
+    const propertiesListContainerElement = document.getElementById('properties-list-container'); // div для списка свойств
+    const addPropertyFormElement = document.getElementById('add-property-form');
+    const propertyTypeSelectElement = document.getElementById('property-type-select'); // select для выбора типа свойства
+    const propertyValueInputElement = document.getElementById('property-value-input');   // input для значения свойства
+    const propertyFormFeedbackElement = document.getElementById('prop-feedback'); // Фидбек для операций со свойствами
 
-    // --- Переменные состояния ---
-    let nodeTypesData = [];     // Кэш типов узлов (включая icon_filename)
-    let propertyTypesData = []; // Кэш типов свойств (без icon_filename)
-    let currentEditTypeId = null; // ID редактируемого типа
-    let selectedTypeIdForProps = null; // ID типа, для которого отображаются свойства
+    // --- API URL-адреса (генерируются Flask) ---
+    const API_URL_NODE_TYPES_CRUD = "{{ url_for('node_types.api_get_all_node_types') }}"; // Для GET (список) и POST (создание)
+    const API_URL_NODE_TYPE_DETAIL_TEMPLATE = "{{ url_for('node_types.api_get_node_type_by_id_route', type_id=0) }}"; // Шаблон для GET/PUT/DELETE по ID
+    const API_URL_NODE_PROPERTY_TYPES_LIST = "{{ url_for('node_properties.api_get_all_node_property_types') }}"; // Для списка типов СВОЙСТВ
+    const API_URL_NODE_TYPE_PROPERTIES_TEMPLATE = "{{ url_for('node_properties.api_get_properties_for_node_type', node_type_id=0) }}"; // GET, PUT для свойств КОНКРЕТНОГО типа узла
+    const API_URL_NODE_TYPE_PROPERTY_DELETE_TEMPLATE = "{{ url_for('node_properties.api_delete_single_node_property', node_type_id=0, property_type_id=0) }}"; // DELETE для конкретного свойства у типа
 
-    // --- Вспомогательные функции ---
+    const ICONS_BASE_STATIC_URL = "{{ url_for('static', filename='icons/') }}"; // Базовый путь к иконкам для JS
 
-    // Функция для выполнения запросов к API
-    async function fetchData(url, options = {}) {
-        const response = await fetch(url, options);
-        if (!response.ok) {
-            let errorText = `Ошибка сети: ${response.status} ${response.statusText}`;
-            let errorDetails = null;
-            let errorCode = 'NETWORK_ERROR'; // Код ошибки по умолчанию
+    // --- Переменные состояния приложения ---
+    let allNodeTypesDataCache = [];     // Кэш всех типов узлов (для таблицы и селекта родителей)
+    let allPropertyTypesDataCache = []; // Кэш всех доступных типов СВОЙСТВ (для селекта в форме свойств)
+    let currentEditingNodeTypeId = null; // ID типа узла, который редактируется (null при создании нового)
+    let selectedNodeTypeIdForPropsEditing = null; // ID типа узла, для которого отображаются/редактируются свойства
 
-            try {
-                 const errorData = await response.json();
-                 // Пытаемся извлечь полезную информацию из ответа API
-                 if (errorData && errorData.error) {
-                    errorCode = errorData.error.code || 'API_ERROR'; // Получаем код ошибки API, если есть
-                    // Формируем сообщение об ошибке
-                    if (errorData.error.message) {
-                         errorText += ` - ${errorData.error.message}`;
-                    } else if (typeof errorData.error === 'string') { // Если ошибка просто строка
-                         errorText += ` - ${errorData.error}`;
-                    }
-                    // Получаем детали, если они есть (для ошибок валидации), иначе берем сообщение или весь объект ошибки
-                    errorDetails = errorData.error.details || errorData.error.message || errorData.error;
-                 } else if (errorData && typeof errorData === 'string') { // Если ответ - просто строка
-                    errorText += ` - ${errorData}`;
-                    errorDetails = errorData;
-                 } else {
-                    // Если не удалось разобрать JSON или структура неизвестна
-                    errorDetails = errorData; // Сохраняем то, что пришло
-                 }
-            } catch (e) {
-                console.warn("Не удалось разобрать JSON ответа с ошибкой:", e);
-                // Попытка получить тело ответа как текст
-                try {
-                    const rawErrorText = await response.text();
-                    errorText += ` - ${rawErrorText}`;
-                    errorDetails = rawErrorText;
-                } catch (e2) { /* Не удалось получить и текст */ }
+    // --- Вспомогательные функции (fetchData, displayValidationErrors, clearValidationErrors, showFeedback) ---
+    // Эти функции можно скопировать из manage_api_keys.html или другого подобного шаблона,
+    // так как их логика универсальна. Убедитесь, что они используют правильные ID элементов для сообщений.
+    function showTypeListFeedback(message, isError = false) { showFeedback(listFeedbackElement, message, isError); }
+    function showTypeFormFeedback(message, isError = false) { showFeedback(typeFormFeedbackElement, message, isError); }
+    function showPropertyFeedback(message, isError = false) { showFeedback(propertyFormFeedbackElement, message, isError); }
+    // ... (остальные хелперы fetchData, displayValidationErrors, clearValidationErrors также нужны)
+    async function fetchData(url, options = {}) { /* ... (реализация из manage_api_keys.html) ... */ }
+    function displayValidationErrors(errors, feedbackElementId = 'form-feedback', fieldPrefix = '') { /* ... (реализация из manage_api_keys.html, адаптировать ID) ... */ }
+    function clearValidationErrors(feedbackElementId = 'form-feedback', formId = 'type-form') { /* ... (реализация из manage_api_keys.html, адаптировать ID) ... */ }
+    function showFeedback(element, message, isError = false) { /* ... (реализация из manage_api_keys.html) ... */ }
+    function populateSelect(selectElement, items, valueField, textField, placeholder, addHierarchy = false, excludeId = null) { /* ... (реализация из manage_subdivisions.html) ... */ }
+
+    /** Обновляет предпросмотр иконки на основе данных формы и загруженных свойств. */
+    function updateIconPreview() {
+        const filename = typeIconFilenameInputElement.value.trim() || 'other.svg'; // Имя файла из поля ввода
+        const colorPropertyType = allPropertyTypesDataCache.find(p => p.name === 'icon_color'); // Ищем тип свойства 'icon_color'
+        let iconColor = '#808080'; // Цвет по умолчанию (серый)
+
+        // Если тип узла выбран для редактирования свойств и тип свойства 'icon_color' существует
+        if (selectedNodeTypeIdForPropsEditing !== null && colorPropertyType) {
+            const currentPropertiesItems = propertiesListContainerElement.querySelectorAll('.property-item');
+            // Ищем элемент свойства 'icon_color' в списке текущих свойств выбранного типа
+            const colorPropertyElement = Array.from(currentPropertiesItems).find(item =>
+                item.dataset.propertyTypeId == colorPropertyType.id // Сравнение ID типов свойств
+            );
+            if (colorPropertyElement) {
+                const colorInputElement = colorPropertyElement.querySelector('input[type="text"]');
+                if (colorInputElement) {
+                    iconColor = colorInputElement.value.trim() || iconColor; // Берем значение цвета из поля ввода
+                }
             }
-
-            const error = new Error(errorText);
-            error.details = errorDetails; // Детали для показа в UI или логах
-            error.code = errorCode;       // Код ошибки API
-            error.status = response.status; // HTTP статус
-            throw error; // Бросаем кастомный объект ошибки
-        }
-        // Обработка успешного ответа (2xx)
-        if (response.status === 204) return null; // Успешно, но нет тела (DELETE)
-        // Пытаемся распарсить JSON, но готовы к пустому ответу или тексту
-        const text = await response.text();
-        try {
-             return text ? JSON.parse(text) : null;
-        } catch (e) {
-             console.warn("Не удалось распарсить JSON успешного ответа:", text);
-             return { rawText: text }; // Возвращаем текст, если не JSON
-        }
-    }
-
-
-    // Функции отображения/очистки сообщений и ошибок
-    function displayValidationErrors(errors, prefix = 'type-') {
-         clearValidationErrors(prefix); let firstErrorField = null;
-         const feedbackEl = prefix === 'type-' ? typeFormFeedback : propFeedback;
-         // Отображаем ошибки по полям
-         if (errors && typeof errors === 'object') {
-             for (const field in errors) {
-                 // Генерируем ID поля (например, parent_type_id -> type-parent)
-                 const fieldId = field.replace(/_id$/, '').replace(/_([a-z])/g, (match, p1) => p1.toUpperCase());
-                 const errorElementId = `${prefix}${fieldId}-error`;
-                 const fieldElementId = `${prefix}${fieldId}`;
-                 const errorElement = document.getElementById(errorElementId);
-                 const fieldElement = document.getElementById(fieldElementId);
-
-                 if (errorElement) {
-                     errorElement.textContent = errors[field];
-                     if (!firstErrorField && fieldElement) firstErrorField = fieldElement;
-                     if (fieldElement) fieldElement.classList.add('invalid'); // Подсветка поля
-                 } else { // Если нет специального div'а, показываем в общем фидбеке
-                    console.warn(`Element with id ${errorElementId} not found for field ${field}. Showing in general feedback.`);
-                    feedbackEl.textContent += ` ${field}: ${errors[field]}`; // Добавляем к общему
-                 }
-             }
-             if (!feedbackEl.textContent) { // Если все ошибки ушли в error-элементы
-                 feedbackEl.textContent = "Пожалуйста, исправьте ошибки в форме.";
-             }
-             feedbackEl.className = 'feedback-area error-feedback';
-         } else if (typeof errors === 'string') { // Если ошибка - просто строка
-             feedbackEl.textContent = errors;
-             feedbackEl.className = 'feedback-area error-feedback';
-         }
-         // Фокус на первом поле с ошибкой
-         if (firstErrorField) { firstErrorField.focus(); }
-     }
-
-    function clearValidationErrors(prefix = 'type-') {
-        const feedbackEl = prefix === 'type-' ? typeFormFeedback : propFeedback;
-        feedbackEl.textContent = ''; feedbackEl.className = 'feedback-area';
-        document.querySelectorAll(`#${prefix}-form .error-feedback`).forEach(el => el.textContent = '');
-        document.querySelectorAll(`#${prefix}-form input.invalid, #${prefix}-form select.invalid, #${prefix}-form textarea.invalid`)
-                .forEach(el => el.classList.remove('invalid'));
-    }
-
-    function showListFeedback(message, isError = false) {
-        listFeedback.textContent = message;
-        listFeedback.className = message ? (isError ? 'error-feedback' : 'success-feedback') : ''; // Класс только если есть сообщение
-        listFeedback.style.padding = message ? '5px' : '0'; // Убираем padding если пусто
-        listFeedback.style.border = message ? `1px solid ${isError ? '#f5c6cb' : '#c3e6cb'}` : 'none';
-        listFeedback.style.backgroundColor = message ? (isError ? '#f8d7da' : '#d4edda') : 'transparent';
-    }
-
-    function showPropFeedback(message, isError = false) {
-        propFeedback.textContent = message;
-        propFeedback.className = 'feedback-area ' + (message ? (isError ? 'error-feedback' : 'success-feedback') : '');
-    }
-
-    // Обновление предпросмотра иконки на основе данных формы и свойств
-    function updateIconPreviewFromForm() {
-        const filename = typeIconFilenameInput.value.trim() || 'other.svg'; // Берем из поля ввода
-        const propColorType = propertyTypesData.find(p => p.name === 'icon_color'); // Находим тип свойства цвета
-        let color = '#808080'; // Дефолтный серый цвет
-
-        // Ищем текущее значение свойства 'icon_color' для ВЫБРАННОГО типа
-        if (selectedTypeIdForProps !== null && propColorType) { // Сравниваем с null
-             const currentPropsItems = propsListContainer.querySelectorAll('.property-item');
-             const colorItem = Array.from(currentPropsItems).find(item => item.dataset.propertyTypeId == propColorType.id);
-             if (colorItem) {
-                 // Берем значение из input'а этого свойства
-                 color = colorItem.querySelector('input')?.value.trim() || color;
-             }
-             // Можно добавить фоллбэк на данные из nodeTypesData, если свойства еще не загружены/отрендерены
-             // else {
-             //    const typeData = nodeTypesData.find(t => t.id === selectedTypeIdForProps);
-             //    if (typeData && typeData.properties) { /* ... */ }
-             // }
         }
 
         // Обновляем стили элемента предпросмотра
-        if (iconPreviewElement) {
-            const iconUrl = `${ICONS_BASE_URL_JS}${encodeURIComponent(filename)}`; // Кодируем имя файла на всякий случай
-            iconPreviewElement.style.backgroundColor = color; // Устанавливаем цвет фона
-            // Устанавливаем SVG маску
-            iconPreviewElement.style.webkitMaskImage = `url("${iconUrl}")`;
-            iconPreviewElement.style.maskImage = `url("${iconUrl}")`;
-            iconPreviewElement.title = `Файл: ${filename}\nЦвет: ${color}`; // Подсказка
+        if (iconPreviewSpanElement) {
+            const iconFullUrl = `${ICONS_BASE_STATIC_URL}${encodeURIComponent(filename)}`;
+            iconPreviewSpanElement.style.backgroundColor = iconColor; // Устанавливаем цвет фона
+            iconPreviewSpanElement.style.webkitMaskImage = `url("${iconFullUrl}")`; // Устанавливаем SVG маску
+            iconPreviewSpanElement.style.maskImage = `url("${iconFullUrl}")`;
+            iconPreviewSpanElement.title = `Файл: ${filename}\nЦвет: ${iconColor}`;
         }
-        // Обновляем текстовую информацию
-        if (iconPreviewInfo) {
-            iconPreviewInfo.textContent = `Файл: ${filename || '(не задан)'}, Цвет: ${color || '(не задан)'}`;
+        if (iconPreviewInfoElement) { // Обновляем текстовую информацию
+            iconPreviewInfoElement.textContent = `Файл: ${filename || '(не указан)'}, Цвет: ${iconColor || '(не указан)'}`;
         }
-        // Показываем секцию предпросмотра
-        if (iconPreviewSection) {
-            iconPreviewSection.style.display = 'block';
+        if (iconPreviewSectionElement) { // Показываем секцию предпросмотра
+            iconPreviewSectionElement.style.display = 'block';
         }
     }
 
-    // --- Загрузка и рендеринг ТИПОВ УЗЛОВ ---
-    async function loadAndRenderNodeTypes() {
-        typeList.innerHTML = `<tr><td colspan="5" class="loading-message">Загрузка списка типов...</td></tr>`;
-        typeParentSelect.innerHTML = '<option value="">-- Нет (Корневое) --</option>';
-        showListFeedback(''); // Очищаем фидбек над списком
+    // --- Загрузка и рендеринг данных для Типов Узлов ---
+    /** Загружает все типы узлов с сервера и вызывает их рендеринг в таблице и селекте родителей. */
+    async function loadAndRenderAllNodeTypes() {
+        typeListTableBody.innerHTML = `<tr><td colspan="5" class="loading-message">Загрузка списка типов узлов...</td></tr>`;
+        typeParentSelectElement.innerHTML = '<option value="">-- Нет (Корневой тип) --</option>'; // Очищаем селект родителей
+        showTypeListFeedback(''); // Очищаем сообщения над списком
 
         try {
-            // Загружаем данные (теперь это объект с пагинацией)
-            // Запрашиваем ВСЕ типы для селектов и дерева (limit не ставим, API вернет все если limit=None)
-            const responseData = await fetchData(API_URL_NODE_TYPES);
+            const responseData = await fetchData(API_URL_NODE_TYPES_CRUD + "?limit=10000"); // Загружаем все типы
 
-            // Проверяем структуру ответа и извлекаем массив 'items'
             if (responseData && Array.isArray(responseData.items)) {
-                nodeTypesData = responseData.items;
-                // const totalNodeTypes = responseData.total_count; // Для будущей пагинации
-                console.debug(`Успешно загружено ${nodeTypesData.length} типов узлов.`); // Используем console.debug
+                allNodeTypesDataCache = responseData.items; // Сохраняем в кэш
             } else {
-                 console.error("API /node_types не вернул ожидаемую структуру {items: [...]}:", responseData);
-                 nodeTypesData = []; // Используем пустой массив в случае ошибки
-                 throw new Error("Некорректный ответ от API при загрузке типов узлов."); // Выбрасываем ошибку
+                console.error("API для списка типов узлов не вернул ожидаемую структуру {items: [...]}:", responseData);
+                allNodeTypesDataCache = [];
+                throw new Error("Некорректный ответ от API при загрузке типов узлов.");
             }
 
-            // Рендерим таблицу и заполняем селект родителей
-            renderTypeTable(nodeTypesData);
-            populateSelect(typeParentSelect, nodeTypesData, 'id', 'name', '-- Нет (Корневое) --', true, currentEditTypeId);
-            // Сбрасываем выбор типа для редактирования свойств
-            selectedTypeIdForProps = null;
-            propsSection.style.display = 'none'; // Скрываем секцию свойств
+            renderNodeTypeTable(allNodeTypesDataCache); // Рендерим таблицу
+            // Заполняем селект родителей, исключая текущий редактируемый тип и его потомков (если редактируем)
+            populateSelect(typeParentSelectElement, allNodeTypesDataCache, 'id', 'name', '-- Нет (Корневой тип) --', true, currentEditingNodeTypeId);
+
+            // После загрузки типов узлов, сбрасываем выбор для свойств, если он был
+            selectedNodeTypeIdForPropsEditing = null;
+            propertiesSectionElement.style.display = 'none';
+            propertiesTitleElement.textContent = `Свойства для типа: (выберите тип из списка)`;
+            propertiesListContainerElement.innerHTML = '<p>Выберите тип узла из списка для управления его свойствами.</p>';
+
         } catch (error) {
-            console.error("Ошибка в loadAndRenderNodeTypes:", error); // Логируем полную ошибку
-            typeList.innerHTML = `<tr><td colspan="5" class="error-message">Ошибка загрузки типов.</td></tr>`;
-            // Используем error.message, который теперь содержит больше деталей от fetchData
-            showListFeedback(`Ошибка загрузки типов: ${error.message}`, true);
+            console.error("loadAndRenderAllNodeTypes: Ошибка:", error);
+            typeListTableBody.innerHTML = `<tr><td colspan="5" class="error-message">Ошибка загрузки списка типов узлов.</td></tr>`;
+            // Сообщение об ошибке уже показано в listFeedbackElement через fetchData
         }
     }
 
+    /** Рендерит таблицу типов узлов с учетом иерархии и иконок. */
+    function renderNodeTypeTable(nodeTypesToRender) {
+        if (!Array.isArray(nodeTypesToRender)) {
+            typeListTableBody.innerHTML = `<tr><td colspan="5" class="error-message">Ошибка отображения: некорректные данные типов.</td></tr>`;
+            return;
+        }
+        const itemMap = {}; const rootItems = [];
+        // Строим карту и определяем корневые элементы
+        nodeTypesToRender.forEach(type => { itemMap[type.id] = { ...type, children: [] }; });
+        nodeTypesToRender.forEach(type => {
+            if (type.parent_type_id === null) { // Корневой тип
+                if (!rootItems.includes(type.id)) rootItems.push(type.id);
+            } else if (itemMap[type.parent_type_id]) {
+                itemMap[type.parent_type_id].children.push(type.id);
+            } else { // Осиротевший тип (родитель не найден) - отображаем как корневой
+                console.warn(`Тип узла ID ${type.id} ('${type.name}') имеет родителя ID ${type.parent_type_id}, который не найден. Отображаем как корневой.`);
+                if (!rootItems.includes(type.id)) rootItems.push(type.id);
+            }
+        });
 
-    // Рендеринг таблицы типов (с иерархией и иконкой)
-    function renderTypeTable(types) {
-        // Строим иерархическую структуру
-         const map = {}; const roots = [];
-         types.forEach(t => { map[t.id] = { ...t, children: [] }; });
-         types.forEach(t => {
-             if (t.parent_type_id === null) { // Строгое сравнение с null
-                if(!roots.includes(t.id)) roots.push(t.id);
-             }
-             else if (map[t.parent_type_id]) {
-                 map[t.parent_type_id].children.push(t.id);
-             }
-             else { // Осиротевшие - в корень
-                 console.warn(`Тип ${t.id} (${t.name}) имеет родителя ${t.parent_type_id}, который не найден. Добавлен в корень.`);
-                 if(!roots.includes(t.id)) roots.push(t.id);
-             }
-         });
+        let tableHtmlContent = '';
+        // Рекурсивная функция для рендеринга строки и ее дочерних элементов
+        function renderRowRecursive(typeId, currentLevel) {
+            const typeData = itemMap[typeId];
+            if (!typeData) return;
 
-         let tableHtml = '';
-         // Рекурсивная функция рендеринга строк
-         function renderRowRecursive(typeId, level) {
-              const t = map[typeId]; if (!t) return; // Пропускаем, если тип не найден (на всякий случай)
-              const parentName = t.parent_type_id !== null ? (map[t.parent_type_id]?.name || `ID: ${t.parent_type_id}`) : '---';
-              const selectedClass = selectedTypeIdForProps === t.id ? 'selected' : ''; // Подсветка выбранного
-              // Формируем HTML для иконки типа
-              const iconHtml = t.icon_filename ? `<img src="${ICONS_BASE_URL_JS}${encodeURIComponent(t.icon_filename)}" alt="" title="${t.icon_filename}">` : '---';
+            const parentDisplayName = typeData.parent_type_id !== null ? (itemMap[typeData.parent_type_id]?.name || `ID: ${typeData.parent_type_id}`) : '---';
+            const isSelectedClass = selectedNodeTypeIdForPropsEditing === typeData.id ? 'selected' : ''; // Класс для подсветки выбранной строки
+            // Формируем HTML для иконки типа (если имя файла указано)
+            const iconHtmlElement = typeData.icon_filename
+                ? `<img src="${ICONS_BASE_STATIC_URL}${encodeURIComponent(typeData.icon_filename)}" alt="Иконка ${typeData.name}" title="Файл: ${typeData.icon_filename}">`
+                : '---';
+            // Собираем HTML для текущей строки таблицы
+            tableHtmlContent += `
+                <tr class="level-${currentLevel} ${isSelectedClass}" data-id="${typeData.id}" data-type-name="${typeData.name || ''}">
+                    <td style="padding-left: ${10 + currentLevel * 20}px;" title="${typeData.description || ''}">${typeData.name || 'N/A'}</td>
+                    <td>${parentDisplayName}</td>
+                    <td class="icon-cell">${iconHtmlElement}</td>
+                    <td>${typeData.priority !== null ? typeData.priority : 'N/A'}</td>
+                    <td class="actions">
+                        <button class="edit-btn" data-id="${typeData.id}" title="Редактировать тип ID ${typeData.id}">✏️</button>
+                        <button class="delete-btn" data-id="${typeData.id}" data-name="${typeData.name || 'N/A'}" title="Удалить тип ID ${typeData.id}">🗑️</button>
+                    </td>
+                </tr>`;
+            // Рекурсивно рендерим дочерние элементы, отсортировав их
+            typeData.children
+              .map(childId => itemMap[childId]).filter(child => child)
+              .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999) || (a.name || '').localeCompare(b.name || ''))
+              .forEach(child => renderRowRecursive(child.id, currentLevel + 1));
+        }
 
-              // Собираем строку таблицы
-              tableHtml += `
-                  <tr class="level-${level} ${selectedClass}" data-id="${t.id}" data-type-name="${t.name}">
-                      <td style="padding-left: ${10 + level * 20}px;">${t.name || 'N/A'}</td>
-                      <td>${parentName}</td>
-                      <td class="icon-cell">${iconHtml}</td> <!-- Ячейка с иконкой -->
-                      <td>${t.priority !== null ? t.priority : '?'}</td> <!-- Отображаем приоритет -->
-                      <td class="actions">
-                          <button class="edit-btn" data-id="${t.id}" title="Редактировать">✏️</button>
-                          <button class="delete-btn" data-id="${t.id}" data-name="${t.name}" title="Удалить">🗑️</button>
-                      </td>
-                  </tr>
-              `;
-              // Рекурсивно рендерим дочерние элементы, сортируя их
-              t.children
-                .map(id => map[id]) // Получаем объекты детей
-                .filter(child => child) // Убираем несуществующих детей (если вдруг)
-                .sort((a, b) => (a.priority - b.priority) || a.name.localeCompare(b.name)) // Сортировка по приоритету, затем по имени
-                .forEach(child => renderRowRecursive(child.id, level + 1));
-         }
-
-         // Рендерим начиная с корневых элементов, сортируя их
-         roots
-            .map(id => map[id]) // Получаем объекты корней
-            .filter(root => root)
-            .sort((a, b) => (a.priority - b.priority) || a.name.localeCompare(b.name)) // Сортировка корней
+        // Сортируем и рендерим, начиная с корневых элементов
+        rootItems
+            .map(rootId => itemMap[rootId]).filter(root => root)
+            .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999) || (a.name || '').localeCompare(b.name || ''))
             .forEach(root => renderRowRecursive(root.id, 0));
 
-         // Обновляем tbody таблицы или показываем сообщение, если пусто
-         typeList.innerHTML = tableHtml || `<tr><td colspan="5" style="text-align: center;">Типы узлов не найдены.</td></tr>`;
+        typeListTableBody.innerHTML = tableHtmlContent || `<tr><td colspan="5" style="text-align: center;">Типы узлов не найдены.</td></tr>`;
     }
 
-    // Универсальная функция заполнения селекта
-    function populateSelect(selectElement, items, valueField, textField, placeholder, addHierarchy = false, excludeId = null) {
-        const currentSelectedValue = selectElement.value; selectElement.innerHTML = `<option value="">${placeholder}</option>`;
-        if (!Array.isArray(items) || items.length === 0) return;
+    // --- Функции для формы и CRUD операций с Типами Узлов ---
+    /** Сбрасывает форму типа узла в начальное состояние (для создания нового). */
+    function resetNodeTypeForm() {
+        typeFormElement.reset();
+        typeIdInputElement.value = '';
+        currentEditingNodeTypeId = null;
+        typeFormTitleElement.textContent = 'Добавить Новый Тип Узла';
+        typeSubmitButton.textContent = 'Добавить Тип';
+        typeSubmitButton.disabled = false;
+        typeCancelButton.style.display = 'none';
+        clearValidationErrors('type-form-feedback', 'type-');
+        showTypeFormFeedback('');
+        // Перезаполняем селект родителей без исключения текущего типа
+        populateSelect(typeParentSelectElement, allNodeTypesDataCache, 'id', 'name', '-- Нет (Корневой тип) --', true, null);
+        iconPreviewSectionElement.style.display = 'none'; // Скрываем предпросмотр
+        // Сбрасываем и скрываем секцию свойств, если она была открыта
+        selectedNodeTypeIdForPropsEditing = null;
+        propertiesSectionElement.style.display = 'none';
+        propertiesTitleElement.textContent = `Свойства для типа: (выберите тип из списка)`;
+        propertiesListContainerElement.innerHTML = '<p>Выберите тип узла из списка для управления его свойствами.</p>';
+        // Убираем подсветку со всех строк таблицы
+        document.querySelectorAll('#type-list-table-body tr.selected').forEach(tr => tr.classList.remove('selected'));
+    }
 
-        const map = {}; const roots = []; const descendantIds = new Set();
-        // Функция для рекурсивного получения ID всех потомков
-        function getDescendants(itemId) { if (!map[itemId]?.rawChildren) return; map[itemId].rawChildren.forEach(childId => { if (!descendantIds.has(childId)) { descendantIds.add(childId); getDescendants(childId); } }); }
-        // Строим карту и первичные связи родитель-ребенок
-        items.forEach(item => { map[item[valueField]] = { ...item, rawChildren: [] }; });
-        items.forEach(item => {
-            const parentFieldKey = valueField === 'id' && item.parent_id !== undefined ? 'parent_id' : (valueField === 'id' && item.parent_type_id !== undefined ? 'parent_type_id' : null);
-            const parentId = parentFieldKey ? item[parentFieldKey] : null;
-            if (parentId !== null && map[parentId]) { map[parentId].rawChildren.push(item[valueField]); }
-        });
-
-        // Если нужно исключить элемент и его потомков (для селекта родителей при редактировании)
-        if (excludeId !== null && addHierarchy) { descendantIds.add(excludeId); getDescendants(excludeId); }
-
-        // Строим дерево для селекта, исключая потомков excludeId
-        const selectMap = {};
-        items.forEach(item => {
-            const itemId = item[valueField];
-            if (!descendantIds.has(itemId)) { // Добавляем только если не в списке исключенных потомков
-                selectMap[itemId] = { ...item, children: [] }; // Копируем данные и создаем пустой массив детей
-                const parentFieldKey = valueField === 'id' && item.parent_id !== undefined ? 'parent_id' : (valueField === 'id' && item.parent_type_id !== undefined ? 'parent_type_id' : null);
-                const parentId = parentFieldKey ? item[parentFieldKey] : null;
-
-                // Определяем корневые элементы или добавляем к родителю
-                if (parentId === null || !selectMap[parentId]) { // Если родителя нет или он сам исключен
-                     if (!roots.includes(itemId)) roots.push(itemId); // Добавляем в корень, если еще не там
-                } else if (selectMap[parentId]) { // Если родитель есть в нашем дереве selectMap
-                     selectMap[parentId].children.push(itemId); // Добавляем как ребенка
-                }
-            }
-        });
-
-        // Рекурсивная функция добавления опций в селект
-        function addOption(itemId, level) {
-            const item = selectMap[itemId]; if (!item) return; // Пропускаем, если элемент не найден (на всякий случай)
-            const option = document.createElement('option');
-            option.value = item[valueField];
-            const name = item.short_name || item[textField]; // Используем short_name если есть, иначе основной текст
-            option.textContent = addHierarchy ? ('\u00A0'.repeat(level * 3) + name) : name; // Добавляем отступы для иерархии
-            selectElement.appendChild(option);
-            // Сортируем детей и рекурсивно добавляем их
-             item.children
-                .map(id => selectMap[id]) // Получаем объекты детей
-                .filter(child => child)
-                .sort((a, b) => (a.priority || 0) - (b.priority || 0) || (a.short_name || a[textField]).localeCompare(b.short_name || b[textField]))
-                .forEach(child => addOption(child.id, level + 1));
+    /**
+     * Заполняет форму данными типа узла для редактирования.
+     * @param {object} nodeTypeData - Объект с данными типа узла.
+     */
+    function fillNodeTypeFormForEditing(nodeTypeData) {
+        if (!nodeTypeData) {
+            console.error("fillNodeTypeFormForEditing: Передан пустой объект данных типа узла.");
+            showTypeFormFeedback("Не удалось загрузить данные типа узла для редактирования.", true);
+            return;
         }
+        resetNodeTypeForm(); // Сначала сбрасываем форму
+        currentEditingNodeTypeId = nodeTypeData.id;
+        typeIdInputElement.value = nodeTypeData.id;
 
-        // Сортируем корневые элементы и запускаем рендеринг опций
-         roots
-            .map(id => selectMap[id]) // Получаем объекты корней
-            .filter(root => root)
-            .sort((a, b) => (a.priority || 0) - (b.priority || 0) || (a.short_name || a[textField]).localeCompare(b.short_name || b[textField]))
-            .forEach(root => addOption(root.id, 0));
+        typeNameInputElement.value = nodeTypeData.name || '';
+        typePriorityInputElement.value = nodeTypeData.priority !== null ? nodeTypeData.priority : 10;
+        typeIconFilenameInputElement.value = nodeTypeData.icon_filename || '';
+        typeDescriptionTextareaElement.value = nodeTypeData.description || '';
 
-        // Восстанавливаем предыдущее значение селекта, если оно валидно
-        if (currentSelectedValue && selectElement.querySelector(`option[value="${currentSelectedValue}"]`)) {
-            selectElement.value = currentSelectedValue;
-        } else {
-            selectElement.value = ""; // Сбрасываем на плейсхолдер
-        }
-    }
+        // Заполняем селект родителей, исключая текущий редактируемый тип и его потомков
+        populateSelect(typeParentSelectElement, allNodeTypesDataCache, 'id', 'name', '-- Нет (Корневой тип) --', true, currentEditingNodeTypeId);
+        typeParentSelectElement.value = nodeTypeData.parent_type_id !== null ? String(nodeTypeData.parent_type_id) : '';
 
+        typeFormTitleElement.textContent = `Редактировать Тип Узла ID: ${nodeTypeData.id}`;
+        typeSubmitButton.textContent = 'Сохранить изменения';
+        typeCancelButton.style.display = 'inline-block';
+        updateIconPreview(); // Обновляем и показываем предпросмотр иконки
 
-    // --- Форма и CRUD для ТИПОВ УЗЛОВ ---
-    // Сброс формы в начальное состояние
-    function resetTypeForm() {
-        typeForm.reset(); // Сбрасывает все поля
-        typeIdInput.value = ''; // Очищаем скрытое поле ID
-        currentEditTypeId = null; // Сбрасываем флаг редактирования
-        // Восстанавливаем заголовки и текст кнопок
-        typeFormTitle.textContent = 'Добавить Тип Узла';
-        typeSubmitBtn.textContent = 'Добавить Тип';
-        typeCancelBtn.style.display = 'none'; // Скрываем кнопку "Отмена"
-        clearValidationErrors('type-'); // Очищаем ошибки валидации
-        // Обновляем селект родителей (без исключений)
-        populateSelect(typeParentSelect, nodeTypesData, 'id', 'name', '-- Нет (Корневое) --', true);
-        iconPreviewSection.style.display = 'none'; // Скрываем предпросмотр иконки
-        // Сбрасываем и скрываем секцию свойств
-        selectedTypeIdForProps = null;
-        propsSection.style.display = 'none';
-        // Убираем подсветку строк
-        document.querySelectorAll('#type-list tr.selected').forEach(tr => tr.classList.remove('selected'));
-    }
-
-    // Заполнение формы данными для редактирования
-    function fillTypeFormForEdit(nodeType) {
-        clearValidationErrors('type-'); // Очищаем старые ошибки
-        currentEditTypeId = nodeType.id; // Устанавливаем ID редактируемого типа
-        // Заполняем поля формы
-        typeIdInput.value = nodeType.id;
-        typeNameInput.value = nodeType.name || ''; // Добавил || ''
-        typePriorityInput.value = nodeType.priority !== null ? nodeType.priority : 10; // Добавил проверку на null
-        typeIconFilenameInput.value = nodeType.icon_filename || ''; // Заполняем имя файла иконки
-        typeDescriptionTextarea.value = nodeType.description || '';
-        // Заполняем селект родителей, исключая текущий тип и его потомков
-        populateSelect(typeParentSelect, nodeTypesData, 'id', 'name', '-- Нет (Корневое) --', true, currentEditTypeId);
-        typeParentSelect.value = nodeType.parent_type_id !== null ? nodeType.parent_type_id : ''; // Устанавливаем выбранного родителя
-        // Обновляем UI формы
-        typeFormTitle.textContent = 'Редактировать Тип Узла';
-        typeSubmitBtn.textContent = 'Сохранить';
-        typeCancelBtn.style.display = 'inline-block'; // Показываем кнопку "Отмена"
-        updateIconPreviewFromForm(); // Показываем предпросмотр иконки
         // Плавно прокручиваем к форме
-        window.scrollTo({ top: typeForm.offsetTop - 20, behavior: 'smooth' });
+        typeFormElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        typeNameInputElement.focus(); // Фокус на поле имени
     }
 
-    // Обработка отправки формы (создание или обновление)
-    async function handleTypeFormSubmit(event) {
-        event.preventDefault(); // Предотвращаем стандартную отправку формы
-        clearValidationErrors('type-'); // Очищаем предыдущие ошибки
-        // Блокируем кнопку на время запроса
-        typeSubmitBtn.disabled = true;
-        typeSubmitBtn.textContent = currentEditTypeId ? 'Сохранение...' : 'Добавление...';
+    /** Обрабатывает отправку формы (создание нового или обновление существующего типа узла). */
+    async function handleNodeTypeFormSubmit(event) {
+        event.preventDefault();
+        clearValidationErrors('type-form-feedback', 'type-');
+        showTypeFormFeedback('');
+        typeSubmitButton.disabled = true;
+        typeSubmitButton.textContent = currentEditingNodeTypeId ? 'Сохранение...' : 'Добавление...';
 
-        // Собираем данные из формы
-        const formData = {
-            name: typeNameInput.value.trim(),
-            parent_type_id: typeParentSelect.value ? parseInt(typeParentSelect.value, 10) : null,
-            priority: parseInt(typePriorityInput.value, 10) || 10,
-            icon_filename: typeIconFilenameInput.value.trim() || null, // Получаем имя файла иконки
-            description: typeDescriptionTextarea.value.trim() || null
+        const formDataPayload = {
+            name: typeNameInputElement.value.trim(),
+            parent_type_id: typeParentSelectElement.value ? parseInt(typeParentSelectElement.value, 10) : null,
+            priority: typePriorityInputElement.value ? parseInt(typePriorityInputElement.value, 10) : 10,
+            icon_filename: typeIconFilenameInputElement.value.trim() || null,
+            description: typeDescriptionTextareaElement.value.trim() || null
         };
 
-        // Простая валидация на клиенте
-        let clientErrors = {};
-        if (!formData.name) { clientErrors.name = 'Имя типа обязательно.'; }
-        if (formData.icon_filename && formData.icon_filename.length > 100) { clientErrors.icon_filename = 'Имя файла иконки слишком длинное (макс 100).'; }
-        if (isNaN(formData.priority) || formData.priority < 0) { clientErrors.priority = 'Приоритет должен быть неотрицательным числом.'; }
-        // Проверка на циклическую зависимость родителя (простая)
-        if (currentEditTypeId !== null && formData.parent_type_id === currentEditTypeId) { clientErrors.parent_type_id = 'Нельзя установить родителя самого на себя.'; }
+        // --- Клиентская валидация ---
+        let clientSideErrors = {};
+        if (!formDataPayload.name) clientSideErrors.name = 'Имя типа обязательно.';
+        if (formDataPayload.icon_filename && formDataPayload.icon_filename.length > 100) clientSideErrors['icon-filename'] = 'Имя файла иконки не должно превышать 100 символов.';
+        if (isNaN(formDataPayload.priority) || formDataPayload.priority < 0) clientSideErrors.priority = 'Приоритет должен быть неотрицательным числом.';
+        if (currentEditingNodeTypeId !== null && formDataPayload.parent_type_id === currentEditingNodeTypeId) {
+            clientSideErrors['parent-type-id'] = 'Тип узла не может быть родителем для самого себя.';
+        }
+        if (Object.keys(clientSideErrors).length > 0) {
+            displayValidationErrors(clientSideErrors, 'type-form-feedback', 'type-');
+            typeSubmitButton.disabled = false;
+            typeSubmitButton.textContent = currentEditingNodeTypeId ? 'Сохранить изменения' : 'Добавить Тип';
+            return;
+        }
+        // --- Конец клиентской валидации ---
 
-        if (Object.keys(clientErrors).length > 0) {
-            displayValidationErrors(clientErrors, 'type-');
-            typeSubmitBtn.disabled = false; typeSubmitBtn.textContent = currentEditTypeId ? 'Сохранить' : 'Добавить Тип';
+        const apiUrl = currentEditingNodeTypeId ? API_URL_NODE_TYPE_DETAIL_TEMPLATE.replace('/0', `/${currentEditingNodeTypeId}`) : API_URL_NODE_TYPES_CRUD;
+        const httpMethod = currentEditingNodeTypeId ? 'PUT' : 'POST';
+
+        try {
+            await fetchData(apiUrl, {
+                method: httpMethod,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formDataPayload)
+            });
+            showTypeListFeedback(`Тип узла успешно ${currentEditingNodeTypeId ? 'обновлен' : 'добавлен'}!`, false);
+            resetNodeTypeForm(); // Сбрасываем форму и состояние редактирования
+            await loadAndRenderAllNodeTypes(); // Обновляем таблицу и селект родителей
+        } catch (error) {
+            console.error(`Ошибка ${httpMethod} для типа узла:`, error);
+            displayValidationErrors(error.details || error.message, 'type-form-feedback', 'type-');
+            if (!error.details) showTypeFormFeedback(`Ошибка: ${error.message || 'Не удалось выполнить операцию.'}`, true);
+            showTypeListFeedback(`Ошибка ${currentEditingNodeTypeId ? 'обновления' : 'создания'} типа узла.`, true);
+        } finally {
+            typeSubmitButton.disabled = false;
+            typeSubmitButton.textContent = currentEditingNodeTypeId ? 'Сохранить изменения' : 'Добавить Тип';
+        }
+    }
+
+    /** Обрабатывает клик на кнопку "Редактировать" в таблице типов узлов. */
+    async function handleEditNodeTypeClick(typeId) {
+        showTypeListFeedback(`Загрузка данных типа ID ${typeId} для редактирования...`);
+        const apiUrlGetType = API_URL_NODE_TYPE_DETAIL_TEMPLATE.replace('/0', `/${typeId}`);
+        try {
+            const nodeTypeToEdit = await fetchData(apiUrlGetType);
+            if (nodeTypeToEdit) {
+                fillNodeTypeFormForEditing(nodeTypeToEdit);
+                showTypeListFeedback(''); // Очищаем сообщение о загрузке
+                // Автоматически выбираем этот тип для редактирования его свойств
+                selectNodeTypeForPropertiesEditing(typeId, nodeTypeToEdit.name);
+            }
+            // Если тип не найден, fetchData выбросит ошибку 404, которая обработается в catch
+        } catch (error) {
+            console.error("Ошибка загрузки типа узла для редактирования:", error);
+            if (currentEditingNodeTypeId === typeId) resetNodeTypeForm(); // Сброс, если пытались редактировать этот же
+        }
+    }
+
+    /** Обрабатывает клик на кнопку "Удалить" в таблице типов узлов. */
+    async function handleDeleteNodeTypeClick(typeId, typeName) {
+        if (typeId === 0) { // Защита от удаления базового типа ID=0
+            alert("Базовый тип узла (ID=0) не может быть удален.");
+            return;
+        }
+        if (!confirm(`Вы уверены, что хотите удалить тип узла "${typeName}" (ID: ${typeId})? Это действие может затронуть связанные узлы (их тип сбросится на базовый) и дочерние типы (станут корневыми или их удаление будет заблокировано в зависимости от настроек БД).`)) {
+            return;
+        }
+        showTypeListFeedback(`Удаление типа узла ID ${typeId} ("${typeName}")...`);
+        // Блокируем кнопки на время операции
+        document.querySelectorAll('.types-table .actions button, #submit-btn').forEach(btn => btn.disabled = true);
+
+        const apiUrlDeleteType = API_URL_NODE_TYPE_DETAIL_TEMPLATE.replace('/0', `/${typeId}`);
+        try {
+            await fetchData(apiUrlDeleteType, { method: 'DELETE' });
+            showTypeListFeedback(`Тип узла "${typeName}" (ID: ${typeId}) успешно удален.`, false);
+            if (currentEditingNodeTypeId === typeId) resetNodeTypeForm(); // Сброс формы, если удалили редактируемый
+            if (selectedNodeTypeIdForPropsEditing === typeId) { // Если удалили тип, для которого редактировались свойства
+                selectedNodeTypeIdForPropsEditing = null;
+                propertiesSectionElement.style.display = 'none';
+            }
+            await loadAndRenderAllNodeTypes(); // Обновляем таблицу и селект родителей
+        } catch (error) {
+            console.error("Ошибка удаления типа узла:", error);
+            let displayMsg = `Ошибка удаления: ${error.message}`;
+            if (error.code === 'CONFLICT' || error.status === 409) {
+                displayMsg = `Невозможно удалить тип "${typeName}": ${error.details || 'проверьте наличие связанных узлов или дочерних типов.'}`;
+            }
+            showTypeListFeedback(displayMsg, true);
+        } finally {
+            document.querySelectorAll('.types-table .actions button, #submit-btn').forEach(btn => btn.disabled = false);
+        }
+    }
+
+    // --- Функции для управления Свойствами выбранного Типа Узла ---
+
+    /** Загружает все доступные типы СВОЙСТВ (из node_property_types) для селекта. */
+    async function loadAllPropertyTypesForSelect() {
+        try {
+            allPropertyTypesDataCache = await fetchData(API_URL_NODE_PROPERTY_TYPES_LIST) || [];
+            // Заполняем селект в форме добавления/изменения свойства
+            populateSelect(propertyTypeSelectElement, allPropertyTypesDataCache, 'id', 'name', '-- Выберите тип свойства --');
+        } catch (error) {
+            console.error("Ошибка загрузки списка типов свойств:", error);
+            showPropertyFeedback(`Ошибка загрузки типов свойств: ${error.message}`, true);
+            propertyTypeSelectElement.innerHTML = '<option value="">Ошибка загрузки</option>';
+        }
+    }
+
+    /** Вызывается при клике на строку типа узла в таблице. Выбирает тип для редактирования его свойств. */
+    function selectNodeTypeForPropertiesEditing(typeId, typeName) {
+        selectedNodeTypeIdForPropsEditing = typeId;
+        // Подсвечиваем выбранную строку в таблице типов
+        document.querySelectorAll('#type-list-table-body tr').forEach(tr => tr.classList.remove('selected'));
+        const selectedRowInTable = document.querySelector(`#type-list-table-body tr[data-id="${typeId}"]`);
+        if (selectedRowInTable) selectedRowInTable.classList.add('selected');
+
+        // Обновляем заголовок секции свойств и отображаем ее
+        propertiesTitleElement.innerHTML = `Свойства для типа: <strong>${typeName || `ID ${typeId}`}</strong>`;
+        propertiesSectionElement.style.display = 'block';
+        // Загружаем и рендерим свойства для этого типа
+        loadAndRenderPropertiesForSelectedType(typeId);
+        // Очищаем форму добавления нового свойства
+        addPropertyFormElement.reset();
+        propertyTypeSelectElement.disabled = false; // Разблокируем селект типа свойства
+        clearValidationErrors('prop-feedback', 'add-property-'); // Очищаем ошибки формы свойств
+        // Обновляем предпросмотр иконки (т.к. цвет может зависеть от свойства)
+        updateIconPreview(); // Эта функция должна быть вызвана и при изменении свойств
+    }
+
+    /** Загружает и отображает список текущих свойств для выбранного типа узла. */
+    async function loadAndRenderPropertiesForSelectedType(nodeTypeId) {
+        propertiesListContainerElement.innerHTML = `<p class="loading-message">Загрузка свойств для типа ID ${nodeTypeId}...</p>`;
+        showPropertyFeedback(''); // Очищаем предыдущие сообщения
+        if (nodeTypeId === null) { // Если тип не выбран (например, после сброса формы)
+            propertiesListContainerElement.innerHTML = '<p>Тип узла не выбран для отображения свойств.</p>';
             return;
         }
 
-
-        // Определяем URL и метод API
-        const url = currentEditTypeId ? API_URL_NODE_TYPE_DETAIL_TPL.replace('/0', `/${currentEditTypeId}`) : API_URL_NODE_TYPES;
-        const method = currentEditTypeId ? 'PUT' : 'POST';
-
+        const apiUrlGetProperties = API_URL_NODE_TYPE_PROPERTIES_TEMPLATE.replace('/0', `/${nodeTypeId}`);
         try {
-            // Отправляем данные на API
-            const resultData = await fetchData(url, {
-                 method: method,
-                 headers: { 'Content-Type': 'application/json' }, // Обязательно для Flask
-                 body: JSON.stringify(formData) // Отправляем JSON
-             });
-            // Обрабатываем успешный ответ
-            showListFeedback(`Тип узла успешно ${currentEditTypeId ? 'обновлен' : 'добавлен'}!`, false);
-            resetTypeForm(); // Сбрасываем форму
-            await loadAndRenderNodeTypes(); // Обновляем список типов
+            const currentProperties = await fetchData(apiUrlGetProperties) || []; // Ожидаем список свойств
+            renderCurrentPropertiesList(currentProperties); // Отображаем список
+
+            // Обновляем селект доступных для добавления типов свойств (исключая уже назначенные этому типу)
+            const existingPropertyTypeIds = new Set(currentProperties.map(p => p.property_type_id));
+            const availablePropTypesForSelect = allPropertyTypesDataCache.filter(pt => !existingPropertyTypeIds.has(pt.id));
+            populateSelect(propertyTypeSelectElement, availablePropTypesForSelect, 'id', 'name', '-- Выберите тип свойства --');
+            // Обновляем предпросмотр иконки (цвет мог измениться)
+            updateIconPreview();
         } catch (error) {
-            // Обрабатываем ошибку от API
-            console.error("Ошибка при отправке формы типа:", error);
-            // Отображаем ошибки валидации от API или общую ошибку
-            displayValidationErrors(error.details || error.message, 'type-');
-            showListFeedback(`Ошибка: ${error.message}`, true); // Показываем общую ошибку над списком
-        } finally {
-            // Разблокируем кнопку в любом случае
-            typeSubmitBtn.disabled = false;
-            typeSubmitBtn.textContent = currentEditTypeId ? 'Сохранить' : 'Добавить Тип';
+            console.error(`Ошибка загрузки свойств для типа узла ID ${nodeTypeId}:`, error);
+            propertiesListContainerElement.innerHTML = `<p class="error-message">Ошибка загрузки свойств.</p>`;
+            showPropertyFeedback(`Ошибка загрузки свойств: ${error.message}`, true);
         }
     }
 
-    // Обработка клика на кнопку "Редактировать" в таблице
-    async function handleTypeEditClick(typeId) {
-        const url = API_URL_NODE_TYPE_DETAIL_TPL.replace('/0', `/${typeId}`);
-        showListFeedback('Загрузка данных типа...'); // Показываем статус
-        try {
-             const nodeType = await fetchData(url); // Загружаем данные типа
-             if (nodeType) {
-                 fillTypeFormForEdit(nodeType); // Заполняем форму
-                 showListFeedback(''); // Очищаем статус
-                 selectTypeForProps(typeId, nodeType.name); // Выбираем тип для редактирования свойств
-             } else {
-                 // Тип не найден (возможно, был удален)
-                 showListFeedback(`Ошибка: Тип узла ID ${typeId} не найден. Возможно, он был удален.`, true);
-                 await loadAndRenderNodeTypes(); // Обновить список на всякий случай
-             }
-        } catch (error) {
-            // Обрабатываем ошибку загрузки
-            console.error("Ошибка загрузки типа для редактирования:", error);
-            showListFeedback(`Ошибка загрузки данных: ${error.message}`, true);
-        }
-    }
-
-    // Обработка клика на кнопку "Удалить" в таблице
-    async function handleTypeDeleteClick(typeId, typeName) {
-        // Не позволяем удалять базовый тип
-        if (typeId === 0) { alert("Нельзя удалить базовый тип (ID=0)!"); return; }
-        // Запрашиваем подтверждение
-        if (!confirm(`Вы уверены, что хотите удалить тип узла "${typeName}" (ID: ${typeId})? Убедитесь, что он не используется узлами и не является родителем для других типов.`)) return;
-
-        const url = API_URL_NODE_TYPE_DETAIL_TPL.replace('/0', `/${typeId}`);
-        showListFeedback(`Удаление типа ${typeName}...`);
-        typeSubmitBtn.disabled = true; // Блокируем кнопки на всякий случай
-        document.querySelectorAll('.delete-btn, .edit-btn').forEach(b => b.disabled = true);
-
-        try {
-             await fetchData(url, { method: 'DELETE' });
-             showListFeedback(`Тип "${typeName}" успешно удален.`, false);
-             if (currentEditTypeId === typeId) { resetTypeForm(); } // Сброс формы, если удалили редактируемый
-             if (selectedTypeIdForProps === typeId) { propsSection.style.display = 'none'; selectedTypeIdForProps = null; }
-             await loadAndRenderNodeTypes(); // Обновляем список
-        } catch (error) {
-             console.error("Ошибка удаления типа:", error);
-             // Формируем сообщение на основе кода и деталей ошибки
-             let displayMessage = `Ошибка удаления: ${error.message}`;
-             if (error.code === 'CONFLICT' || error.status === 409) {
-                 displayMessage = `Невозможно удалить тип "${typeName}": ${error.details || 'существуют связанные объекты (узлы или дочерние типы).'}`;
-             } else if (error.code === 'VALIDATION_ERROR' && error.details) { // Обработка ошибки удаления базового типа с бэкенда
-                 displayMessage = `Невозможно удалить тип "${typeName}": ${error.details}`;
-             }
-             showListFeedback(displayMessage, true);
-        } finally {
-            typeSubmitBtn.disabled = false;
-            document.querySelectorAll('.delete-btn, .edit-btn').forEach(b => b.disabled = false);
-        }
-    }
-
-    // --- Управление СВОЙСТВАМИ выбранного типа ---
-
-    // Загрузка типов свойств для селекта в форме добавления
-    async function loadPropertyTypes() {
-         try {
-             propertyTypesData = await fetchData(API_URL_NODE_PROPERTY_TYPES) || [];
-             populateSelect(propTypeSelect, propertyTypesData, 'id', 'name', '-- Выберите тип свойства --');
-         } catch (error) {
-             console.error("Ошибка загрузки типов свойств:", error);
-             showPropFeedback(`Ошибка загрузки типов свойств: ${error.message}`, true);
-         }
-    }
-
-     // Выбор типа узла для редактирования его свойств
-     function selectTypeForProps(typeId, typeName) {
-         selectedTypeIdForProps = typeId; // Запоминаем выбранный ID
-         // Подсвечиваем выбранную строку в таблице
-         document.querySelectorAll('#type-list tr').forEach(tr => tr.classList.remove('selected'));
-         const selectedRow = document.querySelector(`#type-list tr[data-id="${typeId}"]`);
-         if (selectedRow) selectedRow.classList.add('selected');
-
-         // Показываем секцию свойств и загружаем их
-         propsTitle.textContent = `Свойства для типа: ${typeName} (ID: ${typeId})`;
-         propsSection.style.display = 'block';
-         loadAndRenderProperties(typeId); // Загружаем и отображаем свойства
-
-         // Очищаем и разблокируем форму добавления свойства
-         addPropForm.reset();
-         propTypeSelect.disabled = false;
-         clearValidationErrors('prop-'); // Очищаем ошибки формы свойств
-
-         // Обновляем предпросмотр иконки на основе данных выбранного типа
-         updateIconPreviewFromForm();
-     }
-
-     // Загрузка и рендеринг списка свойств для выбранного типа
-    async function loadAndRenderProperties(typeId) {
-        propsListContainer.innerHTML = `<p class="loading-message">Загрузка свойств...</p>`;
-        showPropFeedback(''); // Очищаем фидбек для свойств
-        if (typeId === null) { // Проверяем, что ID не null (0 - базовый тип, он валиден)
-            propsListContainer.innerHTML = '<p>Тип узла не выбран.</p>';
+    /** Рендерит список текущих назначенных свойств для выбранного типа узла. */
+    function renderCurrentPropertiesList(properties) {
+        if (!Array.isArray(properties)) {
+            propertiesListContainerElement.innerHTML = '<p class="error-message">Ошибка данных: список свойств некорректен.</p>';
             return;
         }
-
-        const url = API_URL_NODE_TYPE_PROPERTIES_TPL.replace('/0', `/${typeId}`);
-        try {
-            const properties = await fetchData(url) || []; // Загружаем свойства
-            renderPropertiesList(properties); // Отображаем список свойств
-
-            // Обновляем селект доступных для добавления типов свойств (исключая уже добавленные)
-            const existingPropTypeIds = new Set(properties.map(p => p.property_type_id));
-            const availablePropTypes = propertyTypesData.filter(pt => !existingPropTypeIds.has(pt.id));
-            populateSelect(propTypeSelect, availablePropTypes, 'id', 'name', '-- Выберите тип свойства --');
-
-            // Обновляем предпросмотр иконки с учетом загруженных свойств (цвета)
-            updateIconPreviewFromForm();
-
-        } catch (error) {
-             console.error(`Ошибка загрузки свойств для типа ${typeId}:`, error);
-             propsListContainer.innerHTML = `<p class="error-message">Ошибка загрузки свойств.</p>`;
-             showPropFeedback(`Ошибка загрузки свойств: ${error.message}`, true);
+        if (properties.length === 0) {
+            propertiesListContainerElement.innerHTML = '<p>Для этого типа узлов свойства еще не заданы.</p>';
+            return;
         }
+        // Генерируем HTML для каждого свойства
+        propertiesListContainerElement.innerHTML = properties.map(prop => `
+            <div class="property-item" data-property-type-id="${prop.property_type_id}" data-node-property-id="${prop.id}">
+                <label title="${prop.property_description || prop.property_name}">${prop.property_name}:</label>
+                <input type="text" value="${prop.property_value || ''}" readonly 
+                       data-original-value="${prop.property_value || ''}" 
+                       aria-label="Значение свойства ${prop.property_name}">
+                <button class="edit-prop-btn" title="Редактировать значение свойства">✏️</button>
+                <button class="delete-prop-btn" title="Удалить это свойство у данного типа узла">🗑️</button>
+            </div>
+        `).join('');
     }
 
-    // Рендеринг списка текущих свойств
-    function renderPropertiesList(properties) {
-         if (!Array.isArray(properties)) { // Доп. проверка
-             propsListContainer.innerHTML = '<p class="error-message">Ошибка данных свойств.</p>';
+    /** Обрабатывает отправку формы добавления/изменения свойства для выбранного типа узла. */
+    async function handleAddOrUpdatePropertyFormSubmit(event) {
+         event.preventDefault(); // Отменяем стандартную отправку формы
+         clearValidationErrors('prop-feedback', 'add-property-'); // Очищаем старые ошибки
+         showPropertyFeedback('');
+
+         const isMockEvent = !event.target.elements; // Определяем, вызвано ли из строки или формы
+         const propertyTypeIdToAddOrUpdate = isMockEvent ? event.propertyTypeId : propertyTypeSelectElement.value;
+         const propertyValueToSet = isMockEvent ? event.value : propertyValueInputElement.value.trim();
+         const formSubmitButtonElement = isMockEvent ? null : addPropertyFormElement.querySelector('button[type="submit"]');
+
+         if (selectedNodeTypeIdForPropsEditing === null) {
+             showPropertyFeedback("Ошибка: Тип узла не выбран для добавления/изменения свойства.", true);
              return;
          }
-         if (properties.length === 0) {
-             propsListContainer.innerHTML = '<p>Для этого типа узлов свойства не заданы.</p>';
-             return;
-         }
-         // Генерируем HTML для каждого свойства
-         propsListContainer.innerHTML = properties.map(p => `
-             <div class="property-item" data-property-type-id="${p.property_type_id}">
-                 <label title="${p.description || p.property_name}">${p.property_name}:</label>
-                 <input type="text" value="${p.property_value || ''}" readonly data-original-value="${p.property_value || ''}"> <!-- Поле для значения + исходное значение -->
-                 <button class="edit-prop-btn" title="Редактировать значение">✏️</button> <!-- Кнопка редактирования -->
-                 <button class="delete-prop-btn" title="Удалить свойство">🗑️</button> <!-- Кнопка удаления -->
-             </div>
-         `).join('');
-    }
-
-    // Обработка отправки формы добавления/изменения свойства
-    async function handleAddPropertyFormSubmit(event) {
-         event.preventDefault(); // Отменяем стандартную отправку
-         clearValidationErrors('prop-'); // Очищаем старые ошибки
-         showPropFeedback('');
-
-         // Получаем данные либо из формы, либо из mockEvent при сохранении из строки
-         const isMockEvent = event.target.elements === undefined;
-         const propertyTypeId = isMockEvent ? event.propertyTypeId : propTypeSelect.value;
-         const propertyValue = isMockEvent ? event.value : propValueInput.value.trim();
-         const formSubmitButton = isMockEvent ? null : addPropForm.querySelector('button[type="submit"]');
-
-         if (selectedTypeIdForProps === null) { // Проверяем, что тип выбран (0 - базовый тип)
-             showPropFeedback("Сначала выберите тип узла.", true);
-             return;
-         }
-
          // Проверяем, что тип свойства выбран и значение введено
-         if (!propertyTypeId || propertyValue === '') {
-              displayValidationErrors({ value: "Выберите тип свойства и введите значение." }, 'prop-');
-              if(propValueInput && !isMockEvent) propValueInput.focus();
+         if (!propertyTypeIdToAddOrUpdate || propertyValueToSet === '') {
+              displayValidationErrors({ value: "Необходимо выбрать тип свойства и ввести его значение." }, 'prop-feedback', 'add-property-');
+              if(propertyValueInputElement && !isMockEvent) propertyValueInputElement.focus(); // Фокус на поле значения
              return;
          }
 
-         // Блокируем кнопку формы, если это не сохранение из строки
-         if(formSubmitButton) { formSubmitButton.disabled = true; formSubmitButton.textContent = 'Сохр...'; }
-         showPropFeedback("Сохранение свойства..."); // Статус
+         if(formSubmitButtonElement) { formSubmitButtonElement.disabled = true; formSubmitButtonElement.textContent = 'Сохранение...'; }
+         showPropertyFeedback("Сохранение значения свойства...");
 
-         // Используем PUT /.../properties с телом {"property_type_id": value}
-         const url = API_URL_NODE_TYPE_PROPERTIES_TPL.replace('/0', `/${selectedTypeIdForProps}`);
-         const data = { [propertyTypeId]: propertyValue }; // { "5": "some_value" }
+         // Используем PUT /api/v1/node_types/{type_id}/properties с телом {"property_type_id": "value"}
+         const apiUrlSetProperty = API_URL_NODE_TYPE_PROPERTIES_TEMPLATE.replace('/0', `/${selectedNodeTypeIdForPropsEditing}`);
+         const payload = { [propertyTypeIdToAddOrUpdate]: propertyValueToSet }; // Формируем объект { "ID_типа_свойства": "значение" }
 
          try {
-             await fetchData(url, {
+             await fetchData(apiUrlSetProperty, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(data)
+                  body: JSON.stringify(payload)
               });
-             showPropFeedback("Свойство успешно сохранено!", false); // Сообщение об успехе
-             if(!isMockEvent) addPropForm.reset(); // Сбрасываем форму добавления, если это была она
-             // Обновляем список свойств и предпросмотр иконки (т.к. мог измениться цвет)
-             await loadAndRenderProperties(selectedTypeIdForProps);
+             showPropertyFeedback("Свойство успешно сохранено!", false);
+             if(!isMockEvent) addPropertyFormElement.reset(); // Сбрасываем форму добавления (если это была она)
+             // Обновляем список свойств, чтобы отобразить изменения, и предпросмотр иконки
+             await loadAndRenderPropertiesForSelectedType(selectedNodeTypeIdForPropsEditing);
          } catch(error) {
-              console.error("Ошибка сохранения свойства:", error);
-              // Показываем ошибку в фидбеке формы свойств
-              displayValidationErrors(error.details || error.message, 'prop-');
-              showPropFeedback(`Ошибка сохранения: ${error.message}`, true);
+              console.error("Ошибка сохранения значения свойства:", error);
+              displayValidationErrors(error.details || error.message, 'prop-feedback', 'add-property-');
+              showPropertyFeedback(`Ошибка сохранения свойства: ${error.message}`, true);
          } finally {
-              if(formSubmitButton) { formSubmitButton.disabled = false; formSubmitButton.textContent = 'Установить'; }
+              if(formSubmitButtonElement) { formSubmitButtonElement.disabled = false; formSubmitButtonElement.textContent = 'Установить'; }
          }
     }
 
+    /** Обрабатывает клик на кнопку удаления конкретного свойства у выбранного типа узла. */
+    async function handleDeleteSinglePropertyClick(propertyTypeIdToDelete) {
+         if (selectedNodeTypeIdForPropsEditing === null) return; // Если тип узла не выбран
+         const propertyTypeInfo = allPropertyTypesDataCache.find(pt => pt.id == propertyTypeIdToDelete);
+         const propertyNameForConfirm = propertyTypeInfo ? propertyTypeInfo.name : `ID ${propertyTypeIdToDelete}`;
+         if (!confirm(`Вы уверены, что хотите удалить свойство "${propertyNameForConfirm}" у текущего типа узла?`)) return;
 
-    // Обработка клика на кнопку удаления свойства
-    async function handleDeletePropertyClick(propertyTypeId) {
-         if (selectedTypeIdForProps === null) return; // Проверка выбранного типа
-         const propType = propertyTypesData.find(pt => pt.id == propertyTypeId); // Находим имя типа для подтверждения
-         if (!confirm(`Удалить свойство "${propType?.name || 'ID: '+propertyTypeId}" для текущего типа узла?`)) return; // Подтверждение
-
-         // Формируем URL для удаления конкретного свойства
-         const url = API_URL_NODE_TYPE_PROPERTY_DELETE_TPL
-                        .replace('/0/', `/${selectedTypeIdForProps}/`)
-                        .replace('/properties/0', `/properties/${propertyTypeId}`); // Заменяем плейсхолдеры
-         showPropFeedback(`Удаление свойства ${propType?.name}...`); // Статус
+         // Формируем URL для DELETE /api/v1/node_types/{node_type_id}/properties/{property_type_id}
+         const apiUrlDeleteProperty = API_URL_NODE_TYPE_PROPERTY_DELETE_TEMPLATE
+                                     .replace('/0/', `/${selectedNodeTypeIdForPropsEditing}/`) // Заменяем ID типа узла
+                                     .replace('/properties/0', `/properties/${propertyTypeIdToDelete}`); // Заменяем ID типа свойства
+         showPropertyFeedback(`Удаление свойства "${propertyNameForConfirm}"...`);
          try {
-            await fetchData(url, { method: 'DELETE' }); // Отправляем запрос DELETE
-            showPropFeedback("Свойство удалено.", false); // Сообщение об успехе
+            await fetchData(apiUrlDeleteProperty, { method: 'DELETE' }); // Ожидаем 204 No Content
+            showPropertyFeedback(`Свойство "${propertyNameForConfirm}" успешно удалено.`, false);
             // Обновляем список свойств и предпросмотр иконки
-            await loadAndRenderProperties(selectedTypeIdForProps);
+            await loadAndRenderPropertiesForSelectedType(selectedNodeTypeIdForPropsEditing);
          } catch (error) {
               console.error("Ошибка удаления свойства:", error);
-              showPropFeedback(`Ошибка удаления: ${error.message}`, true); // Показываем ошибку
+              showPropertyFeedback(`Ошибка удаления свойства: ${error.message}`, true);
          }
     }
 
-    // Обработка клика на кнопку редактирования значения свойства
-    function handleEditPropertyValue(editButton) {
-         const item = editButton.closest('.property-item'); // Находим родительский элемент свойства
-         const input = item.querySelector('input[type="text"]'); // Находим поле ввода
-         if (!input) return;
+    /**
+     * Обрабатывает клик на кнопку редактирования значения существующего свойства.
+     * Переключает поле input в режим редактирования или сохраняет изменения.
+     */
+    function handleEditPropertyValueClick(editButtonElement) {
+         const propertyItemDiv = editButtonElement.closest('.property-item');
+         const valueInputElement = propertyItemDiv.querySelector('input[type="text"]');
+         if (!valueInputElement) return;
 
-         if (input.readOnly) { // Если поле было только для чтения - переключаем в режим редактирования
-             input.readOnly = false;
-             input.dataset.originalValue = input.value; // Сохраняем исходное значение
-             input.focus(); // Ставим фокус
-             editButton.textContent = '💾'; // Меняем иконку на "Сохранить"
-             editButton.title = 'Сохранить значение';
-             // Добавляем обработчик нажатия Enter для сохранения
-             input.addEventListener('keypress', handlePropertyInputEnter);
-             // Добавляем обработчик потери фокуса для отмены
-             input.addEventListener('blur', handlePropertyInputBlur);
+         if (valueInputElement.readOnly) { // Если поле было только для чтения - переключаем в режим редактирования
+             valueInputElement.readOnly = false;
+             valueInputElement.dataset.originalValue = valueInputElement.value; // Сохраняем исходное значение
+             valueInputElement.focus();
+             valueInputElement.select(); // Выделяем текст для удобства
+             editButtonElement.textContent = '💾'; // Меняем иконку на "Сохранить"
+             editButtonElement.title = 'Сохранить измененное значение';
+             // Добавляем временные обработчики для Enter и Blur
+             valueInputElement.addEventListener('keypress', handlePropertyInputKeyPress);
+             valueInputElement.addEventListener('blur', handlePropertyInputBlur);
+         } else { // Если были в режиме редактирования - пытаемся сохранить
+             const newValue = valueInputElement.value.trim();
+             // Возвращаем поле в режим только для чтения
+             valueInputElement.readOnly = true;
+             editButtonElement.textContent = '✏️';
+             editButtonElement.title = 'Редактировать значение свойства';
+             // Удаляем временные обработчики
+             valueInputElement.removeEventListener('keypress', handlePropertyInputKeyPress);
+             valueInputElement.removeEventListener('blur', handlePropertyInputBlur);
 
-         } else { // Если были в режиме редактирования - сохраняем
-             const newValue = input.value.trim();
-             input.readOnly = true; // Возвращаем только для чтения
-             editButton.textContent = '✏️'; // Возвращаем иконку "Редактировать"
-             editButton.title = 'Редактировать значение';
-             input.removeEventListener('keypress', handlePropertyInputEnter);
-             input.removeEventListener('blur', handlePropertyInputBlur);
-
-             // Отправляем только если значение изменилось
-             if (newValue !== input.dataset.originalValue) {
-                 const propertyTypeId = item.dataset.propertyTypeId; // Получаем ID типа свойства
-                 // Вызываем ту же функцию, что и при добавлении (она делает UPSERT)
-                 // Передаем данные напрямую
-                 const mockEvent = { propertyTypeId: propertyTypeId, value: newValue };
-                 handleAddPropertyFormSubmit(mockEvent);
+             // Отправляем на сохранение, только если значение действительно изменилось
+             if (newValue !== valueInputElement.dataset.originalValue) {
+                 const propertyTypeIdToUpdate = propertyItemDiv.dataset.propertyTypeId;
+                 // Вызываем основную функцию сохранения, передавая ей ID типа свойства и новое значение
+                 // Имитируем событие, чтобы передать данные в существующий обработчик
+                 const mockSubmitEvent = { propertyTypeId: propertyTypeIdToUpdate, value: newValue };
+                 handleAddOrUpdatePropertyFormSubmit(mockSubmitEvent); // Сохраняем через общую функцию
              } else {
-                 showPropFeedback("Значение не изменилось.", false); // Сообщение, если не было изменений
+                 showPropertyFeedback("Значение свойства не было изменено.", false);
              }
          }
     }
-
-    // Обработчик Enter для инпута свойства
-    function handlePropertyInputEnter(event) {
+    // Обработчик нажатия Enter для поля ввода значения свойства
+    function handlePropertyInputKeyPress(event) {
         if (event.key === 'Enter') {
-            event.preventDefault(); // Предотвращаем стандартное поведение Enter
+            event.preventDefault(); // Предотвращаем стандартное поведение (например, отправку формы, если есть)
             const editButton = event.target.closest('.property-item').querySelector('.edit-prop-btn');
-            if (editButton) {
-                 handleEditPropertyValue(editButton); // Вызываем сохранение
-            }
+            if (editButton) handleEditPropertyValueClick(editButton); // Имитируем клик по кнопке "Сохранить"
         }
     }
-     // Обработчик потери фокуса для инпута свойства
+     // Обработчик потери фокуса для поля ввода значения свойства (отмена редактирования)
      function handlePropertyInputBlur(event) {
-         // Небольшая задержка, чтобы успел сработать клик по кнопке сохранения
-         setTimeout(() => {
-              // Проверяем, активен ли еще этот инпут (не был ли уже сохранен/закрыт)
-              const input = event.target;
-              const item = input.closest('.property-item');
-              const editButton = item?.querySelector('.edit-prop-btn');
-
-              if (!input.readOnly && document.activeElement !== editButton) { // Если фокус ушел не на кнопку сохранения
-                 input.readOnly = true;
-                 input.value = input.dataset.originalValue; // Возвращаем старое значение
-                 if(editButton) {
-                     editButton.textContent = '✏️';
-                     editButton.title = 'Редактировать значение';
-                 }
-                 input.removeEventListener('keypress', handlePropertyInputEnter);
-                 input.removeEventListener('blur', handlePropertyInputBlur);
-                 showPropFeedback("Редактирование отменено.", false);
+         setTimeout(() => { // Небольшая задержка, чтобы успел сработать клик по кнопке сохранения
+              const inputField = event.target;
+              const propertyItem = inputField.closest('.property-item');
+              const saveButton = propertyItem?.querySelector('.edit-prop-btn');
+              // Если поле все еще в режиме редактирования и фокус ушел НЕ на кнопку сохранения
+              if (!inputField.readOnly && document.activeElement !== saveButton) {
+                 inputField.readOnly = true;
+                 inputField.value = inputField.dataset.originalValue; // Возвращаем старое значение
+                 if(saveButton) { saveButton.textContent = '✏️'; saveButton.title = 'Редактировать значение свойства'; }
+                 inputField.removeEventListener('keypress', handlePropertyInputKeyPress);
+                 inputField.removeEventListener('blur', handlePropertyInputBlur);
+                 showPropertyFeedback("Редактирование значения свойства отменено.", false);
               }
-         }, 150); // 150 мс задержка
+         }, 150); // 150 мс должно быть достаточно
      }
 
-
-    // --- Инициализация и обработчики событий ---
-
-    // Инициализация страницы: загрузка типов свойств и типов узлов
-    async function initializePage() {
-         await loadPropertyTypes(); // Сначала типы СВОЙСТВ
-         await loadAndRenderNodeTypes(); // Затем типы УЗЛОВ
+    // --- Инициализация страницы и глобальные обработчики событий ---
+    /** Инициализирует страницу: загружает все типы свойств и все типы узлов. */
+    async function initializeManageTypesPage() {
+         showTypeListFeedback("Инициализация страницы управления типами...");
+         try {
+             await loadAllPropertyTypesForSelect(); // Сначала загружаем типы СВОЙСТВ (для селекта)
+             await loadAndRenderAllNodeTypes();     // Затем загружаем и рендерим типы УЗЛОВ
+             showTypeListFeedback(""); // Очищаем сообщение
+         } catch(e) {
+              console.error("Критическая ошибка во время инициализации страницы управления типами:", e);
+              showTypeListFeedback(`Ошибка инициализации: ${e.message}`, true);
+              // Можно также показать ошибку в других фидбеках, если они есть
+              typeListTableBody.innerHTML = `<tr><td colspan="5" class="error-message">Ошибка инициализации.</td></tr>`;
+              propertiesListContainerElement.innerHTML = '<p class="error-message">Ошибка инициализации.</p>';
+         }
     }
 
-    // Обработчик отправки основной формы (тип узла)
-    typeForm.addEventListener('submit', handleTypeFormSubmit);
-    // Обработчик кнопки "Отмена"
-    typeCancelBtn.addEventListener('click', resetTypeForm);
-    // Обработчик отправки формы добавления/изменения свойства
-    addPropForm.addEventListener('submit', handleAddPropertyFormSubmit);
-    // Обработчик изменения поля имени файла иконки для обновления предпросмотра
-    typeIconFilenameInput.addEventListener('input', updateIconPreviewFromForm);
-    // Обновление предпросмотра при изменении значения свойства цвета (если редактируется)
-    propsListContainer.addEventListener('input', (event) => {
-        if (event.target.closest('.property-item')?.dataset.propertyTypeId == propertyTypesData.find(p => p.name === 'icon_color')?.id) {
-             updateIconPreviewFromForm();
+    // Обработчик отправки основной формы (для создания/редактирования ТИПА УЗЛА)
+    typeFormElement.addEventListener('submit', handleNodeTypeFormSubmit);
+    // Обработчик кнопки "Отмена" в форме типа узла
+    typeCancelButton.addEventListener('click', resetNodeTypeForm);
+    // Обработчик отправки формы добавления/изменения СВОЙСТВА для выбранного типа
+    addPropertyFormElement.addEventListener('submit', handleAddOrUpdatePropertyFormSubmit);
+    // Обновление предпросмотра иконки при изменении имени файла или значения свойства цвета
+    typeIconFilenameInputElement.addEventListener('input', updateIconPreview);
+    propertiesListContainerElement.addEventListener('input', (event) => { // Делегирование для инпутов свойств
+        const targetInput = event.target.closest('.property-item input[type="text"]');
+        if (targetInput) {
+            const propItem = targetInput.closest('.property-item');
+            const colorPropType = allPropertyTypesDataCache.find(p => p.name === 'icon_color');
+            if (propItem && colorPropType && propItem.dataset.propertyTypeId == colorPropType.id) {
+                 updateIconPreview(); // Обновляем, если изменился цвет
+            }
         }
     });
 
+    // Делегирование событий для таблицы списка ТИПОВ УЗЛОВ
+    typeListTableBody.addEventListener('click', (event) => {
+        const editButton = event.target.closest('.edit-btn');
+        const deleteButton = event.target.closest('.delete-btn');
+        const tableRow = event.target.closest('tr[data-id]'); // Клик по строке
 
-    // Делегирование событий для таблицы типов узлов
-    typeList.addEventListener('click', (event) => {
-        const editBtn = event.target.closest('.edit-btn'); // Клик на кнопку Редактировать?
-        const deleteBtn = event.target.closest('.delete-btn'); // Клик на кнопку Удалить?
-        const row = event.target.closest('tr[data-id]'); // Клик на строку?
-
-        if (editBtn) {
-            event.stopPropagation(); // Предотвращаем выбор строки при клике на кнопку
-            handleTypeEditClick(parseInt(editBtn.dataset.id, 10)); // Вызываем редактирование
-        } else if (deleteBtn) {
-            event.stopPropagation(); // Предотвращаем выбор строки
-            handleTypeDeleteClick(parseInt(deleteBtn.dataset.id, 10), deleteBtn.dataset.name); // Вызываем удаление
-        } else if (row) {
-            // Клик на строку - выбираем тип для просмотра/редактирования свойств
-            selectTypeForProps(parseInt(row.dataset.id, 10), row.dataset.typeName);
+        if (editButton) { // Если клик по кнопке "Редактировать"
+            event.stopPropagation(); // Предотвращаем выбор строки при клике на кнопку внутри нее
+            handleEditNodeTypeClick(parseInt(editButton.dataset.id, 10));
+        } else if (deleteButton) { // Если клик по кнопке "Удалить"
+            event.stopPropagation();
+            handleDeleteNodeTypeClick(parseInt(deleteButton.dataset.id, 10), deleteButton.dataset.name);
+        } else if (tableRow) { // Если клик по самой строке (не по кнопке внутри)
+            // Выбираем этот тип для редактирования его свойств
+            selectNodeTypeForPropertiesEditing(parseInt(tableRow.dataset.id, 10), tableRow.dataset.typeName);
         }
     });
 
-    // Делегирование событий для кнопок у свойств
-    propsListContainer.addEventListener('click', (event) => {
-         const deleteBtn = event.target.closest('.delete-prop-btn'); // Клик на удаление свойства?
-         const editBtn = event.target.closest('.edit-prop-btn'); // Клик на редактирование значения?
-         if (deleteBtn) {
-             const propTypeId = deleteBtn.closest('.property-item')?.dataset.propertyTypeId;
-             if (propTypeId) handleDeletePropertyClick(parseInt(propTypeId, 10)); // Вызываем удаление
-         } else if (editBtn) {
-             handleEditPropertyValue(editBtn); // Вызываем редактирование значения
+    // Делегирование событий для кнопок "Редактировать/Удалить" в списке СВОЙСТВ
+    propertiesListContainerElement.addEventListener('click', (event) => {
+         const deletePropButton = event.target.closest('.delete-prop-btn');
+         const editPropButton = event.target.closest('.edit-prop-btn');
+         if (deletePropButton) {
+             const propTypeId = deletePropButton.closest('.property-item')?.dataset.propertyTypeId;
+             if (propTypeId) handleDeleteSinglePropertyClick(parseInt(propTypeId, 10));
+         } else if (editPropButton) {
+             handleEditPropertyValueClick(editPropButton);
          }
     });
 
-    // Запускаем инициализацию после загрузки DOM
-    document.addEventListener('DOMContentLoaded', initializePage);
-
+    // Начальная загрузка данных при полной загрузке DOM
+    document.addEventListener('DOMContentLoaded', initializeManageTypesPage);
 </script>
 {% endblock %}
